@@ -3,19 +3,153 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "@/context/SidebarContext";
+import { useUser, UserRole } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, Settings, X, Box } from "lucide-react";
+import {
+    LayoutDashboard,
+    MessageSquare,
+    GraduationCap,
+    Users,
+    Calendar,
+    Sparkles,
+    FolderOpen,
+    BarChart3,
+    Settings,
+    X,
+    Flag,
+    BookOpen,
+    type LucideIcon
+} from "lucide-react";
 
-const navItems = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Users", href: "/users", icon: Users },
-    { name: "Settings", href: "/settings", icon: Settings },
-    { name: "Inventory", href: "/inventory", icon: Box },
-];
+type NavItem = {
+    name: string;
+    href: string;
+    icon: LucideIcon;
+    badge?: string | number;
+};
+
+type NavGroup = {
+    title?: string;
+    items: NavItem[];
+};
 
 export default function Sidebar() {
     const { isOpen, closeSidebar } = useSidebar();
+    const { role } = useUser();
     const pathname = usePathname();
+
+    const mentorNavGroups: NavGroup[] = [
+        {
+            items: [
+                { name: "Dashboard", href: "/", icon: LayoutDashboard },
+            ],
+        },
+        {
+            title: "My Program",
+            items: [
+                { name: "Sessions", href: "/sessions", icon: Calendar },
+                { name: "Mentees", href: "/mentors", icon: Sparkles },
+                { name: "Resources", href: "/resources", icon: FolderOpen },
+            ]
+        },
+        {
+            title: "Community",
+            items: [
+                { name: "General Community", href: "/community/general", icon: MessageSquare },
+                { name: "Alumni Network", href: "/community/alumni", icon: GraduationCap },
+            ],
+        },
+        {
+            title: "Cohorts",
+            items: [
+                { name: "Cohort Alpha", href: "/cohorts/alpha", icon: Users },
+                { name: "Cohort Beta", href: "/cohorts/beta", icon: Users },
+            ],
+        },
+        {
+            items: [
+                { name: "Settings", href: "/settings", icon: Settings },
+            ]
+        }
+    ];
+
+    const memberNavGroups: NavGroup[] = [
+        {
+            items: [
+                { name: "Dashboard", href: "/", icon: LayoutDashboard },
+            ],
+        },
+        {
+            title: "My Program",
+            items: [
+                { name: "My Schedule", href: "/sessions", icon: Calendar },
+                { name: "My Mentors", href: "/mentors", icon: Sparkles },
+                { name: "Resources", href: "/resources", icon: FolderOpen },
+            ]
+        },
+        {
+            title: "Community",
+            items: [
+                { name: "General Community", href: "/community/general", icon: MessageSquare },
+                { name: "Alumni Network", href: "/community/alumni", icon: GraduationCap },
+            ],
+        },
+        {
+            title: "Cohorts",
+            items: [
+                { name: "Cohort Alpha", href: "/cohorts/alpha", icon: Users },
+                { name: "Cohort Beta", href: "/cohorts/beta", icon: Users },
+            ],
+        },
+        {
+            items: [
+                { name: "Settings", href: "/settings", icon: Settings },
+            ]
+        }
+    ];
+
+    const adminNavGroups: NavGroup[] = [
+        {
+            items: [
+                { name: "Dashboard", href: "/", icon: LayoutDashboard },
+                { name: "Analytics", href: "/analytics", icon: BarChart3 },
+            ],
+        },
+        {
+            title: "Management",
+            items: [
+                { name: "Members", href: "/members", icon: Users },
+                { name: "Mentors", href: "/mentors", icon: Sparkles },
+                { name: "Moderation", href: "/moderation", icon: Flag },
+            ]
+        },
+        {
+            items: [
+                { name: "Programs", href: "/programs", icon: BookOpen }, // Assuming BookOpen is imported or needs to be
+                { name: "Community", href: "/community/general", icon: MessageSquare },
+                { name: "Events", href: "/events", icon: Calendar },
+            ]
+        },
+        {
+            title: "Cohorts",
+            items: [
+                { name: "Cohort Alpha", href: "/cohorts/alpha", icon: Users },
+                { name: "Cohort Beta", href: "/cohorts/beta", icon: Users },
+            ],
+        },
+        {
+            items: [
+                { name: "Settings", href: "/settings", icon: Settings },
+            ]
+        }
+    ];
+
+    let navGroups = memberNavGroups;
+    if (role === 'mentor') navGroups = mentorNavGroups;
+    if (role === 'admin') navGroups = adminNavGroups;
+
+    const activeClass = "bg-purple-50 text-purple-900";
+    const inactiveClass = "text-stone-500 hover:bg-stone-50 hover:text-stone-900";
 
     return (
         <>
@@ -31,59 +165,70 @@ export default function Sidebar() {
             {/* Sidebar Container */}
             <aside
                 className={cn(
-                    "fixed inset-y-0 left-0 z-50 w-64 transform bg-white/80 backdrop-blur-xl border-r border-gray-200 dark:border-white/10 dark:bg-black/40 shadow-xl transition-transform duration-300 md:static md:translate-x-0",
+                    "fixed inset-y-0 left-0 z-50 w-72 flex-col border-r border-stone-200 bg-white h-full transition-transform duration-300 md:translate-x-0 md:static flex",
                     isOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >
-                <div className="flex h-full flex-col">
-                    {/* Header */}
-                    <div className="flex h-16 items-center justify-between px-6 border-b border-gray-200 dark:border-white/10">
-                        <h1 className="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-                            Nebula App
-                        </h1>
+                <div className="p-6 flex-1 overflow-y-auto">
+                    {/* Logo */}
+                    <div className="flex items-center justify-between mb-8 px-2">
+                        <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 bg-purple-900 text-white rounded-xl flex items-center justify-center font-bold text-lg tracking-tighter">
+                                BGG
+                            </div>
+                            <span className="font-semibold text-lg tracking-tight text-stone-900">
+                                Black Girls Gather
+                            </span>
+                        </div>
                         <button
                             onClick={closeSidebar}
-                            className="md:hidden text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                            className="md:hidden text-stone-500 hover:text-stone-900"
                         >
                             <X className="h-6 w-6" />
                         </button>
                     </div>
 
-                    {/* Nav Items */}
-                    <nav className="flex-1 space-y-2 px-4 py-6">
-                        {navItems.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = pathname === item.href;
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    onClick={() => { if (window.innerWidth < 768) closeSidebar() }}
-                                    className={cn(
-                                        "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
-                                        isActive
-                                            ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-purple-500/20"
-                                            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-white"
-                                    )}
-                                >
-                                    <Icon className="h-5 w-5" />
-                                    {item.name}
-                                </Link>
-                            );
-                        })}
-                    </nav>
-
-                    {/* Footer User Profile (Mock) */}
-                    <div className="p-4 border-t border-gray-200 dark:border-white/10">
-                        <div className="flex items-center gap-3 rounded-xl bg-gray-50/50 p-3 backdrop-blur-md dark:bg-white/5">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-pink-400 to-red-500" />
-                            <div>
-                                <p className="text-sm font-semibold text-gray-900 dark:text-white">Admin User</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">admin@nebula.com</p>
+                    {/* Navigation */}
+                    <nav className="space-y-6">
+                        {navGroups.map((group, idx) => (
+                            <div key={idx}>
+                                {group.title && (
+                                    <h3 className="px-4 text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">
+                                        {group.title}
+                                    </h3>
+                                )}
+                                <div className="space-y-1">
+                                    {group.items.map((item) => {
+                                        const Icon = item.icon;
+                                        const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+                                        return (
+                                            <Link
+                                                key={item.name}
+                                                href={item.href}
+                                                onClick={() => {
+                                                    if (window.innerWidth < 768) closeSidebar();
+                                                }}
+                                                className={cn(
+                                                    "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200",
+                                                    isActive ? activeClass : inactiveClass
+                                                )}
+                                            >
+                                                <Icon size={20} strokeWidth={1.5} />
+                                                <span className="text-sm font-medium">{item.name}</span>
+                                                {item.badge && (
+                                                    <span className="ml-auto bg-rose-100 text-rose-600 text-xs font-semibold px-2 py-0.5 rounded-full">
+                                                        {item.badge}
+                                                    </span>
+                                                )}
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    </div>
+                        ))}
+                    </nav>
                 </div>
+                {/* Footer (optional version info can go here) */}
             </aside>
         </>
     );
