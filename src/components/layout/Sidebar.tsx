@@ -3,21 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "@/context/SidebarContext";
-import { useUser, UserRole } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
 import {
-    LayoutDashboard,
-    MessageSquare,
-    GraduationCap,
-    Users,
-    Calendar,
-    Sparkles,
-    FolderOpen,
-    BarChart3,
-    Settings,
     X,
-    Flag,
-    BookOpen,
     type LucideIcon
 } from "lucide-react";
 
@@ -33,123 +21,23 @@ type NavGroup = {
     items: NavItem[];
 };
 
-export default function Sidebar() {
+type SidebarProps = {
+    navGroups: NavGroup[];
+    moduleType: "member" | "mentor" | "admin";
+};
+
+export default function Sidebar({ navGroups, moduleType }: SidebarProps) {
     const { isOpen, closeSidebar } = useSidebar();
-    const { role } = useUser();
     const pathname = usePathname();
-
-    const mentorNavGroups: NavGroup[] = [
-        {
-            items: [
-                { name: "Dashboard", href: "/", icon: LayoutDashboard },
-            ],
-        },
-        {
-            title: "My Program",
-            items: [
-                { name: "Sessions", href: "/sessions", icon: Calendar },
-                { name: "Mentees", href: "/mentors", icon: Sparkles },
-                { name: "Resources", href: "/resources", icon: FolderOpen },
-            ]
-        },
-        {
-            title: "Community",
-            items: [
-                { name: "General Community", href: "/community/general", icon: MessageSquare },
-                { name: "Alumni Network", href: "/community/alumni", icon: GraduationCap },
-            ],
-        },
-        {
-            title: "Cohorts",
-            items: [
-                { name: "Cohort Alpha", href: "/cohorts/alpha", icon: Users },
-                { name: "Cohort Beta", href: "/cohorts/beta", icon: Users },
-            ],
-        },
-        {
-            items: [
-                { name: "Settings", href: "/settings", icon: Settings },
-            ]
-        }
-    ];
-
-    const memberNavGroups: NavGroup[] = [
-        {
-            items: [
-                { name: "Dashboard", href: "/", icon: LayoutDashboard },
-            ],
-        },
-        {
-            title: "My Program",
-            items: [
-                { name: "My Schedule", href: "/sessions", icon: Calendar },
-                { name: "My Mentors", href: "/mentors", icon: Sparkles },
-                { name: "Resources", href: "/resources", icon: FolderOpen },
-            ]
-        },
-        {
-            title: "Community",
-            items: [
-                { name: "General Community", href: "/community/general", icon: MessageSquare },
-                { name: "Alumni Network", href: "/community/alumni", icon: GraduationCap },
-            ],
-        },
-        {
-            title: "Cohorts",
-            items: [
-                { name: "Cohort Alpha", href: "/cohorts/alpha", icon: Users },
-                { name: "Cohort Beta", href: "/cohorts/beta", icon: Users },
-            ],
-        },
-        {
-            items: [
-                { name: "Settings", href: "/settings", icon: Settings },
-            ]
-        }
-    ];
-
-    const adminNavGroups: NavGroup[] = [
-        {
-            items: [
-                { name: "Dashboard", href: "/", icon: LayoutDashboard },
-                { name: "Analytics", href: "/analytics", icon: BarChart3 },
-            ],
-        },
-        {
-            title: "Management",
-            items: [
-                { name: "Members", href: "/members", icon: Users },
-                { name: "Mentors", href: "/mentors", icon: Sparkles },
-                { name: "Moderation", href: "/moderation", icon: Flag },
-            ]
-        },
-        {
-            items: [
-                { name: "Programs", href: "/programs", icon: BookOpen }, // Assuming BookOpen is imported or needs to be
-                { name: "Community", href: "/community/general", icon: MessageSquare },
-                { name: "Events", href: "/events", icon: Calendar },
-            ]
-        },
-        {
-            title: "Cohorts",
-            items: [
-                { name: "Cohort Alpha", href: "/cohorts/alpha", icon: Users },
-                { name: "Cohort Beta", href: "/cohorts/beta", icon: Users },
-            ],
-        },
-        {
-            items: [
-                { name: "Settings", href: "/settings", icon: Settings },
-            ]
-        }
-    ];
-
-    let navGroups = memberNavGroups;
-    if (role === 'mentor') navGroups = mentorNavGroups;
-    if (role === 'admin') navGroups = adminNavGroups;
 
     const activeClass = "bg-purple-50 text-purple-900";
     const inactiveClass = "text-stone-500 hover:bg-stone-50 hover:text-stone-900";
+
+    const moduleLabels = {
+        member: "Member Portal",
+        mentor: "Mentor Portal",
+        admin: "Admin Portal",
+    };
 
     return (
         <>
@@ -176,9 +64,14 @@ export default function Sidebar() {
                             <div className="h-10 w-10 bg-purple-900 text-white rounded-xl flex items-center justify-center font-bold text-lg tracking-tighter">
                                 BGG
                             </div>
-                            <span className="font-semibold text-lg tracking-tight text-stone-900">
-                                Black Girls Gather
-                            </span>
+                            <div className="flex flex-col">
+                                <span className="font-semibold text-lg tracking-tight text-stone-900">
+                                    Black Girls Gather
+                                </span>
+                                <span className="text-xs text-purple-600 font-medium">
+                                    {moduleLabels[moduleType]}
+                                </span>
+                            </div>
                         </div>
                         <button
                             onClick={closeSidebar}
@@ -200,7 +93,7 @@ export default function Sidebar() {
                                 <div className="space-y-1">
                                     {group.items.map((item) => {
                                         const Icon = item.icon;
-                                        const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+                                        const isActive = pathname === item.href || (item.href !== `/${moduleType}` && pathname.startsWith(item.href));
                                         return (
                                             <Link
                                                 key={item.name}

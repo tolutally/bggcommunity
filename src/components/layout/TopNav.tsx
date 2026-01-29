@@ -1,13 +1,22 @@
 "use client";
 
 import { useSidebar } from "@/context/SidebarContext";
-import { useUser, UserRole } from "@/context/UserContext";
+import { useUser } from "@/context/UserContext";
 import { Menu, Bell } from "lucide-react";
-import { cn } from "@/lib/utils";
 
-export default function TopNav() {
+type TopNavProps = {
+    moduleType: "member" | "mentor" | "admin";
+};
+
+export default function TopNav({ moduleType }: TopNavProps) {
     const { toggleSidebar } = useSidebar();
-    const { role, setRole, user } = useUser();
+    const { user } = useUser();
+
+    const moduleLabels = {
+        member: "Member",
+        mentor: "Mentor",
+        admin: "Admin",
+    };
 
     return (
         <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-stone-200 sticky top-0 z-30">
@@ -27,36 +36,14 @@ export default function TopNav() {
                 </div>
             </div>
 
-            {/* Right Interface: Role Switcher, Notifs, Profile */}
+            {/* Right Interface: Module Badge, Notifs, Profile */}
             <div className="flex items-center gap-4 md:gap-6">
-                {/* Role Switcher */}
-                <div className="hidden md:flex items-center gap-1 bg-stone-100 rounded-lg p-1">
-                    {(["member", "mentor", "admin"] as UserRole[]).map((r) => (
-                        <button
-                            key={r}
-                            onClick={() => setRole(r)}
-                            className={cn(
-                                "px-3 py-1.5 text-xs font-semibold rounded-md capitalize transition-all",
-                                role === r
-                                    ? "bg-white text-purple-900 shadow-sm border border-stone-200"
-                                    : "text-stone-500 hover:text-stone-700"
-                            )}
-                        >
-                            {r}
-                        </button>
-                    ))}
+                {/* Module Badge */}
+                <div className="hidden md:flex items-center gap-2 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100">
+                    <span className="text-xs font-bold text-purple-700 capitalize">
+                        {moduleLabels[moduleType]} Portal
+                    </span>
                 </div>
-
-                {/* Mobile Role Switcher (Simplified) */}
-                <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as UserRole)}
-                    className="md:hidden bg-stone-100 text-stone-600 text-xs font-semibold rounded-md p-2 border-none focus:ring-0"
-                >
-                    <option value="member">Member</option>
-                    <option value="mentor">Mentor</option>
-                    <option value="admin">Admin</option>
-                </select>
 
                 {/* Notifications */}
                 <button className="relative text-stone-500 hover:text-stone-900 transition-colors">
@@ -70,7 +57,7 @@ export default function TopNav() {
                         <span className="text-sm font-semibold text-stone-900">
                             {user.name}
                         </span>
-                        <span className="text-xs text-stone-500 capitalize">{role}</span>
+                        <span className="text-xs text-stone-500 capitalize">{moduleLabels[moduleType]}</span>
                     </div>
                     <img
                         src={user.avatar}

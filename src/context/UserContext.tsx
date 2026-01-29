@@ -7,6 +7,7 @@ export type UserRole = "member" | "mentor" | "admin";
 interface User {
     name: string;
     avatar: string;
+    email: string;
 }
 
 interface UserContextType {
@@ -24,6 +25,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const user: User = {
         name: "Nia Johnson",
         avatar: "https://i.pravatar.cc/150?u=a042581f4e29026704d",
+        email: "nia.johnson@example.com",
     };
 
     return (
