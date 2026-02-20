@@ -16,9 +16,9 @@ export default function MemberSettingsPage() {
                     <img src={user.avatar} className="w-24 h-24 rounded-full border-4 border-white shadow-sm object-cover" alt="Avatar" />
                     <div>
                         <h2 className="text-xl font-bold text-stone-900">{user.name}</h2>
-                        <span className="inline-block mt-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full uppercase tracking-wide">Member Account</span>
+                        <span className="inline-block mt-1 px-2 py-0.5 bg-brand-100 text-brand-700 text-xs font-bold rounded-full uppercase tracking-wide">Member Account</span>
                         <div className="mt-2">
-                            <button className="text-purple-700 font-semibold text-sm hover:underline">Change Avatar</button>
+                            <button className="text-brand-700 font-semibold text-sm hover:underline">Change Avatar</button>
                         </div>
                     </div>
                 </div>
@@ -52,7 +52,7 @@ function InputGroup({ label, value }: any) {
     return (
         <div>
             <label className="block text-sm font-semibold text-stone-700 mb-2">{label}</label>
-            <input type="text" defaultValue={value} className="w-full px-4 py-2 rounded-lg border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-purple-500 outline-none" />
+            <input type="text" defaultValue={value} className="w-full px-4 py-2 rounded-lg border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-brand-500 outline-none" />
         </div>
     )
 }
@@ -65,7 +65,7 @@ function ToggleRow({ label, checked, description }: any) {
                 {description && <span className="text-xs text-stone-500">{description}</span>}
             </div>
 
-            <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${checked ? 'bg-purple-600' : 'bg-stone-300'}`}>
+            <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${checked ? 'bg-brand-600' : 'bg-stone-300'}`}>
                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`}></div>
             </div>
         </div>

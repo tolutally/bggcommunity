@@ -8,12 +8,14 @@ import {
     MessageSquare,
     Users,
     Settings,
+    Briefcase,
 } from "lucide-react";
 
 const memberNavGroups = [
     {
         items: [
             { name: "Dashboard", href: "/member", icon: LayoutDashboard },
+            { name: "Jobs", href: "/member/jobs", icon: Briefcase },
         ],
     },
     {
@@ -46,11 +48,11 @@ export default function MemberLayout({
         <SidebarProvider>
             <UserProvider>
                 <div className="min-h-screen bg-stone-50">
-                    {/* Navigation (Header + Bottom Bar) */}
+                    {/* Navigation (Header + Left Bar) */}
                     <FloatingNav navGroups={memberNavGroups} moduleType="member" />
 
-                    {/* Main Content - with padding for header and bottom nav */}
-                    <main className="pt-20 pb-28">
+                    {/* Main Content - with padding for header and left nav (desktop only) */}
+                    <main className="pt-20 pb-6 md:pl-24 lg:pl-28">
                         {children}
                     </main>
                 </div>

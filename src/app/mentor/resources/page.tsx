@@ -30,7 +30,7 @@ export default function MentorResourcesPage() {
                 </div>
                 <button
                     onClick={() => setIsUploadModalOpen(true)}
-                    className="bg-purple-900 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-purple-800 flex items-center gap-2 shadow-lg shadow-purple-900/10"
+                    className="bg-brand-800 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-brand-700 flex items-center gap-2 shadow-lg shadow-brand-800/10"
                 >
                     <Upload size={18} /> Upload Resource
                 </button>
@@ -55,7 +55,7 @@ export default function MentorResourcesPage() {
                 {/* Add New Placeholder */}
                 <div
                     onClick={() => setIsUploadModalOpen(true)}
-                    className="border-2 border-dashed border-stone-200 rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-purple-300 hover:bg-stone-50 cursor-pointer transition-colors min-h-[200px]"
+                    className="border-2 border-dashed border-stone-200 rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-accent-400 hover:bg-stone-50 cursor-pointer transition-colors min-h-[200px]"
                 >
                     <div className="h-12 w-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3 text-stone-400">
                         <Plus size={24} />
@@ -66,9 +66,9 @@ export default function MentorResourcesPage() {
 
                 {/* Existing Resources */}
                 {myResources.map(resource => (
-                    <div key={resource.id} className="bg-white p-6 rounded-2xl border border-stone-200 group hover:border-purple-300 transition-all">
+                    <div key={resource.id} className="bg-white p-6 rounded-2xl border border-stone-200 group hover:border-brand-300 transition-all">
                         <div className="flex justify-between items-start mb-4">
-                            <div className="h-10 w-10 bg-purple-50 text-purple-700 rounded-lg flex items-center justify-center">
+                            <div className="h-10 w-10 bg-brand-50 text-brand-700 rounded-lg flex items-center justify-center">
                                 <FileText size={20} />
                             </div>
                             <div className="flex gap-1">
@@ -131,17 +131,17 @@ export default function MentorResourcesPage() {
                             <h3 className="font-bold text-lg">Upload Resource</h3>
                             <button onClick={() => setIsUploadModalOpen(false)} className="p-1 hover:bg-stone-100 rounded-full"><X size={20} /></button>
                         </div>
-                        <div className="border-2 border-dashed border-purple-200 bg-purple-50 rounded-xl h-32 flex flex-col items-center justify-center text-purple-800 mb-4 cursor-pointer hover:bg-purple-100 transition-colors">
+                        <div className="border-2 border-dashed border-brand-200 bg-brand-50 rounded-xl h-32 flex flex-col items-center justify-center text-brand-800 mb-4 cursor-pointer hover:bg-brand-100 transition-colors">
                             <Upload size={24} className="mb-2" />
                             <span className="text-sm font-semibold">Click to browse or drag file</span>
                         </div>
                         <div className="space-y-4">
                             <div>
                                 <label className="text-xs font-bold text-stone-500 uppercase">Title</label>
-                                <input type="text" className="w-full border-b border-stone-200 py-2 focus:border-purple-600 outline-none font-medium" placeholder="e.g., Q4 Career Roadmap" />
+                                <input type="text" className="w-full border-b border-stone-200 py-2 focus:border-brand-600 outline-none font-medium" placeholder="e.g., Q4 Career Roadmap" />
                             </div>
                             <div className="flex justify-end pt-4">
-                                <button onClick={() => setIsUploadModalOpen(false)} className="bg-purple-900 text-white px-6 py-2 rounded-xl font-bold">Upload</button>
+                                <button onClick={() => setIsUploadModalOpen(false)} className="bg-brand-800 text-white px-6 py-2 rounded-xl font-bold">Upload</button>
                             </div>
                         </div>
                     </div>

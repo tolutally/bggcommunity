@@ -23,18 +23,18 @@ export default function AdminSettingsPage() {
                     {/* Platform Configuration */}
                     <section className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
                         <div className="p-6 border-b border-stone-100 flex items-center gap-2">
-                            <Server size={20} className="text-purple-600" />
+                            <Server size={20} className="text-brand-600" />
                             <h2 className="font-bold text-lg text-stone-900">Platform Configuration</h2>
                         </div>
                         <div className="p-6 space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-sm font-bold text-stone-700 mb-2">Community Name</label>
-                                    <input type="text" defaultValue="Black Girls Gather" className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-medium" />
+                                    <input type="text" defaultValue="Black Girls Gather" className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none font-medium" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-stone-700 mb-2">Support Email</label>
-                                    <input type="email" defaultValue="help@blackgirlsgather.com" className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-medium" />
+                                    <input type="email" defaultValue="help@blackgirlsgather.com" className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none font-medium" />
                                 </div>
                             </div>
 
@@ -159,7 +159,7 @@ function ToggleSetting({ label, desc, checked, onChange, danger }: any) {
             </div>
             <button
                 onClick={() => onChange(!checked)}
-                className={`w-11 h-6 rounded-full p-1 transition-colors ${checked ? (danger ? 'bg-red-500' : 'bg-purple-600') : 'bg-stone-200'}`}
+                className={`w-11 h-6 rounded-full p-1 transition-colors ${checked ? (danger ? 'bg-red-500' : 'bg-brand-600') : 'bg-stone-200'}`}
             >
                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`}></div>
             </button>
@@ -170,7 +170,7 @@ function ToggleSetting({ label, desc, checked, onChange, danger }: any) {
 function IntegrationCard({ name, status, desc, icon }: any) {
     const isConnected = status === "Connected";
     return (
-        <div className="border border-stone-200 rounded-xl p-4 flex items-center gap-4 hover:border-purple-300 transition-colors group">
+        <div className="border border-stone-200 rounded-xl p-4 flex items-center gap-4 hover:border-brand-300 transition-colors group">
             <img src={icon} className="w-10 h-10 object-contain grayscale group-hover:grayscale-0 transition-all opacity-80 group-hover:opacity-100" />
             <div className="flex-1">
                 <div className="flex justify-between items-start">

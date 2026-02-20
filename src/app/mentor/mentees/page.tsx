@@ -152,20 +152,20 @@ export default function MentorMenteesPage() {
 
 function ReviewCard({ user, avatar, type, title, due, urgent }: any) {
     return (
-        <div className="min-w-[280px] bg-white p-5 rounded-2xl border border-stone-200 hover:border-purple-300 transition-all cursor-pointer group snap-start">
+        <div className="min-w-[280px] bg-white p-5 rounded-2xl border border-stone-200 hover:border-brand-300 transition-all cursor-pointer group snap-start">
             <div className="flex justify-between items-start mb-3">
                 <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${urgent ? 'bg-red-50 text-red-600' : 'bg-stone-100 text-stone-500'}`}>
                     {type}
                 </div>
                 {urgent && <span className="h-2 w-2 rounded-full bg-red-500"></span>}
             </div>
-            <h3 className="font-bold text-stone-900 mb-1 leading-tight group-hover:text-purple-700">{title}</h3>
+            <h3 className="font-bold text-stone-900 mb-1 leading-tight group-hover:text-brand-700">{title}</h3>
             <p className={`text-xs font-medium mb-4 ${urgent ? 'text-red-500' : 'text-stone-400'}`}>{due}</p>
 
             <div className="flex items-center gap-2 pt-3 border-t border-stone-100">
                 <img src={avatar} className="w-6 h-6 rounded-full" />
                 <span className="text-xs font-semibold text-stone-600">{user}</span>
-                <button className="ml-auto text-purple-700 hover:bg-purple-50 p-1.5 rounded-lg transition-colors">
+                <button className="ml-auto text-brand-700 hover:bg-brand-50 p-1.5 rounded-lg transition-colors">
                     <ArrowRight size={14} />
                 </button>
             </div>
@@ -177,7 +177,7 @@ function MenteeCard({ mentee }: any) {
     const [showNotes, setShowNotes] = useState(false);
 
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col group hover:border-purple-300 transition-all relative">
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col group hover:border-brand-300 transition-all relative">
             <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                     <img src={mentee.image} alt={mentee.name} className="h-14 w-14 rounded-full object-cover border-2 border-white shadow-sm" />
@@ -209,10 +209,10 @@ function MenteeCard({ mentee }: any) {
                     <div className="mb-4">
                         <div className="flex justify-between text-xs font-semibold mb-1">
                             <span className="text-stone-500">Progress</span>
-                            <span className="text-purple-700">{mentee.progress}%</span>
+                            <span className="text-brand-700">{mentee.progress}%</span>
                         </div>
                         <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-purple-600 rounded-full" style={{ width: `${mentee.progress}%` }}></div>
+                            <div className="h-full bg-accent-500 rounded-full" style={{ width: `${mentee.progress}%` }}></div>
                         </div>
                         <p className="text-xs text-stone-400 mt-2">Next: <span className="text-stone-600">{mentee.nextMilestone}</span></p>
                     </div>
@@ -227,7 +227,7 @@ function MenteeCard({ mentee }: any) {
                 <button className="flex-1 py-2 bg-stone-50 text-stone-700 rounded-lg text-sm font-semibold hover:bg-stone-100 transition-colors flex items-center justify-center gap-2">
                     <MessageSquare size={16} /> Chat
                 </button>
-                <button className="flex-1 py-2 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-100 transition-colors">
+                <button className="flex-1 py-2 bg-brand-50 text-brand-700 rounded-lg text-sm font-semibold hover:bg-brand-100 transition-colors">
                     Schedule 1:1
                 </button>
             </div>
@@ -243,7 +243,7 @@ function ActivityRow({ user, avatar, action, target, time, content, interactive,
                 <div className="flex-1">
                     <div className="flex justify-between items-start">
                         <p className="text-sm text-stone-900">
-                            <span className="font-bold">{user}</span> <span className="text-stone-500">{action}</span> <span className="font-semibold text-purple-700">{target}</span>
+                            <span className="font-bold">{user}</span> <span className="text-stone-500">{action}</span> <span className="font-semibold text-brand-700">{target}</span>
                         </p>
                         <span className="text-xs text-stone-400">{time}</span>
                     </div>
@@ -254,8 +254,8 @@ function ActivityRow({ user, avatar, action, target, time, content, interactive,
                     )}
                     {interactive && (
                         <div className="flex gap-4 mt-3">
-                            <button className="text-xs font-semibold text-stone-500 hover:text-purple-700 flex items-center gap-1"><Heart size={14} /> Like</button>
-                            <button className="text-xs font-semibold text-stone-500 hover:text-purple-700 flex items-center gap-1"><MessageSquare size={14} /> Reply</button>
+                            <button className="text-xs font-semibold text-stone-500 hover:text-brand-700 flex items-center gap-1"><Heart size={14} /> Like</button>
+                            <button className="text-xs font-semibold text-stone-500 hover:text-brand-700 flex items-center gap-1"><MessageSquare size={14} /> Reply</button>
                         </div>
                     )}
                 </div>

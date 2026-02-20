@@ -48,7 +48,7 @@ export default function MemberProfilePage() {
             {/* Header / Banner */}
             <div className="relative">
                 {/* Banner Image */}
-                <div className="h-48 md:h-64 rounded-3xl overflow-hidden bg-gradient-to-r from-purple-800 to-indigo-900 relative">
+                <div className="h-48 md:h-64 rounded-3xl overflow-hidden bg-gradient-to-r from-brand-700 to-indigo-900 relative">
                     <img
                         src="https://images.unsplash.com/photo-1557683316-973673baf926?w=1200&h=400&fit=crop"
                         className="w-full h-full object-cover opacity-60 mix-blend-overlay"
@@ -74,7 +74,7 @@ export default function MemberProfilePage() {
                                 />
                             </div>
                             {isEditing && (
-                                <button className="absolute bottom-2 right-2 bg-purple-900 text-white p-2 rounded-full border-4 border-white shadow-sm hover:bg-purple-800 transition-colors hover:scale-105 active:scale-95">
+                                <button className="absolute bottom-2 right-2 bg-brand-800 text-white p-2 rounded-full border-4 border-white shadow-sm hover:bg-brand-700 transition-colors hover:scale-105 active:scale-95">
                                     <Camera size={16} />
                                 </button>
                             )}
@@ -114,10 +114,10 @@ export default function MemberProfilePage() {
                                                 value={formData.occupation}
                                                 onChange={handleChange}
                                                 placeholder="Occupation"
-                                                className="px-3 py-1 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-purple-500 focus:bg-white focus:border-transparent outline-none transition-all placeholder:text-stone-400"
+                                                className="px-3 py-1 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-brand-500 focus:bg-white focus:border-transparent outline-none transition-all placeholder:text-stone-400"
                                             />
                                         ) : (
-                                            <span className="text-purple-700 font-semibold">{formData.occupation}</span>
+                                            <span className="text-brand-700 font-semibold">{formData.occupation}</span>
                                         )}
                                         <span className="text-stone-300 hidden md:inline">•</span>
                                         {isEditing ? (
@@ -127,7 +127,7 @@ export default function MemberProfilePage() {
                                                 value={formData.company}
                                                 onChange={handleChange}
                                                 placeholder="Company"
-                                                className="px-3 py-1 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-purple-500 focus:bg-white focus:border-transparent outline-none transition-all placeholder:text-stone-400"
+                                                className="px-3 py-1 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-brand-500 focus:bg-white focus:border-transparent outline-none transition-all placeholder:text-stone-400"
                                             />
                                         ) : (
                                             <span>{formData.company}</span>
@@ -142,7 +142,7 @@ export default function MemberProfilePage() {
                                                     name="location"
                                                     value={formData.location}
                                                     onChange={handleChange}
-                                                    className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-purple-500 focus:bg-white outline-none w-full"
+                                                    className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none w-full"
                                                 />
                                             ) : (
                                                 formData.location
@@ -156,7 +156,7 @@ export default function MemberProfilePage() {
                                                     name="industry"
                                                     value={formData.industry}
                                                     onChange={handleChange}
-                                                    className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-purple-500 focus:bg-white outline-none w-full"
+                                                    className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none w-full"
                                                 />
                                             ) : (
                                                 formData.industry
@@ -167,7 +167,7 @@ export default function MemberProfilePage() {
 
                                 <button
                                     onClick={() => setIsEditing(!isEditing)}
-                                    className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95 ${isEditing ? 'bg-stone-900 text-white hover:bg-stone-800' : 'bg-white border text-stone-700 hover:border-purple-200 hover:text-purple-700 hover:bg-purple-50'}`}
+                                    className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95 ${isEditing ? 'bg-stone-900 text-white hover:bg-stone-800' : 'bg-white border text-stone-700 hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50'}`}
                                 >
                                     {isEditing ? (
                                         <> <Save size={18} /> Save Changes </>
@@ -196,7 +196,7 @@ export default function MemberProfilePage() {
                                 value={formData.bio}
                                 onChange={handleChange}
                                 rows={5}
-                                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:bg-white outline-none text-stone-700 leading-relaxed resize-none transition-all placeholder:text-stone-400"
+                                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-stone-700 leading-relaxed resize-none transition-all placeholder:text-stone-400"
                                 placeholder="Tell us about yourself..."
                             />
                         ) : (
@@ -253,7 +253,7 @@ export default function MemberProfilePage() {
                 <div className="space-y-8">
                     <section className="bg-white rounded-3xl p-8 border border-stone-100 shadow-sm h-full flex flex-col">
                         <h2 className="text-xl font-bold text-stone-900 mb-6 flex items-center gap-2">
-                            <Globe size={20} className="text-purple-600" /> Online Presence
+                            <Globe size={20} className="text-brand-600" /> Online Presence
                         </h2>
 
                         <div className="space-y-6 flex-1">
@@ -268,13 +268,13 @@ export default function MemberProfilePage() {
                                         name="website"
                                         value={formData.website}
                                         onChange={handleChange}
-                                        className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 focus:ring-2 focus:ring-purple-500 focus:bg-white outline-none text-sm transition-all"
+                                        className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-sm transition-all"
                                         placeholder="https://"
                                     />
                                 ) : (
-                                    <a href={formData.website} target="_blank" className="flex items-center justify-between w-full px-4 py-3 bg-stone-50 hover:bg-purple-50 border border-stone-100 hover:border-purple-200 rounded-xl transition-all group">
-                                        <span className="text-stone-700 font-medium truncate group-hover:text-purple-700">{formData.website.replace('https://', '')}</span>
-                                        <Globe size={16} className="text-stone-400 group-hover:text-purple-400" />
+                                    <a href={formData.website} target="_blank" className="flex items-center justify-between w-full px-4 py-3 bg-stone-50 hover:bg-brand-50 border border-stone-100 hover:border-brand-200 rounded-xl transition-all group">
+                                        <span className="text-stone-700 font-medium truncate group-hover:text-brand-700">{formData.website.replace('https://', '')}</span>
+                                        <Globe size={16} className="text-stone-400 group-hover:text-brand-400" />
                                     </a>
                                 )}
                             </div>
@@ -290,7 +290,7 @@ export default function MemberProfilePage() {
                                         name="linkedin"
                                         value={formData.linkedin}
                                         onChange={handleChange}
-                                        className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 focus:ring-2 focus:ring-purple-500 focus:bg-white outline-none text-sm transition-all"
+                                        className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-sm transition-all"
                                         placeholder="Username"
                                     />
                                 ) : (
@@ -312,7 +312,7 @@ export default function MemberProfilePage() {
                                         name="twitter"
                                         value={formData.twitter}
                                         onChange={handleChange}
-                                        className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 focus:ring-2 focus:ring-purple-500 focus:bg-white outline-none text-sm transition-all"
+                                        className="w-full px-4 py-2.5 border border-stone-200 rounded-xl bg-stone-50 focus:ring-2 focus:ring-brand-500 focus:bg-white outline-none text-sm transition-all"
                                         placeholder="Username"
                                     />
                                 ) : (

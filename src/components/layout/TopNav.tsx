@@ -2,7 +2,8 @@
 
 import { useSidebar } from "@/context/SidebarContext";
 import { useUser } from "@/context/UserContext";
-import { Menu, Bell } from "lucide-react";
+import { Menu } from "lucide-react";
+import NotificationsTray from "@/components/notifications/NotificationsTray";
 
 type TopNavProps = {
     moduleType: "member" | "mentor" | "admin";
@@ -29,9 +30,11 @@ export default function TopNav({ moduleType }: TopNavProps) {
                     <Menu className="h-6 w-6" strokeWidth={1.5} />
                 </button>
                 <div className="md:hidden flex items-center gap-2">
-                    <div className="h-8 w-8 bg-purple-900 text-white rounded-lg flex items-center justify-center font-bold text-sm">
-                        BGG
-                    </div>
+                    <img
+                        src="/BBG-Final-Logo.png"
+                        alt="Black Girls Gather"
+                        className="h-8 w-auto object-contain"
+                    />
                     <span className="font-semibold text-stone-900">Black Girls Gather</span>
                 </div>
             </div>
@@ -39,17 +42,14 @@ export default function TopNav({ moduleType }: TopNavProps) {
             {/* Right Interface: Module Badge, Notifs, Profile */}
             <div className="flex items-center gap-4 md:gap-6">
                 {/* Module Badge */}
-                <div className="hidden md:flex items-center gap-2 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-100">
-                    <span className="text-xs font-bold text-purple-700 capitalize">
+                <div className="hidden md:flex items-center gap-2 bg-brand-100 px-3 py-1.5 rounded-lg border border-brand-200">
+                    <span className="text-xs font-bold text-brand-700 capitalize">
                         {moduleLabels[moduleType]} Portal
                     </span>
                 </div>
 
                 {/* Notifications */}
-                <button className="relative text-stone-500 hover:text-stone-900 transition-colors">
-                    <Bell className="h-5 w-5" />
-                    <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-rose-500 rounded-full border-2 border-white"></span>
-                </button>
+                <NotificationsTray />
 
                 {/* Profile */}
                 <div className="flex items-center gap-3 pl-4 border-l border-stone-100">

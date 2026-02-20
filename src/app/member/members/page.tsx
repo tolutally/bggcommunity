@@ -132,7 +132,7 @@ export default function MembersPage() {
                     placeholder="Search by name, role, or location..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-stone-200 rounded-2xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-300 outline-none transition-all shadow-sm"
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-stone-200 rounded-2xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none transition-all shadow-sm"
                 />
             </div>
 
@@ -143,11 +143,11 @@ export default function MembersPage() {
                         key={member.id}
                         layoutId={`card-${member.id}`}
                         onClick={() => setSelectedMember(member)}
-                        className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-lg hover:border-purple-100 transition-all cursor-pointer group flex flex-col items-center text-center relative"
+                        className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-lg hover:border-brand-100 transition-all cursor-pointer group flex flex-col items-center text-center relative"
                     >
                         {/* Avatar */}
                         <div className="relative mb-4">
-                            <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-purple-100 to-orange-100 group-hover:from-purple-300 group-hover:to-orange-300 transition-colors">
+                            <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-brand-100 to-orange-100 group-hover:from-brand-300 group-hover:to-orange-300 transition-colors">
                                 <img
                                     src={member.avatar}
                                     alt={member.name}
@@ -162,7 +162,7 @@ export default function MembersPage() {
                         </div>
 
                         {/* Info */}
-                        <h3 className="font-bold text-stone-900 text-lg mb-1 group-hover:text-purple-700 transition-colors">{member.name}</h3>
+                        <h3 className="font-bold text-stone-900 text-lg mb-1 group-hover:text-brand-700 transition-colors">{member.name}</h3>
 
                         {member.occupation && (
                             <p className="text-sm font-medium text-stone-600 mb-0.5">{member.occupation}</p>
@@ -176,7 +176,7 @@ export default function MembersPage() {
 
                         {/* Tag */}
                         <div className="mt-auto pt-3 border-t border-stone-50 w-full">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full">{member.industry}</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full">{member.industry}</span>
                         </div>
                     </motion.div>
                 ))}
@@ -211,7 +211,7 @@ function MemberDetailModal({ member, onClose }: { member: typeof MEMBERS[0], onC
                 className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md relative z-10 overflow-hidden"
             >
                 {/* Header Background */}
-                <div className="h-32 bg-gradient-to-br from-purple-600 to-indigo-700 relative">
+                <div className="h-32 bg-gradient-to-br from-brand-600 to-indigo-700 relative">
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full backdrop-blur-md transition-colors"
@@ -247,7 +247,7 @@ function MemberDetailModal({ member, onClose }: { member: typeof MEMBERS[0], onC
                         {member.name}
                         <BadgeCheck size={20} className="text-blue-500" fill="currentColor" />
                     </h2>
-                    <p className="text-lg font-medium text-purple-700 mb-1">{member.occupation}</p>
+                    <p className="text-lg font-medium text-brand-700 mb-1">{member.occupation}</p>
                     <p className="text-stone-500 text-sm flex items-center gap-1.5 mb-6">
                         <MapPin size={14} /> {member.location}
                     </p>
@@ -259,7 +259,7 @@ function MemberDetailModal({ member, onClose }: { member: typeof MEMBERS[0], onC
                                 Open to Opportunities
                             </span>
                         )}
-                        <span className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-xs font-bold border border-purple-100">
+                        <span className="px-3 py-1 bg-brand-50 text-brand-700 rounded-full text-xs font-bold border border-brand-100">
                             {member.industry}
                         </span>
                         <span className="px-3 py-1 bg-stone-100 text-stone-600 rounded-full text-xs font-bold border border-stone-200">

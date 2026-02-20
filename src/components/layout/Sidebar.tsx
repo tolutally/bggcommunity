@@ -30,7 +30,7 @@ export default function Sidebar({ navGroups, moduleType }: SidebarProps) {
     const { isOpen, closeSidebar } = useSidebar();
     const pathname = usePathname();
 
-    const activeClass = "bg-purple-50 text-purple-900";
+    const activeClass = "bg-brand-100 text-brand-800";
     const inactiveClass = "text-stone-500 hover:bg-stone-50 hover:text-stone-900";
 
     const moduleLabels = {
@@ -61,14 +61,16 @@ export default function Sidebar({ navGroups, moduleType }: SidebarProps) {
                     {/* Logo */}
                     <div className="flex items-center justify-between mb-8 px-2">
                         <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 bg-purple-900 text-white rounded-xl flex items-center justify-center font-bold text-lg tracking-tighter">
-                                BGG
-                            </div>
+                            <img
+                                src="/BBG-Final-Logo.png"
+                                alt="Black Girls Gather"
+                                className="h-10 w-auto object-contain"
+                            />
                             <div className="flex flex-col">
                                 <span className="font-semibold text-lg tracking-tight text-stone-900">
                                     Black Girls Gather
                                 </span>
-                                <span className="text-xs text-purple-600 font-medium">
+                                <span className="text-xs text-brand-600 font-medium">
                                     {moduleLabels[moduleType]}
                                 </span>
                             </div>

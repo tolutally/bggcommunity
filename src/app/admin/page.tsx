@@ -64,7 +64,7 @@ export default function AdminDashboard() {
                             {[35, 42, 38, 55, 62, 58, 75, 82, 90, 85, 94, 100].map((h, i) => (
                                 <div key={i} className="w-full bg-stone-100 rounded-t-md relative group">
                                     <div
-                                        className="absolute bottom-0 left-0 right-0 bg-purple-600 rounded-t-md transition-all hover:bg-purple-700"
+                                        className="absolute bottom-0 left-0 right-0 bg-brand-600 rounded-t-md transition-all hover:bg-brand-700"
                                         style={{ height: `${h}%` }}
                                     ></div>
                                 </div>
@@ -80,7 +80,7 @@ export default function AdminDashboard() {
                         <div className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm">
                             <h3 className="font-bold text-stone-900 mb-4">Quick Actions</h3>
                             <div className="grid grid-cols-2 gap-3">
-                                <button className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors">
+                                <button className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors">
                                     <Users size={20} />
                                     <span className="text-xs font-semibold">Add User</span>
                                 </button>
@@ -107,7 +107,7 @@ export default function AdminDashboard() {
                     <div className="md:col-span-3 bg-white rounded-3xl p-6 border border-stone-100 shadow-sm">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="font-bold text-stone-900">Active Cohorts</h3>
-                            <Link href="/admin/programs" className="text-sm font-medium text-purple-700 hover:text-purple-900">Manage All</Link>
+                            <Link href="/admin/cohorts" className="text-sm font-medium text-brand-700 hover:text-brand-800">Manage All</Link>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <CohortStatusCard name="Cohort Alpha" phase="Week 3: Research" health="High" stats="42 Members • 95% Active" />
@@ -146,7 +146,7 @@ function CohortStatusCard({ name, phase, health, stats }: any) {
     return (
         <div className="p-4 border border-stone-100 rounded-2xl bg-stone-50/50 hover:bg-white hover:shadow-md transition-all flex items-center justify-between group cursor-pointer">
             <div>
-                <h4 className="font-bold text-stone-900 group-hover:text-purple-700 transition-colors">{name}</h4>
+                <h4 className="font-bold text-stone-900 group-hover:text-brand-700 transition-colors">{name}</h4>
                 <p className="text-xs text-stone-500 font-medium mb-1">{phase}</p>
                 {stats && <p className="text-[10px] text-stone-400 font-medium">{stats}</p>}
             </div>

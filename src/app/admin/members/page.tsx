@@ -76,7 +76,7 @@ export default function AdminMembersPage() {
                         <input
                             type="text"
                             placeholder="Search by name or email..."
-                            className="w-full pl-10 pr-4 py-2 bg-stone-50 border-stone-200 border rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                            className="w-full pl-10 pr-4 py-2 bg-stone-50 border-stone-200 border rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -85,7 +85,7 @@ export default function AdminMembersPage() {
                     {/* Filters */}
                     <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
                         <select
-                            className="bg-stone-50 border border-stone-200 text-stone-700 text-sm rounded-xl focus:ring-purple-500 focus:border-purple-500 block p-2 outline-none cursor-pointer font-medium"
+                            className="bg-stone-50 border border-stone-200 text-stone-700 text-sm rounded-xl focus:ring-brand-500 focus:border-brand-500 block p-2 outline-none cursor-pointer font-medium"
                             value={selectedCohort}
                             onChange={(e) => setSelectedCohort(e.target.value)}
                         >
@@ -93,7 +93,7 @@ export default function AdminMembersPage() {
                             {COHORTS.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <select
-                            className="bg-stone-50 border border-stone-200 text-stone-700 text-sm rounded-xl focus:ring-purple-500 focus:border-purple-500 block p-2 outline-none cursor-pointer font-medium"
+                            className="bg-stone-50 border border-stone-200 text-stone-700 text-sm rounded-xl focus:ring-brand-500 focus:border-brand-500 block p-2 outline-none cursor-pointer font-medium"
                             value={selectedProgram}
                             onChange={(e) => setSelectedProgram(e.target.value)}
                         >
@@ -167,7 +167,7 @@ export default function AdminMembersPage() {
 
 function MemberGridCard({ member }: { member: typeof MOCK_MEMBERS[0] }) {
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col items-center text-center group hover:border-purple-300 hover:shadow-lg hover:shadow-purple-500/5 transition-all cursor-pointer relative overflow-hidden">
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col items-center text-center group hover:border-brand-300 hover:shadow-lg hover:shadow-brand-500/5 transition-all cursor-pointer relative overflow-hidden">
             <button className="absolute top-4 right-4 text-stone-300 hover:text-stone-600 transition-colors">
                 <MoreHorizontal size={20} />
             </button>
@@ -186,7 +186,7 @@ function MemberGridCard({ member }: { member: typeof MOCK_MEMBERS[0] }) {
                 <span className="px-2 py-1 bg-stone-50 border border-stone-100 rounded-md text-xs font-semibold text-stone-600">
                     {member.cohort}
                 </span>
-                <span className="px-2 py-1 bg-purple-50 border border-purple-100 rounded-md text-xs font-bold text-purple-700">
+                <span className="px-2 py-1 bg-brand-50 border border-brand-100 rounded-md text-xs font-bold text-brand-700">
                     {member.program}
                 </span>
             </div>
@@ -196,7 +196,7 @@ function MemberGridCard({ member }: { member: typeof MOCK_MEMBERS[0] }) {
                     <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Progress</span>
                     <span className="text-sm font-bold text-stone-900">{member.progress}%</span>
                 </div>
-                <button className="text-purple-700 hover:bg-purple-50 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <button className="text-brand-700 hover:bg-brand-50 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                     View Profile
                 </button>
             </div>
@@ -239,7 +239,7 @@ function MemberListRow({ member }: { member: typeof MOCK_MEMBERS[0] }) {
                 {member.joinDate}
             </td>
             <td className="px-6 py-4 text-right">
-                <button className="text-stone-400 hover:text-purple-700 transition-colors p-2 hover:bg-purple-50 rounded-full">
+                <button className="text-stone-400 hover:text-brand-700 transition-colors p-2 hover:bg-brand-50 rounded-full">
                     <MoreHorizontal size={18} />
                 </button>
             </td>

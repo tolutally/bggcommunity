@@ -44,7 +44,7 @@ export default function AdminEventsPage() {
                     <h1 className="text-3xl font-bold text-stone-900">Events</h1>
                     <p className="text-stone-500 mt-1">Schedule and manage community events.</p>
                 </div>
-                <button className="bg-purple-900 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-purple-800 flex items-center gap-2 shadow-lg shadow-purple-900/10">
+                <button className="bg-brand-800 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-brand-700 flex items-center gap-2 shadow-lg shadow-brand-800/10">
                     <Plus size={18} /> Create Event
                 </button>
             </div>
@@ -52,10 +52,10 @@ export default function AdminEventsPage() {
             {/* Events List */}
             <div className="space-y-4">
                 {events.map(event => (
-                    <div key={event.id} className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col md:flex-row gap-6 hover:border-purple-300 transition-all group">
-                        <div className="flex-shrink-0 flex flex-col items-center justify-center w-20 h-20 bg-purple-50 rounded-2xl border border-purple-100 group-hover:bg-purple-100 transition-colors">
-                            <span className="text-xs font-bold uppercase tracking-wider text-purple-600">{event.date.split(' ')[0]}</span>
-                            <span className="text-3xl font-bold text-purple-900">{event.date.split(' ')[1]}</span>
+                    <div key={event.id} className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col md:flex-row gap-6 hover:border-brand-300 transition-all group">
+                        <div className="flex-shrink-0 flex flex-col items-center justify-center w-20 h-20 bg-brand-50 rounded-2xl border border-brand-100 group-hover:bg-brand-100 transition-colors">
+                            <span className="text-xs font-bold uppercase tracking-wider text-brand-600">{event.date.split(' ')[0]}</span>
+                            <span className="text-3xl font-bold text-brand-800">{event.date.split(' ')[1]}</span>
                         </div>
 
                         <div className="flex-1">
@@ -66,7 +66,7 @@ export default function AdminEventsPage() {
                                             {event.type}
                                         </span>
                                     </div>
-                                    <h3 className="text-xl font-bold text-stone-900 mb-2 group-hover:text-purple-700 transition-colors">{event.title}</h3>
+                                    <h3 className="text-xl font-bold text-stone-900 mb-2 group-hover:text-brand-700 transition-colors">{event.title}</h3>
                                     <div className="flex flex-wrap gap-4 text-sm text-stone-500">
                                         <span className="flex items-center gap-1.5"><Clock size={16} /> {event.time}</span>
                                         <span className="flex items-center gap-1.5"><Users size={16} /> {event.attendees} Attending</span>

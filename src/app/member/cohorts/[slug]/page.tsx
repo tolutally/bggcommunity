@@ -134,10 +134,10 @@ function FeedTab() {
                         <input
                             type="text"
                             placeholder="Start a discussion with your cohort..."
-                            className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none mb-3"
+                            className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none mb-3"
                         />
                         <div className="flex items-center justify-end">
-                            <button className="bg-purple-900 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-purple-800 flex items-center gap-2">
+                            <button className="bg-brand-800 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-brand-700 flex items-center gap-2">
                                 <Send size={16} /> Post
                             </button>
                         </div>
@@ -171,13 +171,13 @@ function FeedTab() {
                         <div className="flex items-center gap-4 mt-4 pt-4 border-t border-stone-100">
                             <button
                                 onClick={() => toggleExpanded(post.id)}
-                                className="flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-purple-700"
+                                className="flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-brand-700"
                             >
                                 <MessageCircle size={16} />
                                 {post.replies.length} {post.replies.length === 1 ? 'Reply' : 'Replies'}
                                 {expandedPosts.includes(post.id) ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </button>
-                            <button className="text-sm font-medium text-purple-700 hover:text-purple-900">
+                            <button className="text-sm font-medium text-brand-700 hover:text-brand-800">
                                 Add Reply
                             </button>
                         </div>
@@ -187,7 +187,7 @@ function FeedTab() {
                         <div className="bg-stone-50 border-t border-stone-100 px-6 py-4 space-y-4">
                             {post.replies.map(reply => (
                                 <div key={reply.id} className="flex gap-3">
-                                    <div className="w-0.5 bg-purple-200 rounded-full flex-shrink-0 ml-4"></div>
+                                    <div className="w-0.5 bg-brand-200 rounded-full flex-shrink-0 ml-4"></div>
                                     <div className="flex-1 bg-white rounded-xl p-4 border border-stone-100">
                                         <div className="flex items-center gap-2 mb-2">
                                             <img src={reply.avatar} className="w-6 h-6 rounded-full" />
@@ -221,7 +221,7 @@ function SessionsTab() {
                 <div className="space-y-4">
                     <div className="bg-white p-6 rounded-2xl border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex gap-6">
-                            <div className="flex flex-col items-center justify-center w-16 h-16 bg-purple-100 text-purple-700 rounded-2xl">
+                            <div className="flex flex-col items-center justify-center w-16 h-16 bg-brand-100 text-brand-700 rounded-2xl">
                                 <span className="text-xs font-bold uppercase">OCT</span>
                                 <span className="text-2xl font-bold">24</span>
                             </div>
@@ -232,11 +232,11 @@ function SessionsTab() {
                                 </p>
                                 <div className="mt-2 flex items-center gap-2">
                                     <span className="bg-stone-100 px-2 py-0.5 rounded text-xs font-semibold text-stone-600">Lecture</span>
-                                    <span className="bg-purple-100 px-2 py-0.5 rounded text-xs font-semibold text-purple-700">Mandatory</span>
+                                    <span className="bg-brand-100 px-2 py-0.5 rounded text-xs font-semibold text-brand-700">Mandatory</span>
                                 </div>
                             </div>
                         </div>
-                        <button className="px-6 py-2.5 bg-white border-2 border-purple-900 text-purple-900 font-bold rounded-xl hover:bg-purple-50 transition-colors">
+                        <button className="px-6 py-2.5 bg-white border-2 border-brand-800 text-brand-800 font-bold rounded-xl hover:bg-brand-50 transition-colors">
                             Add to Calendar
                         </button>
                     </div>
@@ -258,7 +258,7 @@ function SessionsTab() {
                                 </div>
                             </div>
                         </div>
-                        <button className="px-6 py-2.5 bg-white border-2 border-purple-900 text-purple-900 font-bold rounded-xl hover:bg-purple-50 transition-colors">
+                        <button className="px-6 py-2.5 bg-white border-2 border-brand-800 text-brand-800 font-bold rounded-xl hover:bg-brand-50 transition-colors">
                             Add to Calendar
                         </button>
                     </div>
@@ -277,14 +277,14 @@ function SessionsTab() {
                                     <Video size={28} className="text-stone-400" />
                                 </div>
                                 {/* Play overlay on hover */}
-                                <div className="absolute inset-0 bg-purple-900/0 group-hover:bg-purple-900/20 transition-colors flex items-center justify-center">
+                                <div className="absolute inset-0 bg-brand-800/0 group-hover:bg-brand-800/20 transition-colors flex items-center justify-center">
                                     <div className="w-16 h-16 bg-white/0 group-hover:bg-white/90 rounded-full flex items-center justify-center transition-all scale-75 group-hover:scale-100 opacity-0 group-hover:opacity-100">
-                                        <Play size={28} className="text-purple-900 ml-1" />
+                                        <Play size={28} className="text-brand-800 ml-1" />
                                     </div>
                                 </div>
                             </div>
                             {/* Recording Info */}
-                            <h4 className="font-bold text-stone-900 group-hover:text-purple-900 transition-colors">{recording.title}</h4>
+                            <h4 className="font-bold text-stone-900 group-hover:text-brand-800 transition-colors">{recording.title}</h4>
                             <p className="text-sm text-stone-500">Recorded {recording.date} • {recording.duration}</p>
                         </div>
                     ))}
@@ -340,13 +340,13 @@ function ResourcesTab() {
                         placeholder="Search resources..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                        className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
                     />
                 </div>
                 <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-700 font-medium focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none cursor-pointer"
+                    className="px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-700 font-medium focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none cursor-pointer"
                 >
                     {categories.map(cat => (
                         <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -357,7 +357,7 @@ function ResourcesTab() {
             {/* Resources List */}
             <div className="space-y-3">
                 {filteredResources.map(resource => (
-                    <div key={resource.id} className="bg-white p-5 rounded-2xl border border-stone-200 flex items-center justify-between hover:border-purple-200 hover:shadow-sm transition-all">
+                    <div key={resource.id} className="bg-white p-5 rounded-2xl border border-stone-200 flex items-center justify-between hover:border-brand-200 hover:shadow-sm transition-all">
                         <div className="flex items-center gap-4">
                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getTypeColor(resource.type)}`}>
                                 <FileText size={22} />
@@ -367,7 +367,7 @@ function ResourcesTab() {
                                 <p className="text-sm text-stone-500">{resource.type} • {resource.size}</p>
                             </div>
                         </div>
-                        <button className="p-3 text-stone-400 hover:text-purple-700 hover:bg-purple-50 rounded-xl transition-colors">
+                        <button className="p-3 text-stone-400 hover:text-brand-700 hover:bg-brand-50 rounded-xl transition-colors">
                             <Download size={20} />
                         </button>
                     </div>
@@ -473,11 +473,11 @@ function MembersTab() {
                         key={member.id}
                         layoutId={`card-${member.id}`}
                         onClick={() => setSelectedMember(member)}
-                        className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-lg hover:border-purple-100 transition-all cursor-pointer group flex flex-col items-center text-center relative"
+                        className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-lg hover:border-brand-100 transition-all cursor-pointer group flex flex-col items-center text-center relative"
                     >
                         {/* Avatar */}
                         <div className="relative mb-4">
-                            <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-purple-100 to-orange-100 group-hover:from-purple-300 group-hover:to-orange-300 transition-colors">
+                            <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-brand-100 to-orange-100 group-hover:from-brand-300 group-hover:to-orange-300 transition-colors">
                                 <img
                                     src={member.avatar}
                                     alt={member.name}
@@ -492,7 +492,7 @@ function MembersTab() {
                         </div>
 
                         {/* Info */}
-                        <h3 className="font-bold text-stone-900 text-lg mb-1 group-hover:text-purple-700 transition-colors">{member.name}</h3>
+                        <h3 className="font-bold text-stone-900 text-lg mb-1 group-hover:text-brand-700 transition-colors">{member.name}</h3>
 
                         <p className="text-sm font-medium text-stone-600 mb-0.5">{member.occupation}</p>
 
@@ -502,7 +502,7 @@ function MembersTab() {
 
                         {/* Tag */}
                         <div className="mt-auto pt-3 border-t border-stone-50 w-full flex flex-wrap justify-center gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full">{member.industry}</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full">{member.industry}</span>
                             {member.role === 'Mentor' && (
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">Mentor</span>
                             )}
@@ -539,7 +539,7 @@ function MemberDetailModal({ member, onClose }: { member: any, onClose: () => vo
                 className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md relative z-10 overflow-hidden"
             >
                 {/* Header Background */}
-                <div className="h-32 bg-gradient-to-br from-purple-600 to-indigo-700 relative">
+                <div className="h-32 bg-gradient-to-br from-brand-600 to-indigo-700 relative">
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full backdrop-blur-md transition-colors"
@@ -576,7 +576,7 @@ function MemberDetailModal({ member, onClose }: { member: any, onClose: () => vo
                         {/* Using explicit BadgeCheck if verification logic existed, for now static or omitted if not needed. Adding back simpler version */}
                         <div className="text-blue-500"><BadgeCheck size={20} fill="currentColor" className="text-white fill-blue-500" /></div>
                     </h2>
-                    <p className="text-lg font-medium text-purple-700 mb-1">{member.occupation}</p>
+                    <p className="text-lg font-medium text-brand-700 mb-1">{member.occupation}</p>
                     <p className="text-stone-500 text-sm flex items-center gap-1.5 mb-6">
                         <MapPin size={14} /> {member.location}
                     </p>
@@ -593,7 +593,7 @@ function MemberDetailModal({ member, onClose }: { member: any, onClose: () => vo
                                 Open to Opportunities
                             </span>
                         )}
-                        <span className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-xs font-bold border border-purple-100">
+                        <span className="px-3 py-1 bg-brand-50 text-brand-700 rounded-full text-xs font-bold border border-brand-100">
                             {member.industry}
                         </span>
                         <span className="px-3 py-1 bg-stone-100 text-stone-600 rounded-full text-xs font-bold border border-stone-200">
@@ -633,7 +633,7 @@ function TabButton({ active, onClick, label, icon: Icon }: any) {
     return (
         <button
             onClick={onClick}
-            className={`flex items-center gap-2 pb-4 border-b-2 transition-all px-2 ${active ? 'border-purple-900 text-purple-900' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
+            className={`flex items-center gap-2 pb-4 border-b-2 transition-all px-2 ${active ? 'border-brand-800 text-brand-800' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
         >
             <Icon size={18} />
             <span className="font-semibold">{label}</span>

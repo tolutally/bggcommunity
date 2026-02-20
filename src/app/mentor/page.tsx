@@ -47,14 +47,14 @@ export default function MentorDashboard() {
                     <div className="lg:col-span-2 space-y-8">
                         <section>
                             <h2 className="text-xl font-bold text-stone-900 mb-4">Sessions to Host</h2>
-                            <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm border-l-4 border-l-purple-600">
+                            <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm border-l-4 border-l-brand-600">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold mb-2">Upcoming - Starts in 2h</span>
+                                        <span className="inline-block px-3 py-1 bg-brand-100 text-brand-700 rounded-full text-xs font-semibold mb-2">Upcoming - Starts in 2h</span>
                                         <h3 className="text-lg font-bold text-stone-900">Product Strategy Workshop</h3>
                                         <p className="text-stone-500">Cohort Alpha • 45 Attending</p>
                                     </div>
-                                    <button className="bg-purple-900 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-purple-800">
+                                    <button className="bg-brand-800 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-brand-700">
                                         Launch Session
                                     </button>
                                 </div>

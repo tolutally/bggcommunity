@@ -2,6 +2,32 @@
 
 @theme {
   --font-sans: var(--font-plus-jakarta);
+  
+  /* Brand Purple - #412569 */
+  --color-brand-50: #f5f1f9;
+  --color-brand-100: #ebe4f3;
+  --color-brand-200: #d4c5e6;
+  --color-brand-300: #b89dd4;
+  --color-brand-400: #9670be;
+  --color-brand-500: #7649a3;
+  --color-brand-600: #5c3785;
+  --color-brand-700: #4d2d6e;
+  --color-brand-800: #412569;
+  --color-brand-900: #351d56;
+  --color-brand-950: #1f0f35;
+  
+  /* Brand Accent Amber - #db8e29 */
+  --color-accent-50: #fdf8ed;
+  --color-accent-100: #f9ecd0;
+  --color-accent-200: #f3d7a0;
+  --color-accent-300: #ecbc66;
+  --color-accent-400: #e6a43c;
+  --color-accent-500: #db8e29;
+  --color-accent-600: #c26e1e;
+  --color-accent-700: #a1521c;
+  --color-accent-800: #84411d;
+  --color-accent-900: #6d361b;
+  --color-accent-950: #3e1a0b;
 }
 
 /* Custom Scrollbar for sleek look */
@@ -25,9 +51,9 @@
 
 /* Custom Checkbox */
 .custom-checkbox input:checked+div {
-  background-color: #7e22ce;
-  /* purple-700 */
-  border-color: #7e22ce;
+  background-color: #412569;
+  /* brand-800 */
+  border-color: #412569;
 }
 
 .custom-checkbox input:checked+div svg {

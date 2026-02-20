@@ -100,7 +100,7 @@ export default function MemberCommunityPage() {
             {/* New Post Composer */}
             <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
                 <h2 className="font-bold text-stone-900 mb-4 flex items-center gap-2">
-                    <MessageSquare size={20} className="text-purple-600" />
+                    <MessageSquare size={20} className="text-brand-600" />
                     Start a Discussion
                 </h2>
                 <div className="space-y-4">
@@ -109,19 +109,19 @@ export default function MemberCommunityPage() {
                         placeholder="Discussion title..."
                         value={newPostTitle}
                         onChange={(e) => setNewPostTitle(e.target.value)}
-                        className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none font-medium"
+                        className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none font-medium"
                     />
                     <textarea
                         placeholder="What's on your mind? Share your thoughts, questions, or experiences..."
                         value={newPostContent}
                         onChange={(e) => setNewPostContent(e.target.value)}
                         rows={3}
-                        className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none"
+                        className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none resize-none"
                     />
                     <div className="flex justify-end">
                         <button
                             onClick={handleSubmitPost}
-                            className="bg-purple-900 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-purple-800 transition-colors flex items-center gap-2 shadow-lg shadow-purple-900/10"
+                            className="bg-brand-800 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-brand-700 transition-colors flex items-center gap-2 shadow-lg shadow-brand-900/10"
                         >
                             <Send size={16} /> Post Discussion
                         </button>
@@ -174,7 +174,7 @@ function PostCard({ post, isExpanded, onToggle }: { post: any, isExpanded: boole
     };
 
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden hover:border-purple-200 transition-colors">
+        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden hover:border-brand-200 transition-colors">
             {/* Post Header & Content */}
             <div className="p-6">
                 <div className="flex items-start justify-between mb-3">
@@ -199,7 +199,7 @@ function PostCard({ post, isExpanded, onToggle }: { post: any, isExpanded: boole
                 <div className="flex items-center gap-4 mt-4 pt-4 border-t border-stone-100">
                     <button
                         onClick={onToggle}
-                        className="flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-purple-700 transition-colors"
+                        className="flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-brand-700 transition-colors"
                     >
                         <MessageSquare size={16} />
                         {replies.length} {replies.length === 1 ? 'Reply' : 'Replies'}
@@ -207,7 +207,7 @@ function PostCard({ post, isExpanded, onToggle }: { post: any, isExpanded: boole
                     </button>
                     <button
                         onClick={() => setShowReplyInput(!showReplyInput)}
-                        className="text-sm font-medium text-purple-700 hover:text-purple-900 transition-colors"
+                        className="text-sm font-medium text-brand-700 hover:text-brand-800 transition-colors"
                     >
                         Add Reply
                     </button>
@@ -219,7 +219,7 @@ function PostCard({ post, isExpanded, onToggle }: { post: any, isExpanded: boole
                 <div className="bg-stone-50 border-t border-stone-100 px-6 py-4 space-y-4">
                     {replies.map((reply: any) => (
                         <div key={reply.id} className="flex gap-3">
-                            <div className="w-0.5 bg-purple-200 rounded-full flex-shrink-0 ml-4"></div>
+                            <div className="w-0.5 bg-brand-200 rounded-full flex-shrink-0 ml-4"></div>
                             <div className="flex-1 bg-white rounded-xl p-4 border border-stone-100">
                                 <div className="flex items-center gap-2 mb-2">
                                     <img src={reply.avatar} alt={reply.author} className="w-6 h-6 rounded-full" />
@@ -244,7 +244,7 @@ function PostCard({ post, isExpanded, onToggle }: { post: any, isExpanded: boole
                                 value={replyContent}
                                 onChange={(e) => setReplyContent(e.target.value)}
                                 rows={2}
-                                className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none text-sm"
+                                className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none resize-none text-sm"
                             />
                             <div className="flex justify-end gap-2 mt-2">
                                 <button
@@ -255,7 +255,7 @@ function PostCard({ post, isExpanded, onToggle }: { post: any, isExpanded: boole
                                 </button>
                                 <button
                                     onClick={handleSubmitReply}
-                                    className="px-4 py-2 bg-purple-900 text-white font-medium text-sm rounded-lg hover:bg-purple-800 transition-colors"
+                                    className="px-4 py-2 bg-brand-800 text-white font-medium text-sm rounded-lg hover:bg-brand-700 transition-colors"
                                 >
                                     Reply
                                 </button>

@@ -122,8 +122,8 @@ export default function AdminModerationPage() {
                                     key={report.id}
                                     onClick={() => setSelectedReportId(report.id)}
                                     className={`p-4 rounded-xl border cursor-pointer transition-all hover:shadow-md ${(selectedReport?.id === report.id)
-                                        ? 'bg-purple-50 border-purple-200 shadow-sm'
-                                        : 'bg-white border-stone-100 hover:border-purple-200'
+                                        ? 'bg-brand-50 border-brand-200 shadow-sm'
+                                        : 'bg-white border-stone-100 hover:border-brand-200'
                                         }`}
                                 >
                                     <div className="flex justify-between items-start mb-2">

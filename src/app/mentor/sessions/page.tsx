@@ -24,18 +24,18 @@ export default function MentorSessionsPage() {
             <div className="bg-white rounded-2xl border border-stone-200 p-6">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-                        <Calendar size={22} className="text-purple-700" /> Weekly Availability
+                        <Calendar size={22} className="text-brand-700" /> Weekly Availability
                     </h2>
-                    <button className="text-sm font-semibold text-purple-700 hover:text-purple-900 border border-purple-200 px-3 py-1 rounded-lg hover:bg-purple-50">
+                    <button className="text-sm font-semibold text-brand-700 hover:text-brand-800 border border-brand-200 px-3 py-1 rounded-lg hover:bg-brand-50">
                         Edit Time Slots
                     </button>
                 </div>
                 <div className="flex gap-4 overflow-x-auto pb-2">
                     {Object.entries(availability).map(([day, isAvailable]) => (
-                        <div key={day} className={`flex-1 min-w-[80px] p-4 rounded-xl border-2 cursor-pointer transition-all ${isAvailable ? 'border-purple-600 bg-purple-50' : 'border-stone-100 bg-stone-50'}`}>
+                        <div key={day} className={`flex-1 min-w-[80px] p-4 rounded-xl border-2 cursor-pointer transition-all ${isAvailable ? 'border-brand-600 bg-brand-50' : 'border-stone-100 bg-stone-50'}`}>
                             <div className="text-center">
-                                <span className={`block font-bold mb-1 ${isAvailable ? 'text-purple-900' : 'text-stone-400'}`}>{day}</span>
-                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-purple-200 text-purple-800' : 'bg-stone-200 text-stone-500'}`}>
+                                <span className={`block font-bold mb-1 ${isAvailable ? 'text-brand-800' : 'text-stone-400'}`}>{day}</span>
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-brand-200 text-brand-800' : 'bg-stone-200 text-stone-500'}`}>
                                     {isAvailable ? '4 Slots' : 'Off'}
                                 </span>
                             </div>
@@ -60,7 +60,7 @@ export default function MentorSessionsPage() {
                         topic="Technical Review"
                         avatar="https://i.pravatar.cc/150?u=2"
                     />
-                    <div className="border-2 border-dashed border-stone-200 rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-purple-300 hover:bg-stone-50 cursor-pointer transition-colors min-h-[140px]">
+                    <div className="border-2 border-dashed border-stone-200 rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-accent-400 hover:bg-stone-50 cursor-pointer transition-colors min-h-[140px]">
                         <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center shadow-sm mb-2 text-stone-400">
                             <Plus size={20} />
                         </div>
@@ -101,7 +101,7 @@ function CoachingCard({ mentee, time, topic, avatar }: any) {
                 <button className="text-stone-400 hover:text-stone-600"><MoreHorizontal size={18} /></button>
             </div>
             <div className="mt-auto">
-                <p className="text-sm font-semibold text-purple-700 mb-1">{topic}</p>
+                <p className="text-sm font-semibold text-brand-700 mb-1">{topic}</p>
                 <div className="flex items-center gap-2 text-xs text-stone-500">
                     <Clock size={14} /> {time}
                 </div>
@@ -125,7 +125,7 @@ function SessionRow({ day, month, title, time, type }: any) {
                     <span>{time}</span>
                 </p>
             </div>
-            <button className="text-sm font-semibold text-stone-500 hover:text-purple-700 px-3 py-1.5 rounded hover:bg-stone-50">Details</button>
+            <button className="text-sm font-semibold text-stone-500 hover:text-brand-700 px-3 py-1.5 rounded hover:bg-stone-50">Details</button>
         </div>
     )
 }

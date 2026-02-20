@@ -18,7 +18,7 @@ export default function AdminCommunityPage() {
                         ))}
                     </div>
                     <div className="text-xs font-bold text-stone-600">
-                        <span className="text-purple-700 text-lg">24</span>
+                        <span className="text-brand-700 text-lg">24</span>
                         <span className="block">Online Now</span>
                     </div>
                 </div>
@@ -29,7 +29,7 @@ export default function AdminCommunityPage() {
                 <div className="flex-1 space-y-8">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold text-stone-900">Interest Groups</h2>
-                        <button className="text-purple-700 font-bold text-sm hover:bg-purple-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                        <button className="text-brand-700 font-bold text-sm hover:bg-brand-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
                             <Plus size={16} /> New Group
                         </button>
                     </div>
@@ -65,7 +65,7 @@ export default function AdminCommunityPage() {
                             posts={156}
                             desc="The digital watercooler. Random topics welcome!"
                             icon={MessageSquare}
-                            color="bg-purple-50 text-purple-600"
+                            color="bg-brand-50 text-brand-600"
                         />
                     </div>
                 </div>
@@ -73,7 +73,7 @@ export default function AdminCommunityPage() {
                 {/* Sidebar: Announcements */}
                 <div className="w-full xl:w-96 space-y-6">
                     <div className="bg-stone-900 text-white rounded-3xl p-6 shadow-xl shadow-stone-900/10">
-                        <div className="flex items-center gap-2 mb-4 text-purple-300 font-bold text-sm uppercase tracking-wider">
+                        <div className="flex items-center gap-2 mb-4 text-brand-300 font-bold text-sm uppercase tracking-wider">
                             <Megaphone size={16} /> Admin Updates
                         </div>
                         <h3 className="text-xl font-bold mb-2">Make an Announcement</h3>
@@ -83,14 +83,14 @@ export default function AdminCommunityPage() {
                             <input
                                 type="text"
                                 placeholder="Post Title"
-                                className="w-full bg-stone-800 border-none rounded-xl px-4 py-3 text-sm text-white placeholder:text-stone-500 focus:ring-1 focus:ring-purple-500"
+                                className="w-full bg-stone-800 border-none rounded-xl px-4 py-3 text-sm text-white placeholder:text-stone-500 focus:ring-1 focus:ring-brand-500"
                             />
                             <textarea
                                 placeholder="Message..."
                                 rows={3}
-                                className="w-full bg-stone-800 border-none rounded-xl px-4 py-3 text-sm text-white placeholder:text-stone-500 focus:ring-1 focus:ring-purple-500 resize-none"
+                                className="w-full bg-stone-800 border-none rounded-xl px-4 py-3 text-sm text-white placeholder:text-stone-500 focus:ring-1 focus:ring-brand-500 resize-none"
                             ></textarea>
-                            <button className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl transition-colors">
+                            <button className="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3 rounded-xl transition-colors">
                                 Post to Community
                             </button>
                         </div>
@@ -129,7 +129,7 @@ export default function AdminCommunityPage() {
 
 function GroupCard({ name, members, posts, desc, icon: Icon, color }: any) {
     return (
-        <div className="bg-white p-6 rounded-2xl border border-stone-200 hover:border-purple-300 transition-all cursor-pointer group flex flex-col h-full">
+        <div className="bg-white p-6 rounded-2xl border border-stone-200 hover:border-brand-300 transition-all cursor-pointer group flex flex-col h-full">
             <div className="flex justify-between items-start mb-4">
                 <div className={`p-3 rounded-xl ${color}`}>
                     <Icon size={24} />
@@ -153,10 +153,10 @@ function GroupCard({ name, members, posts, desc, icon: Icon, color }: any) {
 function ActivityItem({ user, action, target, time }: any) {
     return (
         <div className="flex items-center gap-3 text-sm">
-            <div className="w-2 h-2 rounded-full bg-purple-500 mt-1"></div>
+            <div className="w-2 h-2 rounded-full bg-brand-500 mt-1"></div>
             <div>
                 <p className="text-stone-700">
-                    <span className="font-bold text-stone-900">{user}</span> {action} <span className="font-semibold text-purple-700">{target}</span>
+                    <span className="font-bold text-stone-900">{user}</span> {action} <span className="font-semibold text-brand-700">{target}</span>
                 </p>
                 <p className="text-xs text-stone-400">{time}</p>
             </div>

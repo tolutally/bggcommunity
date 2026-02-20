@@ -21,9 +21,9 @@ export default function MentorSettingsPage() {
                     <img src={user.avatar} className="w-24 h-24 rounded-full border-4 border-white shadow-sm object-cover" alt="Avatar" />
                     <div>
                         <h2 className="text-xl font-bold text-stone-900">{user.name}</h2>
-                        <span className="inline-block mt-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full uppercase tracking-wide">Mentor Account</span>
+                        <span className="inline-block mt-1 px-2 py-0.5 bg-brand-100 text-brand-700 text-xs font-bold rounded-full uppercase tracking-wide">Mentor Account</span>
                         <div className="mt-2">
-                            <button className="text-purple-700 font-semibold text-sm hover:underline">Change Avatar</button>
+                            <button className="text-brand-700 font-semibold text-sm hover:underline">Change Avatar</button>
                         </div>
                     </div>
                 </div>
@@ -43,7 +43,7 @@ export default function MentorSettingsPage() {
                         <div className="mb-6">
                             <label className="block text-sm font-semibold text-stone-700 mb-2">Professional Bio</label>
                             <textarea
-                                className="w-full px-4 py-3 rounded-lg border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-purple-500 outline-none h-32 resize-none text-sm text-stone-600"
+                                className="w-full px-4 py-3 rounded-lg border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-brand-500 outline-none h-32 resize-none text-sm text-stone-600"
                                 defaultValue="10+ years in product management. Passionate about helping women break into tech leadership roles. I specialize in helping folks navigate the transition from IC to Manager."
                             />
                         </div>
@@ -52,12 +52,12 @@ export default function MentorSettingsPage() {
                             <label className="block text-sm font-semibold text-stone-700 mb-2">Expertise Tags</label>
                             <div className="flex flex-wrap gap-2 mb-2">
                                 {tags.map(tag => (
-                                    <span key={tag} className="px-3 py-1 bg-purple-50 text-purple-700 text-sm font-semibold rounded-full flex items-center gap-1 group">
+                                    <span key={tag} className="px-3 py-1 bg-brand-50 text-brand-700 text-sm font-semibold rounded-full flex items-center gap-1 group">
                                         {tag}
-                                        <button onClick={() => removeTag(tag)} className="hover:bg-purple-100 rounded-full p-0.5 transition-colors"><X size={12} /></button>
+                                        <button onClick={() => removeTag(tag)} className="hover:bg-brand-100 rounded-full p-0.5 transition-colors"><X size={12} /></button>
                                     </span>
                                 ))}
-                                <button className="px-3 py-1 border border-dashed border-stone-300 text-stone-400 text-sm font-semibold rounded-full flex items-center gap-1 hover:border-purple-300 hover:text-purple-600 transition-colors">
+                                <button className="px-3 py-1 border border-dashed border-stone-300 text-stone-400 text-sm font-semibold rounded-full flex items-center gap-1 hover:border-brand-300 hover:text-brand-600 transition-colors">
                                     <Plus size={14} /> Add Tag
                                 </button>
                             </div>
@@ -94,7 +94,7 @@ function InputGroup({ label, value }: any) {
     return (
         <div>
             <label className="block text-sm font-semibold text-stone-700 mb-2">{label}</label>
-            <input type="text" defaultValue={value} className="w-full px-4 py-2 rounded-lg border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-purple-500 outline-none" />
+            <input type="text" defaultValue={value} className="w-full px-4 py-2 rounded-lg border border-stone-200 bg-stone-50 focus:ring-2 focus:ring-brand-500 outline-none" />
         </div>
     )
 }
@@ -107,7 +107,7 @@ function ToggleRow({ label, checked, description }: any) {
                 {description && <span className="text-xs text-stone-500">{description}</span>}
             </div>
 
-            <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${checked ? 'bg-purple-600' : 'bg-stone-300'}`}>
+            <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${checked ? 'bg-brand-700' : 'bg-stone-300'}`}>
                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`}></div>
             </div>
         </div>

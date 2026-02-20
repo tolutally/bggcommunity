@@ -48,7 +48,7 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
             {isOpen && (
                 <div className="w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
                     {/* Header */}
-                    <div className="bg-purple-900 text-white p-4 flex items-center justify-between">
+                    <div className="bg-brand-800 text-white p-4 flex items-center justify-between">
                         {selectedContact ? (
                             <button onClick={() => setSelectedContact(null)} className="flex items-center gap-2 hover:opacity-80">
                                 <ChevronDown size={18} className="rotate-90" />
@@ -75,7 +75,7 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                                     </div>
                                 </div>
                                 <div className="flex justify-end">
-                                    <div className="bg-purple-600 text-white p-3 rounded-xl shadow-sm max-w-[80%]">
+                                    <div className="bg-brand-700 text-white p-3 rounded-xl shadow-sm max-w-[80%]">
                                         <p className="text-sm">Sounds great!</p>
                                     </div>
                                 </div>
@@ -87,10 +87,10 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                                     value={message}
                                     onChange={(e) => setMessage(e.target.value)}
                                     placeholder="Type a message..."
-                                    className="flex-1 px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                                    className="flex-1 px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none"
                                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                                 />
-                                <button onClick={handleSend} className="bg-purple-600 text-white p-2.5 rounded-xl hover:bg-purple-700 transition-colors">
+                                <button onClick={handleSend} className="bg-brand-700 text-white p-2.5 rounded-xl hover:bg-brand-800 transition-colors">
                                     <Send size={18} />
                                 </button>
                             </div>
@@ -114,7 +114,7 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                                     <div className="flex-1 min-w-0">
                                         <div className="flex justify-between items-center">
                                             <h4 className="font-bold text-stone-900 text-sm truncate">{contact.name}</h4>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${contact.role === 'mentor' ? 'bg-purple-100 text-purple-700' : 'bg-stone-100 text-stone-500'}`}>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${contact.role === 'mentor' ? 'bg-brand-100 text-brand-700' : 'bg-stone-100 text-stone-500'}`}>
                                                 {contact.role}
                                             </span>
                                         </div>
@@ -130,7 +130,7 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
             {/* Floating Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 ${isOpen ? 'bg-stone-800 rotate-90' : 'bg-purple-600 hover:bg-purple-700'}`}
+                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 ${isOpen ? 'bg-stone-800 rotate-90' : 'bg-brand-700 hover:bg-brand-800'}`}
             >
                 {isOpen ? <X size={24} className="text-white" /> : <MessageCircle size={24} className="text-white" />}
             </button>

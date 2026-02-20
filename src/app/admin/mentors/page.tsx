@@ -91,7 +91,7 @@ export default function AdminMentorsPage() {
                 </div>
                 <div className="flex gap-4">
                     <div className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-xl shadow-sm">
-                        <UserCheck size={18} className="text-purple-600" />
+                        <UserCheck size={18} className="text-brand-600" />
                         <span className="font-bold text-stone-900">42 Active</span>
                     </div>
                     <div className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-xl shadow-sm">
@@ -105,18 +105,18 @@ export default function AdminMentorsPage() {
             <div className="border-b border-stone-200 flex gap-8">
                 <button
                     onClick={() => setActiveTab('active')}
-                    className={`pb-4 px-2 font-bold text-sm transition-colors relative ${activeTab === 'active' ? 'text-purple-700' : 'text-stone-500 hover:text-stone-700'}`}
+                    className={`pb-4 px-2 font-bold text-sm transition-colors relative ${activeTab === 'active' ? 'text-brand-700' : 'text-stone-500 hover:text-stone-700'}`}
                 >
                     Active Directory
-                    {activeTab === 'active' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-700 rounded-t-full"></div>}
+                    {activeTab === 'active' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-700 rounded-t-full"></div>}
                 </button>
                 <button
                     onClick={() => setActiveTab('applications')}
-                    className={`pb-4 px-2 font-bold text-sm transition-colors relative flex items-center gap-2 ${activeTab === 'applications' ? 'text-purple-700' : 'text-stone-500 hover:text-stone-700'}`}
+                    className={`pb-4 px-2 font-bold text-sm transition-colors relative flex items-center gap-2 ${activeTab === 'applications' ? 'text-brand-700' : 'text-stone-500 hover:text-stone-700'}`}
                 >
                     Applications
                     <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full">2</span>
-                    {activeTab === 'applications' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-700 rounded-t-full"></div>}
+                    {activeTab === 'applications' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-700 rounded-t-full"></div>}
                 </button>
             </div>
 
@@ -128,13 +128,13 @@ export default function AdminMentorsPage() {
                             <div
                                 key={mentor.id}
                                 onClick={() => setSelectedMentor(mentor)}
-                                className="bg-white rounded-2xl border border-stone-200 p-6 hover:border-purple-300 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+                                className="bg-white rounded-2xl border border-stone-200 p-6 hover:border-brand-300 transition-all cursor-pointer group shadow-sm hover:shadow-md"
                             >
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="flex items-center gap-4">
                                         <img src={mentor.image} className="w-14 h-14 rounded-full object-cover border border-stone-100" />
                                         <div>
-                                            <h3 className="font-bold text-stone-900 group-hover:text-purple-700 transition-colors">{mentor.name}</h3>
+                                            <h3 className="font-bold text-stone-900 group-hover:text-brand-700 transition-colors">{mentor.name}</h3>
                                             <p className="text-xs text-stone-500">{mentor.title} @ {mentor.company}</p>
                                         </div>
                                     </div>
@@ -201,7 +201,7 @@ export default function AdminMentorsPage() {
             {selectedMentor && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-                        <div className="relative h-32 bg-purple-900">
+                        <div className="relative h-32 bg-brand-800">
                             <button onClick={() => setSelectedMentor(null)} className="absolute top-4 right-4 bg-black/20 text-white p-2 rounded-full hover:bg-black/40 backdrop-blur-md">
                                 <X size={20} />
                             </button>
@@ -213,7 +213,7 @@ export default function AdminMentorsPage() {
                                     <button className="flex items-center gap-2 px-4 py-2 bg-stone-100 text-stone-700 rounded-xl text-sm font-bold hover:bg-stone-200">
                                         <Mail size={16} /> Email
                                     </button>
-                                    <button className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-xl text-sm font-bold hover:bg-purple-100">
+                                    <button className="flex items-center gap-2 px-4 py-2 bg-brand-50 text-brand-700 rounded-xl text-sm font-bold hover:bg-brand-100">
                                         <Shield size={16} /> Admin Actions
                                     </button>
                                 </div>
@@ -221,7 +221,7 @@ export default function AdminMentorsPage() {
 
                             <div className="mb-8">
                                 <h2 className="text-2xl font-bold text-stone-900">{selectedMentor.name}</h2>
-                                <p className="text-purple-600 font-medium">{selectedMentor.title} @ {selectedMentor.company}</p>
+                                <p className="text-brand-600 font-medium">{selectedMentor.title} @ {selectedMentor.company}</p>
                                 <p className="mt-4 text-stone-600 leading-relaxed">{selectedMentor.bio}</p>
                             </div>
 
