@@ -17,6 +17,7 @@ import {
     Clock
 } from "lucide-react";
 import { useParams } from "next/navigation";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export default function CohortPage() {
     const { slug } = useParams();
@@ -29,6 +30,7 @@ export default function CohortPage() {
         : "The second cohort focused on Engineering & Leadership.";
 
     return (
+        <ErrorBoundary>
         <div className="flex bg-stone-50 min-h-full">
             <div className="flex-1 min-w-0">
                 {/* Cohort Header */}
@@ -102,6 +104,7 @@ export default function CohortPage() {
                 </div>
             </div>
         </div>
+        </ErrorBoundary>
     );
 }
 

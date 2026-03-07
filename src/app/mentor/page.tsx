@@ -4,6 +4,7 @@ import { useUser } from "@/context/UserContext";
 import { MessageSquare, X, Check } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 const container = {
     hidden: { opacity: 0 },
@@ -25,6 +26,7 @@ export default function MentorDashboard() {
     const [dmOpen, setDmOpen] = useState(true);
 
     return (
+        <ErrorBoundary>
         <motion.div
             initial="hidden"
             animate="show"
@@ -99,6 +101,7 @@ export default function MentorDashboard() {
                 </div>
             </motion.div>
         </motion.div>
+        </ErrorBoundary>
     );
 }
 

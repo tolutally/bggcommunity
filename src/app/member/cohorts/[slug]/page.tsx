@@ -21,10 +21,16 @@ import {
     MapPin,
     BadgeCheck,
     X,
-    Linkedin
+    Linkedin,
+    Bookmark,
+    BookmarkCheck,
+    Eye,
+    ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams } from "next/navigation";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export default function MemberCohortPage() {
     const { slug } = useParams();
@@ -37,6 +43,7 @@ export default function MemberCohortPage() {
         : "The second cohort focused on Engineering & Leadership.";
 
     return (
+        <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">
             {/* Cohort Header */}
             <div>
@@ -80,6 +87,7 @@ export default function MemberCohortPage() {
                 {activeTab === "members" && <MembersTab />}
             </div>
         </div>
+        </ErrorBoundary>
     );
 }
 
@@ -297,17 +305,20 @@ function SessionsTab() {
 function ResourcesTab() {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
+    const [saved, setSaved] = useState<Set<number>>(new Set());
+    const [previewResource, setPreviewResource] = useState<typeof resources[number] | null>(null);
 
     const resources = [
-        { id: 1, name: "User Persona Template", type: "PDF", size: "2.4 MB", category: "templates" },
-        { id: 2, name: "Design Systems Guide", type: "PDF", size: "5.1 MB", category: "guides" },
-        { id: 3, name: "Workshop Recording - Week 1", type: "VIDEO", size: "156 MB", category: "recordings" },
-        { id: 4, name: "UX Research Methods Cheatsheet", type: "PDF", size: "1.2 MB", category: "templates" },
-        { id: 5, name: "Figma Component Library", type: "ZIP", size: "8.7 MB", category: "assets" },
+        { id: 1, name: "User Persona Template", type: "PDF", size: "2.4 MB", category: "templates", url: "#", description: "A ready-to-use template for creating detailed user personas during discovery research." },
+        { id: 2, name: "Design Systems Guide", type: "PDF", size: "5.1 MB", category: "guides", url: "#", description: "Comprehensive guide to building and maintaining a scalable design system." },
+        { id: 3, name: "Workshop Recording - Week 1", type: "VIDEO", size: "156 MB", category: "recordings", url: "#", description: "Full recording of the Week 1 kickoff workshop covering program overview and goals." },
+        { id: 4, name: "UX Research Methods Cheatsheet", type: "PDF", size: "1.2 MB", category: "templates", url: "#", description: "Quick-reference cheatsheet covering 12 common UX research methods and when to use them." },
+        { id: 5, name: "Figma Component Library", type: "ZIP", size: "8.7 MB", category: "assets", url: "#", description: "Pre-built Figma components matching our design system for rapid prototyping." },
+        { id: 6, name: "Career Strategy Playbook", type: "PDF", size: "3.0 MB", category: "guides", url: "#", description: "Step-by-step playbook for navigating your career transition into product and design." },
     ];
 
     const categories = [
-        { value: "all", label: "All Categories" },
+        { value: "all", label: "All" },
         { value: "templates", label: "Templates" },
         { value: "guides", label: "Guides" },
         { value: "recordings", label: "Recordings" },
@@ -315,10 +326,18 @@ function ResourcesTab() {
     ];
 
     const filteredResources = resources.filter(resource => {
-        const matchesSearch = resource.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch = resource.name.toLowerCase().includes(searchQuery.toLowerCase()) || resource.description.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesCategory = selectedCategory === "all" || resource.category === selectedCategory;
         return matchesSearch && matchesCategory;
     });
+
+    const toggleSave = (id: number) => {
+        setSaved(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    };
 
     const getTypeColor = (type: string) => {
         switch (type) {
@@ -329,57 +348,127 @@ function ResourcesTab() {
         }
     };
 
+    const getTypeIcon = (type: string) => {
+        switch (type) {
+            case "VIDEO": return <Play size={20} />;
+            default: return <FileText size={20} />;
+        }
+    };
+
     return (
         <div className="space-y-6">
-            {/* Search and Filter */}
-            <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-                    <input
-                        type="text"
-                        placeholder="Search resources..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
-                    />
-                </div>
-                <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-700 font-medium focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none cursor-pointer"
-                >
-                    {categories.map(cat => (
-                        <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                </select>
+            {/* Search */}
+            <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+                <input
+                    type="text"
+                    placeholder="Search resources..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none"
+                />
             </div>
 
-            {/* Resources List */}
-            <div className="space-y-3">
+            {/* Category Tabs */}
+            <div className="flex flex-wrap gap-2">
+                {categories.map(cat => (
+                    <button
+                        key={cat.value}
+                        onClick={() => setSelectedCategory(cat.value)}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${selectedCategory === cat.value ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}
+                    >
+                        {cat.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Count */}
+            <p className="text-sm text-stone-500 font-medium">{filteredResources.length} resource{filteredResources.length !== 1 ? "s" : ""}</p>
+
+            {/* Resources Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {filteredResources.map(resource => (
-                    <div key={resource.id} className="bg-white p-5 rounded-2xl border border-stone-200 flex items-center justify-between hover:border-brand-200 hover:shadow-sm transition-all">
-                        <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getTypeColor(resource.type)}`}>
-                                <FileText size={22} />
+                    <div
+                        key={resource.id}
+                        onClick={() => setPreviewResource(resource)}
+                        className="bg-white p-5 rounded-2xl border border-stone-200 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-500/5 transition-all cursor-pointer group"
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${getTypeColor(resource.type)} group-hover:scale-105 transition-transform`}>
+                                {getTypeIcon(resource.type)}
                             </div>
-                            <div>
-                                <h4 className="font-bold text-stone-900">{resource.name}</h4>
-                                <p className="text-sm text-stone-500">{resource.type} • {resource.size}</p>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-stone-900 group-hover:text-brand-700 transition-colors truncate">{resource.name}</h4>
+                                <p className="text-xs text-stone-400 mt-0.5">{resource.type} &middot; {resource.size} &middot; <span className="capitalize">{resource.category}</span></p>
+                                <p className="text-sm text-stone-500 mt-2 line-clamp-2">{resource.description}</p>
                             </div>
                         </div>
-                        <button className="p-3 text-stone-400 hover:text-brand-700 hover:bg-brand-50 rounded-xl transition-colors">
-                            <Download size={20} />
-                        </button>
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-stone-100">
+                            <a
+                                href={resource.url}
+                                onClick={e => e.stopPropagation()}
+                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-brand-800 text-white font-bold text-xs rounded-xl hover:bg-brand-700 transition-colors"
+                            >
+                                {resource.type === "VIDEO" ? <><Eye size={14} /> Watch</> : <><Download size={14} /> Download</>}
+                            </a>
+                            <button
+                                onClick={e => { e.stopPropagation(); toggleSave(resource.id); }}
+                                className={`p-2 rounded-xl border transition-colors ${saved.has(resource.id) ? "bg-brand-50 text-brand-700 border-brand-200" : "text-stone-400 border-stone-200 hover:bg-stone-50"}`}
+                            >
+                                {saved.has(resource.id) ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                            </button>
+                        </div>
                     </div>
                 ))}
-
-                {filteredResources.length === 0 && (
-                    <div className="text-center py-12 text-stone-500">
-                        <FolderOpen size={48} className="mx-auto mb-3 text-stone-300" />
-                        <p>No resources found matching your criteria.</p>
-                    </div>
-                )}
             </div>
+
+            {filteredResources.length === 0 && (
+                <EmptyState
+                    icon={FolderOpen}
+                    heading="No resources found"
+                    description="Try a different search or category."
+                    variant="plain"
+                />
+            )}
+
+            {/* Resource Detail Modal */}
+            {previewResource && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPreviewResource(null)} />
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+                        {/* Header */}
+                        <div className="p-6 border-b border-stone-100 flex items-start gap-4">
+                            <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${getTypeColor(previewResource.type)}`}>
+                                {getTypeIcon(previewResource.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h2 className="text-xl font-bold text-stone-900">{previewResource.name}</h2>
+                                <p className="text-sm text-stone-400 mt-0.5">{previewResource.type} &middot; {previewResource.size} &middot; <span className="capitalize">{previewResource.category}</span></p>
+                            </div>
+                            <button onClick={() => setPreviewResource(null)} className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        {/* Body */}
+                        <div className="p-6 space-y-4">
+                            <p className="text-stone-600 leading-relaxed">{previewResource.description}</p>
+                        </div>
+                        {/* Footer */}
+                        <div className="p-6 border-t border-stone-100 flex gap-3">
+                            <a href={previewResource.url} className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm">
+                                {previewResource.type === "VIDEO" ? <><Eye size={16} /> Watch Recording</> : <><Download size={16} /> Download File</>}
+                            </a>
+                            <button
+                                onClick={() => toggleSave(previewResource.id)}
+                                className={`px-4 py-3 rounded-xl font-bold text-sm border transition-colors flex items-center gap-2 ${saved.has(previewResource.id) ? "bg-brand-50 text-brand-700 border-brand-200" : "text-stone-600 border-stone-200 hover:bg-stone-50"}`}
+                            >
+                                {saved.has(previewResource.id) ? <><BookmarkCheck size={16} /> Saved</> : <><Bookmark size={16} /> Save</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

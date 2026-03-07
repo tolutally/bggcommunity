@@ -21,6 +21,7 @@
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
+    "@linear/sdk": "^76.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

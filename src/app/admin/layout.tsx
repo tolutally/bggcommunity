@@ -12,6 +12,7 @@ import {
     MessageSquare,
     Calendar,
     Settings,
+    Briefcase,
 } from "lucide-react";
 
 const adminNavGroups = [
@@ -33,6 +34,7 @@ const adminNavGroups = [
             { name: "Cohorts", href: "/admin/cohorts", icon: GraduationCap },
             { name: "Community", href: "/admin/community", icon: MessageSquare },
             { name: "Events", href: "/admin/events", icon: Calendar },
+            { name: "Jobs", href: "/admin/jobs", icon: Briefcase },
         ]
     },
     {

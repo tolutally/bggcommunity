@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Search, LayoutGrid, List as ListIcon, MoreHorizontal, Mail, Shield } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Search, LayoutGrid, List as ListIcon, MoreHorizontal, Mail, Shield, Eye, Send, UserX, Ban } from "lucide-react";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 // Mock Data Generation
 const PROGRAMS = ["Engineering", "Product Design", "Data Science", "Product Management"];
@@ -23,7 +27,7 @@ const MOCK_MEMBERS = NAMES.map((name, i) => ({
     id: i + 1,
     name,
     email: `${name.toLowerCase().replace(' ', '.')}@example.com`,
-    role: i < 5 ? "Mentor" : "Member",
+    role: "Member",
     program: PROGRAMS[i % PROGRAMS.length],
     cohort: COHORTS[i % COHORTS.length],
     status: STATUSES[i % STATUSES.length],
@@ -37,19 +41,20 @@ export default function AdminMembersPage() {
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCohort, setSelectedCohort] = useState("All");
-    const [selectedProgram, setSelectedProgram] = useState("All");
+    const [selectedStatus, setSelectedStatus] = useState("All");
 
     const filteredMembers = useMemo(() => {
         return MOCK_MEMBERS.filter(member => {
             const matchesSearch = member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 member.email.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesCohort = selectedCohort === "All" || member.cohort === selectedCohort;
-            const matchesProgram = selectedProgram === "All" || member.program === selectedProgram;
-            return matchesSearch && matchesCohort && matchesProgram;
+            const matchesStatus = selectedStatus === "All" || member.status === selectedStatus;
+            return matchesSearch && matchesCohort && matchesStatus;
         });
-    }, [searchQuery, selectedCohort, selectedProgram]);
+    }, [searchQuery, selectedCohort, selectedStatus]);
 
     return (
+        <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-[1600px] mx-auto space-y-8">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -94,11 +99,11 @@ export default function AdminMembersPage() {
                         </select>
                         <select
                             className="bg-stone-50 border border-stone-200 text-stone-700 text-sm rounded-xl focus:ring-brand-500 focus:border-brand-500 block p-2 outline-none cursor-pointer font-medium"
-                            value={selectedProgram}
-                            onChange={(e) => setSelectedProgram(e.target.value)}
+                            value={selectedStatus}
+                            onChange={(e) => setSelectedStatus(e.target.value)}
                         >
-                            <option value="All">All Programs</option>
-                            {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
+                            <option value="All">All Status</option>
+                            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                     </div>
                 </div>
@@ -134,9 +139,9 @@ export default function AdminMembersPage() {
                             <thead className="text-xs text-stone-400 uppercase bg-stone-50 border-b border-stone-100">
                                 <tr>
                                     <th className="px-6 py-4 font-bold">Member</th>
-                                    <th className="px-6 py-4 font-bold">Role</th>
-                                    <th className="px-6 py-4 font-bold">Program</th>
+                                    <th className="px-6 py-4 font-bold">Cohort</th>
                                     <th className="px-6 py-4 font-bold">Status</th>
+                                    <th className="px-6 py-4 font-bold">Location</th>
                                     <th className="px-6 py-4 font-bold">Joined</th>
                                     <th className="px-6 py-4 font-bold text-right">Actions</th>
                                 </tr>
@@ -153,95 +158,121 @@ export default function AdminMembersPage() {
 
             {/* Empty State */}
             {filteredMembers.length === 0 && (
-                <div className="text-center py-20 bg-stone-50 rounded-2xl border border-dashed border-stone-200">
-                    <div className="bg-white p-4 rounded-full shadow-sm w-fit mx-auto mb-4">
-                        <Search className="text-stone-300" size={32} />
-                    </div>
-                    <h3 className="text-lg font-bold text-stone-900">No members found</h3>
-                    <p className="text-stone-500">Try adjusting your search or filters.</p>
-                </div>
+                <EmptyState
+                    icon={Search}
+                    heading="No members found"
+                    description="Try adjusting your search or filters."
+                />
             )}
         </div>
+        </ErrorBoundary>
     );
 }
 
 function MemberGridCard({ member }: { member: typeof MOCK_MEMBERS[0] }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handleClick(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+        document.addEventListener("mousedown", handleClick);
+        return () => document.removeEventListener("mousedown", handleClick);
+    }, []);
+
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col items-center text-center group hover:border-brand-300 hover:shadow-lg hover:shadow-brand-500/5 transition-all cursor-pointer relative overflow-hidden">
-            <button className="absolute top-4 right-4 text-stone-300 hover:text-stone-600 transition-colors">
-                <MoreHorizontal size={20} />
-            </button>
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col items-center text-center group hover:border-brand-300 hover:shadow-lg hover:shadow-brand-500/5 transition-all cursor-pointer relative overflow-visible">
+            {/* Action Dropdown */}
+            <div ref={ref} className="absolute top-4 right-4 z-10">
+                <button onClick={() => setOpen(!open)} className="text-stone-300 hover:text-stone-600 transition-colors p-1 rounded-lg hover:bg-stone-100">
+                    <MoreHorizontal size={20} />
+                </button>
+                {open && (
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-stone-200 shadow-xl py-1 z-50">
+                        <button onClick={() => setOpen(false)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors"><Eye size={15} /> View Profile</button>
+                        <button onClick={() => setOpen(false)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors"><Send size={15} /> Send Email</button>
+                        <div className="border-t border-stone-100 my-1" />
+                        <button onClick={() => setOpen(false)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"><Ban size={15} /> Deactivate</button>
+                    </div>
+                )}
+            </div>
 
             <div className="relative mb-4">
-                <img src={member.avatar} alt={member.name} className="w-24 h-24 rounded-full object-cover border-4 border-stone-50 shadow-sm group-hover:scale-105 transition-transform duration-300" />
-                <span className={`absolute bottom-0 right-0 w-6 h-6 rounded-full border-4 border-white ${member.status === 'Active' ? 'bg-green-500' : 'bg-stone-400'}`}></span>
+                <AvatarInitials name={member.name} src={member.avatar} size="xl" className="border-4 border-stone-50 shadow-sm group-hover:scale-105 transition-transform duration-300" />
+                <span className={`absolute bottom-0 right-0 w-6 h-6 rounded-full border-4 border-white ${member.status === 'Active' ? 'bg-green-500' : member.status === 'On Leave' ? 'bg-yellow-500' : 'bg-stone-400'}`}></span>
             </div>
 
             <h3 className="text-lg font-bold text-stone-900 mb-1">{member.name}</h3>
-            <p className="text-sm text-stone-500 mb-4 flex items-center gap-1">
+            <p className="text-sm text-stone-500 mb-3 flex items-center gap-1">
                 <Mail size={12} /> {member.email}
             </p>
 
-            <div className="flex flex-wrap justify-center gap-2 mb-6 w-full">
+            <div className="flex flex-wrap justify-center gap-2 mb-4 w-full">
                 <span className="px-2 py-1 bg-stone-50 border border-stone-100 rounded-md text-xs font-semibold text-stone-600">
                     {member.cohort}
                 </span>
-                <span className="px-2 py-1 bg-brand-50 border border-brand-100 rounded-md text-xs font-bold text-brand-700">
-                    {member.program}
+                <span className={`px-2 py-1 rounded-md text-xs font-bold border ${member.status === 'Active' ? 'bg-green-50 text-green-700 border-green-100' : member.status === 'On Leave' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' : 'bg-stone-50 text-stone-500 border-stone-100'}`}>
+                    {member.status}
                 </span>
             </div>
 
             <div className="w-full mt-auto pt-4 border-t border-stone-100 flex justify-between items-center px-2">
                 <div className="flex flex-col items-start">
-                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Progress</span>
-                    <span className="text-sm font-bold text-stone-900">{member.progress}%</span>
+                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Joined</span>
+                    <span className="text-sm font-bold text-stone-900">{member.joinDate}</span>
                 </div>
-                <button className="text-brand-700 hover:bg-brand-50 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                    View Profile
-                </button>
+                <span className="text-xs text-stone-400">{member.location}</span>
             </div>
         </div>
     )
 }
 
 function MemberListRow({ member }: { member: typeof MOCK_MEMBERS[0] }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handleClick(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+        document.addEventListener("mousedown", handleClick);
+        return () => document.removeEventListener("mousedown", handleClick);
+    }, []);
+
     return (
         <tr className="bg-white border-b border-stone-100 hover:bg-stone-50 transition-colors cursor-pointer group">
             <td className="px-6 py-4 flex items-center gap-3">
-                <img src={member.avatar} alt={member.name} className="w-10 h-10 rounded-full object-cover" />
+                <AvatarInitials name={member.name} src={member.avatar} size="md" />
                 <div>
                     <div className="font-bold text-stone-900">{member.name}</div>
                     <div className="text-xs text-stone-500">{member.email}</div>
                 </div>
             </td>
             <td className="px-6 py-4">
-                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${member.role === 'Mentor' ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-800'
-                    }`}>
-                    {member.role === 'Mentor' && <Shield size={10} />}
-                    {member.role}
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-800">
+                    {member.cohort}
                 </span>
             </td>
             <td className="px-6 py-4">
-                <div className="text-stone-900 font-medium">{member.program}</div>
-                <div className="text-xs text-stone-400">{member.cohort}</div>
+                <StatusBadge label={member.status} preset={member.status as any} />
             </td>
-            <td className="px-6 py-4">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${member.status === 'Active' ? 'bg-green-100 text-green-700' :
-                    member.status === 'On Leave' ? 'bg-yellow-100 text-yellow-700' : 'bg-stone-100 text-stone-500'
-                    }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${member.status === 'Active' ? 'bg-green-500' :
-                        member.status === 'On Leave' ? 'bg-yellow-500' : 'bg-stone-500'
-                        }`}></span>
-                    {member.status}
-                </span>
+            <td className="px-6 py-4 text-stone-500 font-medium">
+                {member.location}
             </td>
             <td className="px-6 py-4 text-stone-500 font-medium">
                 {member.joinDate}
             </td>
             <td className="px-6 py-4 text-right">
-                <button className="text-stone-400 hover:text-brand-700 transition-colors p-2 hover:bg-brand-50 rounded-full">
-                    <MoreHorizontal size={18} />
-                </button>
+                <div ref={ref} className="relative inline-block">
+                    <button onClick={() => setOpen(!open)} className="text-stone-400 hover:text-brand-700 transition-colors p-2 hover:bg-brand-50 rounded-full">
+                        <MoreHorizontal size={18} />
+                    </button>
+                    {open && (
+                        <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-stone-200 shadow-xl py-1 z-50">
+                            <button onClick={() => setOpen(false)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors"><Eye size={15} /> View Profile</button>
+                            <button onClick={() => setOpen(false)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors"><Send size={15} /> Send Email</button>
+                            <div className="border-t border-stone-100 my-1" />
+                            <button onClick={() => setOpen(false)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"><Ban size={15} /> Deactivate</button>
+                        </div>
+                    )}
+                </div>
             </td>
         </tr>
     )

@@ -298,9 +298,9 @@ export default function NotificationsTray() {
                     {/* Footer */}
                     {notifications.length > 0 && (
                         <div className="p-3 border-t border-stone-100 bg-stone-50">
-                            <button className="w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-800 py-1.5 rounded-lg hover:bg-brand-50 transition-colors">
+                            <a href="/member/notifications" className="block w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-800 py-1.5 rounded-lg hover:bg-brand-50 transition-colors">
                                 View all notifications
-                            </button>
+                            </a>
                         </div>
                     )}
                 </div>

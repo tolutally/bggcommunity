@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { FileText, NotebookPen, MessageSquare, ArrowRight, Heart } from "lucide-react";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export default function MentorMenteesPage() {
     const [filter, setFilter] = useState("all");
@@ -43,6 +45,7 @@ export default function MentorMenteesPage() {
     ];
 
     return (
+        <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-10">
             {/* Header */}
             <div>
@@ -147,6 +150,7 @@ export default function MentorMenteesPage() {
                 </div>
             </section>
         </div>
+        </ErrorBoundary>
     );
 }
 
@@ -163,7 +167,7 @@ function ReviewCard({ user, avatar, type, title, due, urgent }: any) {
             <p className={`text-xs font-medium mb-4 ${urgent ? 'text-red-500' : 'text-stone-400'}`}>{due}</p>
 
             <div className="flex items-center gap-2 pt-3 border-t border-stone-100">
-                <img src={avatar} className="w-6 h-6 rounded-full" />
+                <AvatarInitials name={user} src={avatar} size="xs" />
                 <span className="text-xs font-semibold text-stone-600">{user}</span>
                 <button className="ml-auto text-brand-700 hover:bg-brand-50 p-1.5 rounded-lg transition-colors">
                     <ArrowRight size={14} />
@@ -239,7 +243,7 @@ function ActivityRow({ user, avatar, action, target, time, content, interactive,
     return (
         <div className="p-6 hover:bg-stone-50 transition-colors">
             <div className="flex gap-4">
-                <img src={avatar} className="w-10 h-10 rounded-full flex-shrink-0" />
+                <AvatarInitials name={user} src={avatar} size="md" />
                 <div className="flex-1">
                     <div className="flex justify-between items-start">
                         <p className="text-sm text-stone-900">

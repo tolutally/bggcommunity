@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Calendar, Clock, Plus, MoreHorizontal } from "lucide-react";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export default function MentorSessionsPage() {
     const [availability, setAvailability] = useState({
@@ -13,6 +15,7 @@ export default function MentorSessionsPage() {
     });
 
     return (
+        <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-6xl mx-auto space-y-10">
             {/* Header */}
             <div>
@@ -84,6 +87,7 @@ export default function MentorSessionsPage() {
                 </div>
             </div>
         </div>
+        </ErrorBoundary>
     )
 }
 
@@ -92,7 +96,7 @@ function CoachingCard({ mentee, time, topic, avatar }: any) {
         <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm flex flex-col">
             <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                    <img src={avatar} className="w-10 h-10 rounded-full" />
+                    <AvatarInitials name={mentee} src={avatar} size="md" />
                     <div>
                         <h4 className="font-bold text-stone-900 text-sm">{mentee}</h4>
                         <p className="text-xs text-stone-500">Mentee</p>

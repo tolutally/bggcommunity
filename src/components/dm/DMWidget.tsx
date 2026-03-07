@@ -1,49 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { MessageCircle, X, Send, AlertTriangle, ChevronDown } from "lucide-react";
+import { MessageCircle, X, Send, ChevronDown } from "lucide-react";
 
 const MOCK_CONTACTS = [
     { id: 1, name: "Amara Okafor", avatar: "https://i.pravatar.cc/150?u=1", role: "member", lastMessage: "Hey, can you share that doc?", dmOpen: true },
-    { id: 2, name: "Dr. Alisha Reid", avatar: "https://i.pravatar.cc/150?u=alisha", role: "mentor", lastMessage: "Thanks for the chat!", dmOpen: true },
-    { id: 3, name: "Maya Patel", avatar: "https://i.pravatar.cc/150?u=maya", role: "mentor", lastMessage: "Let me know when you're free.", dmOpen: false },
+    { id: 4, name: "Brianna Sterling", avatar: "https://i.pravatar.cc/150?u=4", role: "member", lastMessage: "See you at the event!", dmOpen: true },
+    { id: 5, name: "Chiamaka Nnadi", avatar: "https://i.pravatar.cc/150?u=5", role: "member", lastMessage: "Thanks for the feedback!", dmOpen: true },
 ];
 
 export default function DMWidget({ userRole = 'member' }: { userRole?: string }) {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedContact, setSelectedContact] = useState<any>(null);
     const [message, setMessage] = useState("");
-    const [showAlert, setShowAlert] = useState(false);
 
     const handleSelectContact = (contact: any) => {
-        // Only block if a MEMBER tries to message a MENTOR with closed DMs
-        // Mentors can always message other mentors
-        const isMemberMessagingClosedMentor = userRole === 'member' && contact.role === 'mentor' && !contact.dmOpen;
-
-        if (isMemberMessagingClosedMentor) {
-            setShowAlert(true);
-            setTimeout(() => setShowAlert(false), 3000);
-            return;
-        }
         setSelectedContact(contact);
     };
 
     const handleSend = () => {
         if (!message.trim()) return;
-        // Mock send - just clear input
         setMessage("");
     };
 
     return (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-4">
-            {/* Alert Toast */}
-            {showAlert && (
-                <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300">
-                    <AlertTriangle size={18} className="text-amber-500" />
-                    <span className="font-medium text-sm">This mentor's DMs are currently closed.</span>
-                </div>
-            )}
-
             {/* Chat Panel */}
             {isOpen && (
                 <div className="w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
@@ -66,7 +47,6 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                     {/* Content */}
                     {selectedContact ? (
                         <div className="flex flex-col h-80">
-                            {/* Mock Messages */}
                             <div className="flex-1 p-4 space-y-4 overflow-y-auto bg-stone-50">
                                 <div className="flex gap-2">
                                     <img src={selectedContact.avatar} className="w-8 h-8 rounded-full" />
@@ -80,7 +60,6 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                                     </div>
                                 </div>
                             </div>
-                            {/* Input */}
                             <div className="p-3 border-t border-stone-100 bg-white flex gap-2">
                                 <input
                                     type="text"
@@ -103,18 +82,11 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                                     onClick={() => handleSelectContact(contact)}
                                     className="w-full p-4 flex items-center gap-3 hover:bg-stone-50 transition-colors text-left"
                                 >
-                                    <div className="relative">
-                                        <img src={contact.avatar} className="w-10 h-10 rounded-full" />
-                                        {contact.role === 'mentor' && !contact.dmOpen && (
-                                            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full border-2 border-white flex items-center justify-center">
-                                                <X size={8} className="text-white" />
-                                            </div>
-                                        )}
-                                    </div>
+                                    <img src={contact.avatar} className="w-10 h-10 rounded-full" />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex justify-between items-center">
                                             <h4 className="font-bold text-stone-900 text-sm truncate">{contact.name}</h4>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${contact.role === 'mentor' ? 'bg-brand-100 text-brand-700' : 'bg-stone-100 text-stone-500'}`}>
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-stone-100 text-stone-500">
                                                 {contact.role}
                                             </span>
                                         </div>

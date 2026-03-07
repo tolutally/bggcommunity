@@ -1,9 +1,12 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { Calendar, Clock, ArrowRight, AlertTriangle, Activity, CheckCircle, Video, MapPin, Users } from "lucide-react";
+import { Calendar, Clock, ArrowRight, AlertTriangle, Activity, CheckCircle, Video, MapPin, Users, BookOpen, Briefcase, MessageSquare } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import Link from "next/link";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 const container = {
     hidden: { opacity: 0 },
@@ -125,12 +128,29 @@ export default function MemberDashboard() {
                     Welcome back, {user.name.split(' ')[0]}
                 </h1>
                 <p className="text-lg text-stone-500 mt-2">
-                    Here's what's happening in your cohort today.
+                    Here&apos;s what&apos;s happening in your cohort today.
                 </p>
+            </motion.div>
+
+            {/* Quick Actions */}
+            <motion.div variants={item} className="flex flex-wrap gap-3">
+                <Link href="/member/schedule" className="flex items-center gap-2 px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm shadow-sm">
+                    <Calendar size={16} /> Join Next Event
+                </Link>
+                <Link href="/member/resources" className="flex items-center gap-2 px-5 py-2.5 bg-white border border-stone-200 text-stone-700 font-bold rounded-xl hover:border-brand-300 hover:text-brand-700 transition-colors text-sm">
+                    <BookOpen size={16} /> View Resources
+                </Link>
+                <Link href="/member/jobs" className="flex items-center gap-2 px-5 py-2.5 bg-white border border-stone-200 text-stone-700 font-bold rounded-xl hover:border-brand-300 hover:text-brand-700 transition-colors text-sm">
+                    <Briefcase size={16} /> Browse Jobs
+                </Link>
+                <Link href="/member/community" className="flex items-center gap-2 px-5 py-2.5 bg-white border border-stone-200 text-stone-700 font-bold rounded-xl hover:border-brand-300 hover:text-brand-700 transition-colors text-sm">
+                    <MessageSquare size={16} /> Community
+                </Link>
             </motion.div>
 
             {/* Main Content Grid */}
             <motion.div variants={item}>
+              <ErrorBoundary>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                     {/* Left Column (2/3): Learning Path & Schedule */}
@@ -202,6 +222,8 @@ export default function MemberDashboard() {
                                             <p className="text-sm text-stone-500">Track your sessions and workshops</p>
                                         </div>
                                     </div>
+                                    <div className="flex items-center gap-3">
+                                    <Link href="/member/schedule" className="text-sm font-bold text-brand-600 hover:text-brand-800 transition-colors flex items-center gap-1">View All <ArrowRight size={14} /></Link>
                                     <div className="flex bg-stone-100 p-1 rounded-xl">
                                         <button
                                             onClick={() => setScheduleView('upcoming')}
@@ -215,6 +237,7 @@ export default function MemberDashboard() {
                                         >
                                             Past Recordings
                                         </button>
+                                    </div>
                                     </div>
                                 </div>
                             </div>
@@ -277,7 +300,7 @@ export default function MemberDashboard() {
                                                             </span>
                                                             <span className="flex items-center gap-1.5">
                                                                 {session.hostAvatar ? (
-                                                                    <img src={session.hostAvatar} className="w-5 h-5 rounded-full" alt={session.host} />
+                                                                    <AvatarInitials name={session.host} src={session.hostAvatar} size="xs" className="!w-5 !h-5" />
                                                                 ) : (
                                                                     <Users size={15} className="text-stone-400" />
                                                                 )}
@@ -329,10 +352,10 @@ export default function MemberDashboard() {
                                         ))}
 
                                         {/* View All Card */}
-                                        <div className="aspect-video border-2 border-dashed border-stone-200 rounded-2xl flex flex-col items-center justify-center text-stone-400 hover:border-accent-400 hover:text-accent-500 transition-colors cursor-pointer group">
+                                        <Link href="/member/schedule" className="aspect-video border-2 border-dashed border-stone-200 rounded-2xl flex flex-col items-center justify-center text-stone-400 hover:border-accent-400 hover:text-accent-500 transition-colors cursor-pointer group">
                                             <Video size={32} className="mb-2" />
                                             <span className="font-semibold text-sm">View All Recordings</span>
-                                        </div>
+                                        </Link>
                                     </div>
                                 )}
                             </div>
@@ -438,9 +461,9 @@ export default function MemberDashboard() {
                                 </div>
                             </div>
 
-                            <button className="w-full mt-4 bg-accent-500 hover:bg-accent-600 text-white px-6 py-3 rounded-full font-bold text-sm transition-colors">
+                            <Link href="/member/jobs" className="block w-full mt-4 bg-accent-500 hover:bg-accent-600 text-white px-6 py-3 rounded-full font-bold text-sm transition-colors text-center">
                                 Explore More Jobs
-                            </button>
+                            </Link>
                         </div>
 
                         {/* Invite Community */}
@@ -452,6 +475,7 @@ export default function MemberDashboard() {
                         </div>
                     </div>
                 </div>
+              </ErrorBoundary>
             </motion.div>
         </motion.div>
     );

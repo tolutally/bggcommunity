@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Search, Menu, X, type LucideIcon } from "lucide-react";
+import { Bell, ChevronDown, Search, Menu, X, type LucideIcon } from "lucide-react";
 import { useState, useEffect } from "react";
-import NotificationsTray from "@/components/notifications/NotificationsTray";
 
 type NavItem = {
     name: string;
@@ -108,8 +107,13 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
 
                     {/* Right: Actions & Profile */}
                     <div className="flex items-center gap-2 md:gap-4">
-                        {/* Notifications */}
-                        <NotificationsTray />
+                        {/* Notifications — links to full page */}
+                        <Link
+                            href={`/${moduleType}/notifications`}
+                            className="relative p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
+                        >
+                            <Bell className="h-5 w-5" />
+                        </Link>
 
                         {/* Profile Dropdown */}
                         <div className="relative">

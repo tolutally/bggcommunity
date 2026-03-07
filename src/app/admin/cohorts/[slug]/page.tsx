@@ -22,6 +22,10 @@ import {
     Settings,
     Pencil,
 } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 // --- Mock Data ---
 const COHORT_DATA: Record<string, any> = {
@@ -171,6 +175,7 @@ export default function AdminCohortDetailPage() {
         : "bg-stone-100 text-stone-600";
 
     return (
+        <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-[1400px] mx-auto space-y-6">
             {/* Back + Header */}
             <Link
@@ -188,9 +193,7 @@ export default function AdminCohortDetailPage() {
                     <div>
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl md:text-3xl font-bold text-stone-900">{cohort.name}</h1>
-                            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${statusBadge}`}>
-                                {cohort.status}
-                            </span>
+                            <StatusBadge label={cohort.status} preset={cohort.status as any} variant="pill" />
                         </div>
                         <p className="text-stone-500 text-sm mt-1">{cohort.track} Track &bull; {cohort.startDate} – {cohort.endDate}</p>
                     </div>
@@ -270,7 +273,14 @@ export default function AdminCohortDetailPage() {
                             </div>
                             <div className="space-y-3">
                                 {cohort.sessions.filter((s: any) => s.status === "upcoming").length === 0 ? (
-                                    <p className="text-sm text-stone-400 py-4 text-center">No upcoming sessions scheduled.</p>
+                                    <EmptyState
+                                        icon={Video}
+                                        heading="No upcoming sessions"
+                                        description="Schedule a new session for this cohort."
+                                        variant="plain"
+                                        action={{ label: "Schedule Session", onClick: () => setActiveTab("sessions") }}
+                                        className="py-4"
+                                    />
                                 ) : (
                                     cohort.sessions.filter((s: any) => s.status === "upcoming").map((session: any) => (
                                         <div key={session.id} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl">
@@ -364,7 +374,7 @@ export default function AdminCohortDetailPage() {
                                         <tr key={member.id} className="hover:bg-stone-50 transition-colors">
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <img src={member.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+                                                    <AvatarInitials name={member.name} src={member.avatar} size="sm" />
                                                     <span className="font-semibold text-stone-900 text-sm">{member.name}</span>
                                                 </div>
                                             </td>
@@ -376,22 +386,11 @@ export default function AdminCohortDetailPage() {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={`flex items-center gap-1.5 text-xs font-semibold ${
-                                                    member.status === "Active" || member.status === "Graduated"
-                                                        ? "text-green-600"
-                                                        : member.status === "Enrolled"
-                                                        ? "text-blue-600"
-                                                        : "text-stone-400"
-                                                }`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                                        member.status === "Active" || member.status === "Graduated"
-                                                            ? "bg-green-500"
-                                                            : member.status === "Enrolled"
-                                                            ? "bg-blue-500"
-                                                            : "bg-stone-300"
-                                                    }`}></span>
-                                                    {member.status}
-                                                </span>
+                                                <StatusBadge
+                                                    label={member.status}
+                                                    preset={member.status === "Enrolled" ? "Upcoming" : member.status as any}
+                                                    variant="pill"
+                                                />
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
@@ -444,7 +443,7 @@ export default function AdminCohortDetailPage() {
                                         <div className="flex items-center gap-4">
                                             <span className="text-sm font-medium text-stone-500">{session.attendees} RSVPs</span>
                                             <span className="text-xs font-bold px-2.5 py-1 rounded-full uppercase bg-blue-50 text-blue-700">
-                                                Upcoming
+                                                <StatusBadge label="Upcoming" preset="Upcoming" variant="tag" />
                                             </span>
                                             <button className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
                                                 <Pencil size={15} />
@@ -474,7 +473,7 @@ export default function AdminCohortDetailPage() {
                                         <div className="flex items-center gap-4">
                                             <span className="text-sm font-medium text-stone-500">{session.attendees} attended</span>
                                             <span className="text-xs font-bold px-2.5 py-1 rounded-full uppercase bg-stone-100 text-stone-500">
-                                                Completed
+                                                <StatusBadge label="Completed" preset="Completed" variant="tag" />
                                             </span>
                                         </div>
                                     </div>
@@ -544,6 +543,7 @@ export default function AdminCohortDetailPage() {
                 </div>
             )}
         </div>
+        </ErrorBoundary>
     );
 }
 

@@ -11,6 +11,7 @@ import {
     BadgeCheck
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 // --- Mock Data: Members ---
 const MEMBERS = [
@@ -115,6 +116,7 @@ export default function MembersPage() {
     );
 
     return (
+        <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -192,6 +194,7 @@ export default function MembersPage() {
                 )}
             </AnimatePresence>
         </div>
+        </ErrorBoundary>
     );
 }
 

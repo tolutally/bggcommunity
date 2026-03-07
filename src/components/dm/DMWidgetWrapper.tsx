@@ -6,8 +6,8 @@ import DMWidget from "./DMWidget";
 export default function DMWidgetWrapper() {
     const { role } = useUser();
 
-    // Show DM widget for members and mentors
-    if (role !== 'member' && role !== 'mentor') {
+    // Show DM widget for members only (mentor module disabled)
+    if (role !== 'member') {
         return null;
     }
 

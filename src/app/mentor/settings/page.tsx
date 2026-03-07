@@ -3,6 +3,7 @@
 import { useUser } from "@/context/UserContext";
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export default function MentorSettingsPage() {
     const { user } = useUser();
@@ -13,6 +14,7 @@ export default function MentorSettingsPage() {
     };
 
     return (
+        <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-4xl mx-auto">
             <h1 className="text-3xl font-bold text-stone-900 mb-8">Settings</h1>
 
@@ -87,6 +89,7 @@ export default function MentorSettingsPage() {
                 </div>
             </div>
         </div>
+        </ErrorBoundary>
     )
 }
 

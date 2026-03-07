@@ -2,6 +2,7 @@
 
 import { FileText, Plus, Trash2, Lock, Globe, Info, HelpCircle, Upload, X } from "lucide-react";
 import { useState } from "react";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export default function MentorResourcesPage() {
     const [myResources, setMyResources] = useState([
@@ -21,6 +22,7 @@ export default function MentorResourcesPage() {
     };
 
     return (
+        <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-6xl mx-auto space-y-10">
             {/* Header */}
             <div className="flex justify-between items-start">
@@ -148,5 +150,6 @@ export default function MentorResourcesPage() {
                 </div>
             )}
         </div>
+        </ErrorBoundary>
     )
 }

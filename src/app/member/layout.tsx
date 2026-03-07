@@ -9,6 +9,7 @@ import {
     Users,
     Settings,
     Briefcase,
+    Target,
 } from "lucide-react";
 
 const memberNavGroups = [
@@ -16,6 +17,7 @@ const memberNavGroups = [
         items: [
             { name: "Dashboard", href: "/member", icon: LayoutDashboard },
             { name: "Jobs", href: "/member/jobs", icon: Briefcase },
+            { name: "Dev Plan", href: "/member/devplan", icon: Target },
         ],
     },
     {
