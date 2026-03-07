@@ -38,7 +38,7 @@ function cycleDate(weekOffset) {
 const CYCLES = [
   {
     name: "C1 — Foundation & Shared Components",
-    description: "Shared component library + API layer + global error handling. Prerequisites for all integration work.",
+    description: "Shared component library (DONE — 7/7 components built & adopted) + API layer + global error handling. Remaining: DatePicker, API error handling.",
     startsAt: cycleDate(0),
     endsAt: cycleDate(2),
   },
@@ -246,13 +246,13 @@ const TASKS = [
   // ═══════════════════════════════════════════════════════════════════════════
   // GLOBAL / SHARED COMPONENTS
   // ═══════════════════════════════════════════════════════════════════════════
-  { id: "FE-G-01", title: "Build shared Toast/Snackbar component", status: "Todo", priority: "High", cycle: 1, labels: ["Global", "Component"], desc: "Success, error, info variants. Used on all form submissions and action feedback." },
-  { id: "FE-G-02", title: "Extract shared ConfirmModal component", status: "In Progress", priority: "Medium", cycle: 1, labels: ["Global", "Component"], desc: "Inline confirm modals exist in many pages. Extract into one shared reusable ConfirmModal." },
-  { id: "FE-G-03", title: "Extract shared EmptyState component", status: "In Progress", priority: "Medium", cycle: 1, labels: ["Global", "Component"], desc: "Empty states exist inline. Extract into shared EmptyState (icon + message + optional CTA)." },
-  { id: "FE-G-04", title: "Build SkeletonLoader components", status: "Todo", priority: "Medium", cycle: 1, labels: ["Global", "Component"], desc: "Card, list, table skeleton variants. Replace 'Loading...' text across all pages." },
-  { id: "FE-G-05", title: "Add ErrorBoundary components", status: "Todo", priority: "High", cycle: 1, labels: ["Global", "Logic"], desc: "Per-section fallback UI for all data-fetching sections." },
-  { id: "FE-G-06", title: "Extract shared AvatarInitials component", status: "In Progress", priority: "Low", cycle: 1, labels: ["Global", "Component"], desc: "Some pages show initials fallback. Extract into shared component." },
-  { id: "FE-G-07", title: "Extract shared StatusBadge component", status: "In Progress", priority: "Low", cycle: 1, labels: ["Global", "Component"], desc: "Colour-coded pill (Active, Suspended, etc.) used in admin tables and milestone items." },
+  { id: "FE-G-01", title: "Build shared Toast/Snackbar component", status: "Done", priority: "High", cycle: null, labels: ["Global", "Component"], desc: "ToastProvider context, useToast hook, success/error/info variants, auto-dismiss 3s, stacked top-right. Wrapped in root layout." },
+  { id: "FE-G-02", title: "Extract shared ConfirmModal component", status: "Done", priority: "Medium", cycle: null, labels: ["Global", "Component"], desc: "Shared ConfirmModal with danger/primary variants, icon prop, loading state, backdrop dismiss. Adopted in devplan, profile, admin/settings." },
+  { id: "FE-G-03", title: "Extract shared EmptyState component", status: "Done", priority: "Medium", cycle: null, labels: ["Global", "Component"], desc: "Shared EmptyState with plain/dashed variants, icon + heading + description + CTA. Adopted in moderation, events, cohorts, jobs, schedule, notifications." },
+  { id: "FE-G-04", title: "Build SkeletonLoader components", status: "Done", priority: "Medium", cycle: null, labels: ["Global", "Component"], desc: "Skeleton (base bar), SkeletonCard (header + lines), SkeletonRow (table rows). Ready for API loading states." },
+  { id: "FE-G-05", title: "Add ErrorBoundary components", status: "Done", priority: "High", cycle: null, labels: ["Global", "Logic"], desc: "Class component with getDerivedStateFromError, custom fallback prop, retry button. Wrapped around all 27 data pages." },
+  { id: "FE-G-06", title: "Extract shared AvatarInitials component", status: "Done", priority: "Low", cycle: null, labels: ["Global", "Component"], desc: "5 size presets (xs-xl), deterministic color from name hash, image fallback on error. Adopted in 10+ pages." },
+  { id: "FE-G-07", title: "Extract shared StatusBadge component", status: "Done", priority: "Low", cycle: null, labels: ["Global", "Component"], desc: "Pill/tag/dot-only variants, 20+ presets (Active/Upcoming/Completed/etc). Adopted in admin/jobs, events, cohorts, devplan." },
   { id: "FE-G-08", title: "Build accessible DatePicker component", status: "In Progress", priority: "Low", cycle: 1, labels: ["Global", "Component"], desc: "Currently native HTML date inputs. Need custom accessible DatePicker for dev plan + events." },
   { id: "FE-G-09", title: "Global API error handling + 401 redirect", status: "Todo", priority: "Urgent", cycle: 1, labels: ["Global", "Logic"], desc: "No API layer exists. Need: fetch wrapper/axios instance, error interceptors, 401 → redirect to /auth." },
   { id: "FE-G-10", title: "Responsive breakpoint system", status: "Done", priority: "High", cycle: null, labels: ["Global", "Style"], desc: "Tailwind config with brand colors, responsive breakpoints, custom theme in globals.css." },
