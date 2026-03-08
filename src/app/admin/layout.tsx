@@ -2,6 +2,7 @@
 
 import { SidebarProvider } from "@/context/SidebarContext";
 import { UserProvider } from "@/context/UserContext";
+import { RouteGuard } from "@/context/AuthContext";
 import FloatingNav from "@/components/layout/FloatingNav";
 import {
     LayoutDashboard,
@@ -50,18 +51,20 @@ export default function AdminLayout({
     children: React.ReactNode;
 }) {
     return (
-        <SidebarProvider>
-            <UserProvider>
-                <div className="min-h-screen bg-stone-50">
-                    {/* Navigation (Header + Left Bar) */}
-                    <FloatingNav navGroups={adminNavGroups} moduleType="admin" />
+        <RouteGuard allowedRoles={["admin"]}>
+            <SidebarProvider>
+                <UserProvider>
+                    <div className="min-h-screen bg-stone-50">
+                        {/* Navigation (Header + Left Bar) */}
+                        <FloatingNav navGroups={adminNavGroups} moduleType="admin" />
 
-                    {/* Main Content - with padding for header and left nav (desktop only) */}
-                    <main className="pt-20 pb-6 md:pl-24 lg:pl-28">
-                        {children}
-                    </main>
-                </div>
-            </UserProvider>
-        </SidebarProvider>
+                        {/* Main Content - with padding for header and left nav (desktop only) */}
+                        <main className="pt-20 pb-6 md:pl-24 lg:pl-28">
+                            {children}
+                        </main>
+                    </div>
+                </UserProvider>
+            </SidebarProvider>
+        </RouteGuard>
     );
 }

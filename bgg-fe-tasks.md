@@ -2,24 +2,24 @@
 
 > **Audited:** March 6, 2026
 > **Codebase:** `bgg-fe` (Next.js)
-> **Total Tasks:** 103 | **Complete:** 57 | **Partial:** 13 | **Not Started:** 33
+> **Total Tasks:** 103 | **Complete:** 66 | **Partial:** 13 | **Not Started:** 24
 
 ---
 
 ## Sprint 1 — Auth & Onboarding (16 tasks)
 
-### M0 Landing/Auth — NOT STARTED (0/8)
+### M0 Landing/Auth — COMPLETE (8/8)
 
 | Task | Status | Details |
-|------|--------|---------|
-| **FE-M0-01** Auth page layout | ❌ Not started | No auth page exists. Root `/` just redirects to `/member` |
-| **FE-M0-02** Google OAuth button | ❌ Not started | No OAuth component |
-| **FE-M0-03** Email + password sign-in form | ❌ Not started | No login form |
-| **FE-M0-04** Email + password sign-up form | ❌ Not started | No registration form |
-| **FE-M0-05** Form validation (signup) | ❌ Not started | No validation hooks |
-| **FE-M0-06** Forgot Password flow | ❌ Not started | No forgot password page |
-| **FE-M0-07** Auth routing logic | ❌ Not started | No auth guards, no useAuth hook. Root redirects blindly to `/member` |
-| **FE-M0-08** Auth page responsive styling | ❌ Not started | N/A — no auth page to style |
+|------|--------|--------|
+| **FE-M0-01** Auth page layout | ✅ Complete | Split-screen auth page at `/auth` — branded left panel (desktop) with logo, tagline, social proof; centered form card (right). Mobile: centered form with condensed logo |
+| **FE-M0-02** Google OAuth button | ✅ Complete | Google OAuth button with official Google SVG icon. Calls `useAuth().loginWithGoogle()`. Loading spinner on click. Available on both sign-in and sign-up views |
+| **FE-M0-03** Email + password sign-in form | ✅ Complete | Sign-in form with email/password inputs, icon prefixes, show/hide password toggle, "Forgot password?" link, submit with loading state. Demo credentials shown |
+| **FE-M0-04** Email + password sign-up form | ✅ Complete | Sign-up form with name/email/password/confirm-password. All fields have icon prefixes and validation. Tab-free toggle between sign-in/sign-up views |
+| **FE-M0-05** Form validation (signup) | ✅ Complete | `validateEmail()`, `validatePassword()`, `validateName()` helpers exported from AuthContext. Password strength indicator with 3-bar meter + checklist (length, uppercase, number). Client-side + server error display |
+| **FE-M0-06** Forgot Password flow | ✅ Complete | Forgot password view with email input + "Send Reset Link" button. Success state shows "Check your email" confirmation with back-to-sign-in link. Uses `useAuth().forgotPassword()` |
+| **FE-M0-07** Auth routing logic | ✅ Complete | `AuthProvider` at root layout, `RouteGuard` component with role-based access control. Root `/` redirects to `/auth` if not authenticated, to role-based home if authenticated. `sessionStorage` preserves intended destination post-login. Member layout guarded for `member` role, admin for `admin` |
+| **FE-M0-08** Auth page responsive styling | ✅ Complete | Fully responsive: left branding panel hidden on mobile (`hidden lg:flex`), form card centered with `max-w-md`, touch-friendly inputs (py-3), mobile logo above form. Tailwind breakpoints for sm/lg/xl |
 
 ### M1 Onboarding — NOT STARTED (0/8)
 
@@ -38,7 +38,7 @@
 
 ## Sprint 2 — Member Dashboard & Events (12 tasks)
 
-### M2.0 App Shell/Navigation — COMPLETE (4/5)
+### M2.0 App Shell/Navigation — COMPLETE (5/5)
 
 | Task | Status | Details |
 |------|--------|---------|
@@ -46,7 +46,7 @@
 | **FE-M2-02** SideNav links + active states | ✅ Complete | `FloatingNav` renders nav items: Dashboard, Community, Members, Jobs, Cohorts with active route highlighting and dynamic cohort sub-links |
 | **FE-M2-03** Notification bell dropdown | ✅ Complete (UI) | `NotificationsTray` component with unread badge, filter tabs, mark-all-read, notification items with icons/timestamps. **Mock data only** |
 | **FE-M2-04** User avatar menu | ✅ Complete | `FloatingNav` has profile dropdown with View Profile, Settings, Sign Out links |
-| **FE-M2-05** Auth route guards | ❌ Not started | No `ProtectedRoute` HOC, no auth check. All routes are accessible without login |
+| **FE-M2-05** Auth route guards | ✅ Complete | `RouteGuard` component in AuthContext. Member layout wrapped with `allowedRoles={["member"]}`, admin with `allowedRoles={["admin"]}`. Redirects unauthenticated users to `/auth`, wrong-role users to their home. Loading spinner while checking |
 
 ### M3 Dashboard Home — PARTIALLY COMPLETE (5/7)
 
