@@ -1,7 +1,8 @@
 "use client";
 
-import { Calendar, Clock, Users, Plus, X, Pencil, Trash2, CalendarDays, List, Check, UserCheck, Video, Copy, ExternalLink, Link2 } from "lucide-react";
+import { Calendar, Clock, Users, Plus, X, Pencil, Trash2, CalendarDays, List, Check, UserCheck, Video, Copy, ExternalLink, Link2, Eye } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -214,6 +215,7 @@ export default function AdminEventsPage() {
                                                     {event.rsvps.includes("You") ? <><Check size={14} /> RSVP&apos;d</> : <><UserCheck size={14} /> RSVP</>}
                                                 </button>
                                             )}
+                                            <Link href={`/admin/events/${event.id}`} className="p-2 text-stone-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors" title="View Details"><Eye size={16} /></Link>
                                             <button onClick={() => setModal(event)} className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors"><Pencil size={16} /></button>
                                             <button onClick={() => setDeleteId(event.id)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
                                         </div>

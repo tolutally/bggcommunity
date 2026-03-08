@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Briefcase, Plus, X, Trash2, Pencil, MapPin, Building2, Clock, ExternalLink, UserCircle } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Briefcase, Plus, X, Trash2, Pencil, MapPin, Building2, Clock, ExternalLink, UserCircle, Users, Search, ArrowRight, MessageSquare } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 type ContactRole = "Member" | "Ecosystem Partner" | "Alumni" | "Staff";
+type ReferralStatus = "New" | "Contacted" | "Closed";
 
 interface InternalContact {
     name: string;
@@ -27,7 +29,29 @@ interface Job {
     contact?: InternalContact;
 }
 
+interface ReferralRequest {
+    id: number;
+    memberName: string;
+    memberEmail: string;
+    memberAvatar: string;
+    jobTitle: string;
+    company: string;
+    requestedAt: string;
+    status: ReferralStatus;
+    notes: string;
+}
+
 const CONTACT_ROLES: ContactRole[] = ["Member", "Ecosystem Partner", "Alumni", "Staff"];
+const REFERRAL_STATUSES: ReferralStatus[] = ["New", "Contacted", "Closed"];
+
+const INITIAL_REFERRALS: ReferralRequest[] = [
+    { id: 1, memberName: "Amara Okafor", memberEmail: "amara.okafor@example.com", memberAvatar: "https://i.pravatar.cc/150?u=10", jobTitle: "Java Developer", company: "CGI", requestedAt: "2025-10-22", status: "New", notes: "" },
+    { id: 2, memberName: "Chiamaka Nnadi", memberEmail: "chiamaka.nnadi@example.com", memberAvatar: "https://i.pravatar.cc/150?u=12", jobTitle: "Senior Product Manager", company: "Shopify", requestedAt: "2025-10-21", status: "Contacted", notes: "Connected with TechBridge partner" },
+    { id: 3, memberName: "Efe Omoregie", memberEmail: "efe.omoregie@example.com", memberAvatar: "https://i.pravatar.cc/150?u=14", jobTitle: "Data Analyst Intern", company: "Meta", requestedAt: "2025-10-20", status: "New", notes: "" },
+    { id: 4, memberName: "Fatima Diop", memberEmail: "fatima.diop@example.com", memberAvatar: "https://i.pravatar.cc/150?u=15", jobTitle: "Java Developer", company: "CGI", requestedAt: "2025-10-19", status: "Closed", notes: "Referral submitted by Amara" },
+    { id: 5, memberName: "Imani Lewis", memberEmail: "imani.lewis@example.com", memberAvatar: "https://i.pravatar.cc/150?u=18", jobTitle: "Senior Product Manager", company: "Shopify", requestedAt: "2025-10-18", status: "Contacted", notes: "Awaiting reply from recruiter" },
+    { id: 6, memberName: "Keisha Williams", memberEmail: "keisha.williams@example.com", memberAvatar: "https://i.pravatar.cc/150?u=20", jobTitle: "Frontend Engineer", company: "Stripe", requestedAt: "2025-10-17", status: "New", notes: "" },
+];
 
 const INITIAL_JOBS: Job[] = [
     { id: 1, title: "Java Developer", company: "CGI", location: "Toronto, ON", type: "Full-time", workMode: "Hybrid", url: "https://example.com/job/1", featured: true, postedAt: "2025-10-20", contact: { name: "Amara Okafor", role: "Member" } },
@@ -44,6 +68,10 @@ export default function AdminJobsPage() {
     const [jobs, setJobs] = useState<Job[]>(INITIAL_JOBS);
     const [modal, setModal] = useState<null | "create" | Job>(null);
     const [deleteId, setDeleteId] = useState<number | null>(null);
+    const [activeTab, setActiveTab] = useState<"jobs" | "referrals">("jobs");
+    const [referrals, setReferrals] = useState<ReferralRequest[]>(INITIAL_REFERRALS);
+    const [referralSearch, setReferralSearch] = useState("");
+    const [referralFilter, setReferralFilter] = useState<"All" | ReferralStatus>("All");
     let nextId = jobs.length ? Math.max(...jobs.map(j => j.id)) + 1 : 1;
 
     const featured = jobs.filter(j => j.featured);
@@ -67,6 +95,27 @@ export default function AdminJobsPage() {
         setJobs(prev => prev.map(j => j.id === id ? { ...j, featured: !j.featured } : j));
     };
 
+    const filteredReferrals = useMemo(() => {
+        return referrals.filter(r => {
+            const matchesSearch = r.memberName.toLowerCase().includes(referralSearch.toLowerCase()) ||
+                r.jobTitle.toLowerCase().includes(referralSearch.toLowerCase()) ||
+                r.company.toLowerCase().includes(referralSearch.toLowerCase());
+            const matchesFilter = referralFilter === "All" || r.status === referralFilter;
+            return matchesSearch && matchesFilter;
+        });
+    }, [referrals, referralSearch, referralFilter]);
+
+    const updateReferralStatus = (id: number, status: ReferralStatus) => {
+        setReferrals(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+    };
+
+    const referralStats = useMemo(() => ({
+        total: referrals.length,
+        new: referrals.filter(r => r.status === "New").length,
+        contacted: referrals.filter(r => r.status === "Contacted").length,
+        closed: referrals.filter(r => r.status === "Closed").length,
+    }), [referrals]);
+
     return (
         <ErrorBoundary>
         <div className="p-6 md:p-10 max-w-[1600px] mx-auto space-y-8">
@@ -76,11 +125,28 @@ export default function AdminJobsPage() {
                     <h1 className="text-3xl font-bold text-stone-900">Featured Jobs</h1>
                     <p className="text-stone-500 mt-1">Manage job listings visible to community members.</p>
                 </div>
-                <button onClick={() => setModal("create")} className="bg-brand-800 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-brand-700 flex items-center gap-2 shadow-lg shadow-brand-800/10 w-fit">
-                    <Plus size={18} /> Add Job
-                </button>
+                <div className="flex items-center gap-3">
+                    <div className="flex bg-stone-100 rounded-xl p-1">
+                        <button onClick={() => setActiveTab("jobs")} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "jobs" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}>
+                            <Briefcase size={16} /> Jobs
+                        </button>
+                        <button onClick={() => setActiveTab("referrals")} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeTab === "referrals" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}>
+                            <Users size={16} /> Referrals
+                            {referralStats.new > 0 && (
+                                <span className="ml-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{referralStats.new}</span>
+                            )}
+                        </button>
+                    </div>
+                    {activeTab === "jobs" && (
+                        <button onClick={() => setModal("create")} className="bg-brand-800 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-brand-700 flex items-center gap-2 shadow-lg shadow-brand-800/10 w-fit">
+                            <Plus size={18} /> Add Job
+                        </button>
+                    )}
+                </div>
             </div>
 
+            {/* Jobs Tab */}
+            {activeTab === "jobs" && (<>
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="bg-white rounded-2xl border border-stone-100 p-5">
@@ -129,6 +195,121 @@ export default function AdminJobsPage() {
                     variant="plain"
                 />
             )}
+            </>)}
+
+            {/* Referral Requests Tab */}
+            {activeTab === "referrals" && (<>
+                {/* Referral Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-2xl border border-stone-100 p-5">
+                        <p className="text-sm text-stone-500 font-medium">Total Requests</p>
+                        <p className="text-3xl font-bold text-stone-900 mt-1">{referralStats.total}</p>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-rose-100 p-5">
+                        <p className="text-sm text-rose-600 font-medium">New</p>
+                        <p className="text-3xl font-bold text-rose-700 mt-1">{referralStats.new}</p>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-amber-100 p-5">
+                        <p className="text-sm text-amber-600 font-medium">Contacted</p>
+                        <p className="text-3xl font-bold text-amber-700 mt-1">{referralStats.contacted}</p>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-green-100 p-5">
+                        <p className="text-sm text-green-600 font-medium">Closed</p>
+                        <p className="text-3xl font-bold text-green-700 mt-1">{referralStats.closed}</p>
+                    </div>
+                </div>
+
+                {/* Referral Toolbar */}
+                <div className="flex flex-col md:flex-row gap-4 justify-between bg-white p-4 rounded-2xl border border-stone-200">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search referral requests..."
+                            className="w-full pl-10 pr-4 py-2 bg-stone-50 border-stone-200 border rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all"
+                            value={referralSearch}
+                            onChange={(e) => setReferralSearch(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {(["All", ...REFERRAL_STATUSES] as const).map(s => (
+                            <button key={s} onClick={() => setReferralFilter(s as any)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${referralFilter === s ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Referral Table */}
+                {filteredReferrals.length > 0 ? (
+                    <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left text-stone-500">
+                                <thead className="text-xs text-stone-400 uppercase bg-stone-50 border-b border-stone-100">
+                                    <tr>
+                                        <th className="px-6 py-4 font-bold">Member</th>
+                                        <th className="px-6 py-4 font-bold">Job</th>
+                                        <th className="px-6 py-4 font-bold">Date</th>
+                                        <th className="px-6 py-4 font-bold">Status</th>
+                                        <th className="px-6 py-4 font-bold">Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredReferrals.map(req => (
+                                        <tr key={req.id} className="bg-white border-b border-stone-100 hover:bg-stone-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <AvatarInitials name={req.memberName} src={req.memberAvatar} size="md" />
+                                                    <div>
+                                                        <div className="font-bold text-stone-900">{req.memberName}</div>
+                                                        <div className="text-xs text-stone-500">{req.memberEmail}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="font-semibold text-stone-900">{req.jobTitle}</div>
+                                                <div className="text-xs text-stone-500 flex items-center gap-1"><Building2 size={12} /> {req.company}</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-stone-500 font-medium whitespace-nowrap">
+                                                {new Date(req.requestedAt + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <select
+                                                    value={req.status}
+                                                    onChange={(e) => updateReferralStatus(req.id, e.target.value as ReferralStatus)}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border outline-none cursor-pointer transition-colors ${
+                                                        req.status === "New" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                                                        req.status === "Contacted" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                                                        "bg-green-50 text-green-700 border-green-200"
+                                                    }`}
+                                                >
+                                                    {REFERRAL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                                </select>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {req.notes ? (
+                                                    <span className="text-stone-600 text-sm flex items-center gap-1.5">
+                                                        <MessageSquare size={12} className="text-stone-400 flex-shrink-0" />
+                                                        <span className="line-clamp-1">{req.notes}</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-stone-300 text-sm">—</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                    <EmptyState
+                        icon={Users}
+                        heading="No referral requests"
+                        description={referralSearch || referralFilter !== "All" ? "Try adjusting your search or filters." : "Members haven't requested any referrals yet."}
+                    />
+                )}
+            </>)}
 
             {/* Create / Edit Modal */}
             {modal !== null && <JobFormModal initial={typeof modal === "object" ? modal : undefined} onClose={() => setModal(null)} onSave={handleSave} />}

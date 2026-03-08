@@ -2,7 +2,7 @@
 
 > **Audited:** March 6, 2026
 > **Codebase:** `bgg-fe` (Next.js)
-> **Total Tasks:** 103 | **Complete:** 45 | **Partial:** 19 | **Not Started:** 39
+> **Total Tasks:** 103 | **Complete:** 57 | **Partial:** 13 | **Not Started:** 33
 
 ---
 
@@ -87,8 +87,8 @@
 |------|--------|---------|
 | **FE-R4-01** RecordingCard component | ✅ Complete (UI) | YouTube thumbnail, title, cohort label badge, hover state. Used in dashboard + cohort page. Mock data |
 | **FE-R4-02** YouTube thumbnail extraction | 🟡 Partial | Thumbnail URLs are hardcoded in mock data (using `img.youtube.com/vi/...` pattern). No utility function to parse arbitrary YouTube URLs and extract video IDs dynamically |
-| **FE-R4-03** Recordings full list page | ❌ Not started | No dedicated `/member/recordings` page exists. Recordings only appear inline on dashboard and cohort page |
-| **FE-R4-04** Responsive recording grid styling | 🟡 Partial | Grid exists on dashboard (responsive), but no dedicated page layout with filter/toggle |
+| **FE-R4-03** Recordings full list page | ✅ Complete (UI) | Dedicated `/member/recordings` page with 12 mock recordings, grid/list toggle, search, filter by type and cohort, video thumbnail cards with play overlay, back-to-dashboard link |
+| **FE-R4-04** Responsive recording grid styling | ✅ Complete (UI) | Fully responsive 1-4 column grid on recordings page, list view alternative, toolbar with filters and view toggle matches members page pattern |
 
 ---
 
@@ -171,7 +171,7 @@
 |------|--------|---------|
 | **FE-A8-05** Members List page | ✅ Complete (UI) | `admin/members/page.tsx` — Table with name, email, joined date, status badge. Search + filter. Pagination. Mock data |
 | **FE-A8-06** Add Single Member modal | ✅ Complete (UI) | Email input + invite option + submit. Mock/local state |
-| **FE-A8-07** Bulk Add Members modal | ❌ Not started | No CSV dropzone, no paste emails, no bulk add UI |
+| **FE-A8-07** Bulk Add Members modal | ✅ Complete (UI) | Full modal with Paste Emails / CSV Upload tabs, drag-and-drop CSV dropzone, email parsing with validation preview, cohort selector, processing spinner, success state |
 | **FE-A8-08** Member action menu | ✅ Complete (UI) | Dropdown: Suspend, Send Warning, Remove. Confirm modals. Mock state |
 | **FE-A8-09** Send warning flow | 🟡 Partial | Warning textarea exists in modal. Submit updates local state. No POST to API |
 
@@ -193,8 +193,8 @@
 |------|--------|---------|
 | **FE-A8-17** Events List page | ✅ Complete (UI) | `admin/events/page.tsx` — Table with name, date, audience, RSVP count. Create button. Filter. Mock data |
 | **FE-A8-18** Create/Edit Event form | ✅ Complete (UI) | Name, DateTime, Host, MeetingURL, AudienceSelector (Community/Cohort/Individual). Cohort dropdown. Submit. Mock/local |
-| **FE-A8-19** Event Detail + RSVP List view | ❌ Not started | No separate event detail page with RSVP table |
-| **FE-A8-20** Add Recording link to event | ❌ Not started | No recording-to-event attachment UI |
+| **FE-A8-19** Event Detail + RSVP List view | ✅ Complete (UI) | Full `/admin/events/[id]` page with event header, RSVP stats (total/going/maybe/attended), searchable RSVP table with filter by status, attendance toggle, Export CSV and Email All buttons |
+| **FE-A8-20** Add Recording link to event | ✅ Complete (UI) | Recording attachment section on event detail page — URL input, save button, attached state with watch/remove, YouTube-ready |
 
 ### A6.1 Admin Jobs Management — PARTIALLY COMPLETE (2/3)
 
@@ -202,7 +202,7 @@
 |------|--------|---------|
 | **FE-A8-21** Jobs List page (admin) | ✅ Complete (UI) | `admin/jobs/page.tsx` — Table with title, company, referral flag, date. Create button. Mock data |
 | **FE-A8-22** Create/Edit Job form | ✅ Complete (UI) | Title, Company, Location, Description, ExternalURL, ReferralToggle, ReferralContact. Submit. Mock data |
-| **FE-A8-23** Referral Requests panel | ❌ Not started | No referral request table or status management UI |
+| **FE-A8-23** Referral Requests panel | ✅ Complete (UI) | Jobs/Referrals tab toggle on admin jobs page, referral stats row (total/new/contacted/closed), searchable table with member avatar, job info, StatusSelect dropdown (New/Contacted/Closed), notes column. 6 mock referrals |
 
 ### A7 Admin Moderation — PARTIALLY COMPLETE (2/3)
 
@@ -248,14 +248,14 @@
 | Sprint 2 — App Shell | 5 | 4 | 0 | **1** |
 | Sprint 2 — Dashboard | 7 | 4 | 1 | **2** |
 | Sprint 3 — Cohorts | 8 | 6 | 0 | **2** |
-| Sprint 4 — Recordings | 4 | 1 | 2 | **1** |
+| Sprint 4 — Recordings | 4 | 3 | 1 | **0** |
 | Sprint 5 — Jobs | 6 | 3 | 2 | **1** |
 | Sprint 6 — Community | 6 | 4 | 1 | **1** |
 | Sprint 6 — Member Directory | 6 | 4 | 1 | **1** |
 | Sprint 7 — Dev Plan | 7 | 4 | 1 | **2** |
-| Sprint 8 — Admin Portal | 28 | 14 | 6 | **8** |
+| Sprint 8 — Admin Portal | 28 | 17 | 6 | **5** |
 | Global/Shared | 10 | 8 | 0 | **2** |
-| **TOTAL** | **103** | **52** | **14** | **37** |
+| **TOTAL** | **103** | **57** | **13** | **33** |
 
 ---
 
@@ -264,5 +264,5 @@
 1. **Entire auth system (Sprint 1)** — 16 tasks, zero done. No login, register, OAuth, forgot password, onboarding, or route guards
 2. **No API integration anywhere** — Every page uses hardcoded mock data. Zero hooks, zero fetch calls, zero real backend connectivity
 3. **~~No shared component library~~** — ✅ RESOLVED. All 7 shared components (Toast, ConfirmModal, EmptyState, SkeletonLoader, ErrorBoundary, AvatarInitials, StatusBadge) built in `src/components/ui/` with barrel export. Inline duplicates migrated. ErrorBoundary wraps all 27 data pages.
-4. **Missing pages** — Recordings full list, Event Detail+RSVP, Referral Requests panel, Bulk Add Members, PDF export
+4. **~~Missing pages~~** — ✅ RESOLVED. Recordings full list (`/member/recordings`), Event Detail+RSVP (`/admin/events/[id]`), Referral Requests panel (tab on admin jobs), Bulk Add Members modal (on admin members) all built. Only PDF export remains.
 5. **DM Widget is a prototype** — send doesn't persist messages
