@@ -15,6 +15,12 @@ export default function AuthPage() {
     // Redirect if already authenticated
     useEffect(() => {
         if (!isLoading && isAuthenticated) {
+            // Check if onboarding is complete
+            const onboardingDone = localStorage.getItem("bgg_onboarding_complete") === "true";
+            if (!onboardingDone) {
+                router.replace("/onboarding");
+                return;
+            }
             const redirect = sessionStorage.getItem("bgg_redirect_after_login") || "/member";
             sessionStorage.removeItem("bgg_redirect_after_login");
             router.replace(redirect);

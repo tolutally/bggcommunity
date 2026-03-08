@@ -2,7 +2,7 @@
 
 > **Audited:** March 6, 2026
 > **Codebase:** `bgg-fe` (Next.js)
-> **Total Tasks:** 103 | **Complete:** 66 | **Partial:** 13 | **Not Started:** 24
+> **Total Tasks:** 103 | **Complete:** 74 | **Partial:** 13 | **Not Started:** 16
 
 ---
 
@@ -21,18 +21,18 @@
 | **FE-M0-07** Auth routing logic | ✅ Complete | `AuthProvider` at root layout, `RouteGuard` component with role-based access control. Root `/` redirects to `/auth` if not authenticated, to role-based home if authenticated. `sessionStorage` preserves intended destination post-login. Member layout guarded for `member` role, admin for `admin` |
 | **FE-M0-08** Auth page responsive styling | ✅ Complete | Fully responsive: left branding panel hidden on mobile (`hidden lg:flex`), form card centered with `max-w-md`, touch-friendly inputs (py-3), mobile logo above form. Tailwind breakpoints for sm/lg/xl |
 
-### M1 Onboarding — NOT STARTED (0/8)
+### M1 Onboarding — COMPLETE (8/8)
 
 | Task | Status | Details |
-|------|--------|---------|
-| **FE-M1-01** Multi-step onboarding shell | ❌ Not started | No onboarding route or component |
-| **FE-M1-02** Step 1 — Basic info form | ❌ Not started | |
-| **FE-M1-03** Step 2 — Profile photo upload | ❌ Not started | |
-| **FE-M1-04** Step 3 — Social links input | ❌ Not started | |
-| **FE-M1-05** Step 4 — Privacy toggles | ❌ Not started | |
-| **FE-M1-06** Step 5 — Optional Dev Plan | ❌ Not started | |
-| **FE-M1-07** Onboarding state persistence | ❌ Not started | |
-| **FE-M1-08** 'Complete Dev Plan' banner | ❌ Not started | |
+|------|--------|--------|
+| **FE-M1-01** Multi-step onboarding shell | ✅ Complete | `/onboarding` route with 5-step wizard — header with step counter, clickable progress bar, sticky footer with Back/Continue/Complete, responsive layout |
+| **FE-M1-02** Step 1 — Basic info form | ✅ Complete | Display Name (pre-filled from auth), Occupation (required), Industry dropdown (10 options), Location, Bio with 200-char counter. Validation on required fields |
+| **FE-M1-03** Step 2 — Profile photo upload | ✅ Complete | Drag-and-drop + click-to-browse dropzone, 5MB limit, image preview in rounded-3xl frame, remove button, dataURL persistence |
+| **FE-M1-04** Step 3 — Social links input | ✅ Complete | Website, LinkedIn, Twitter/X, GitHub — all optional with icon prefixes. Tip box for LinkedIn |
+| **FE-M1-05** Step 4 — Privacy toggles | ✅ Complete | 4 toggle switches: Public profile, Show email, Show socials, Show location. Custom ToggleSwitch component. Info note about cohort visibility |
+| **FE-M1-06** Step 5 — Optional Dev Plan | ✅ Complete | Goal title input + milestone list (add/remove, up to 8). "Skip for now" button. Example dev plan shown when empty. Skip sets `bgg_devplan_skipped` flag |
+| **FE-M1-07** Onboarding state persistence | ✅ Complete | `bgg_onboarding` localStorage key auto-saves on every change. Hydrates on mount. Profile data, avatar, and dev goals written to existing `bgg-profile`, `bgg-avatar`, `bgg-goals` keys on completion |
+| **FE-M1-08** 'Complete Dev Plan' banner | ✅ Complete | Amber gradient banner on member dashboard when `bgg_devplan_skipped` is true. Links to `/member/devplan`. Dismissible with X (sets `bgg_devplan_banner_dismissed`). Animated with framer-motion |
 
 ---
 
@@ -244,8 +244,8 @@
 
 | Area | Total | ✅ Complete | 🟡 Partial | ❌ Not Started |
 |------|:-----:|:----------:|:----------:|:-------------:|
-| Sprint 1 — Auth & Onboarding | 16 | 0 | 0 | **16** |
-| Sprint 2 — App Shell | 5 | 4 | 0 | **1** |
+| Sprint 1 — Auth & Onboarding | 16 | 16 | 0 | **0** |
+| Sprint 2 — App Shell | 5 | 5 | 0 | **0** |
 | Sprint 2 — Dashboard | 7 | 4 | 1 | **2** |
 | Sprint 3 — Cohorts | 8 | 6 | 0 | **2** |
 | Sprint 4 — Recordings | 4 | 3 | 1 | **0** |
@@ -255,13 +255,13 @@
 | Sprint 7 — Dev Plan | 7 | 4 | 1 | **2** |
 | Sprint 8 — Admin Portal | 28 | 17 | 6 | **5** |
 | Global/Shared | 10 | 8 | 0 | **2** |
-| **TOTAL** | **103** | **57** | **13** | **33** |
+| **TOTAL** | **103** | **74** | **13** | **16** |
 
 ---
 
 ## Biggest Gaps (Blockers)
 
-1. **Entire auth system (Sprint 1)** — 16 tasks, zero done. No login, register, OAuth, forgot password, onboarding, or route guards
+1. **~~Entire auth system (Sprint 1)~~** — ✅ RESOLVED. Full auth system (login, register, Google OAuth, forgot password, route guards) + complete 5-step onboarding wizard with state persistence, privacy toggles, and dev plan setup
 2. **No API integration anywhere** — Every page uses hardcoded mock data. Zero hooks, zero fetch calls, zero real backend connectivity
 3. **~~No shared component library~~** — ✅ RESOLVED. All 7 shared components (Toast, ConfirmModal, EmptyState, SkeletonLoader, ErrorBoundary, AvatarInitials, StatusBadge) built in `src/components/ui/` with barrel export. Inline duplicates migrated. ErrorBoundary wraps all 27 data pages.
 4. **~~Missing pages~~** — ✅ RESOLVED. Recordings full list (`/member/recordings`), Event Detail+RSVP (`/admin/events/[id]`), Referral Requests panel (tab on admin jobs), Bulk Add Members modal (on admin members) all built. Only PDF export remains.

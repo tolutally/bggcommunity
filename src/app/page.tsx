@@ -14,6 +14,12 @@ export default function Home() {
       router.replace("/auth");
       return;
     }
+    // Check if onboarding is complete
+    const onboardingDone = typeof window !== "undefined" && localStorage.getItem("bgg_onboarding_complete") === "true";
+    if (!onboardingDone) {
+      router.replace("/onboarding");
+      return;
+    }
     // Redirect to role-appropriate dashboard
     const home = user?.role === "admin" ? "/admin" : user?.role === "mentor" ? "/mentor" : "/member";
     router.replace(home);

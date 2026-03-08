@@ -1,9 +1,9 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { Calendar, Clock, ArrowRight, AlertTriangle, Activity, CheckCircle, Video, MapPin, Users, BookOpen, Briefcase, MessageSquare } from "lucide-react";
+import { Calendar, Clock, ArrowRight, AlertTriangle, Activity, CheckCircle, Video, MapPin, Users, BookOpen, Briefcase, MessageSquare, Target, X } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -26,6 +26,16 @@ const item = {
 export default function MemberDashboard() {
     const { user } = useUser();
     const [scheduleView, setScheduleView] = useState<'upcoming' | 'past'>('upcoming');
+    const [showDevPlanBanner, setShowDevPlanBanner] = useState(false);
+
+    // Check if user skipped dev plan during onboarding
+    useEffect(() => {
+        const skipped = localStorage.getItem("bgg_devplan_skipped");
+        const dismissed = localStorage.getItem("bgg_devplan_banner_dismissed");
+        if (skipped === "true" && dismissed !== "true") {
+            setShowDevPlanBanner(true);
+        }
+    }, []);
 
     const upcomingSessions = [
         {
@@ -147,6 +157,42 @@ export default function MemberDashboard() {
                     <MessageSquare size={16} /> Community
                 </Link>
             </motion.div>
+
+            {/* Complete Dev Plan Banner */}
+            {showDevPlanBanner && (
+                <motion.div
+                    variants={item}
+                    className="relative bg-gradient-to-r from-accent-50 via-amber-50 to-accent-50 border border-accent-200 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4"
+                >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 bg-accent-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <Target size={20} className="text-accent-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-stone-900">Complete your Development Plan</p>
+                            <p className="text-xs text-stone-500 mt-0.5">You skipped this during onboarding. Setting goals helps you stay on track and get the most out of your cohort.</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        <Link
+                            href="/member/devplan"
+                            className="px-4 py-2 bg-accent-500 text-white text-sm font-bold rounded-xl hover:bg-accent-600 transition-colors shadow-sm"
+                        >
+                            Set Up Dev Plan
+                        </Link>
+                        <button
+                            onClick={() => {
+                                setShowDevPlanBanner(false);
+                                localStorage.setItem("bgg_devplan_banner_dismissed", "true");
+                            }}
+                            className="p-2 text-stone-400 hover:text-stone-600 transition-colors"
+                            aria-label="Dismiss banner"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                </motion.div>
+            )}
 
             {/* Main Content Grid */}
             <motion.div variants={item}>
