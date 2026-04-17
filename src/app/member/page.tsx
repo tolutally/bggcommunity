@@ -8,6 +8,7 @@ import Link from "next/link";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useEvents, eventTypeLabel, fmtEventTime, fmtDuration, isEventPast } from "@/hooks/use-events";
+import { useJobs, fmtJobDate } from "@/hooks/use-jobs";
 
 const container = {
     hidden: { opacity: 0 },
@@ -27,6 +28,7 @@ const item = {
 export default function MemberDashboard() {
     const { user } = useUser();
     const { events: apiEvents, isLoading: eventsLoading } = useEvents();
+    const { jobs: apiJobs, isLoading: jobsLoading } = useJobs();
     const [scheduleView, setScheduleView] = useState<'upcoming' | 'past'>('upcoming');
     const [showDevPlanBanner, setShowDevPlanBanner] = useState(false);
 
@@ -405,69 +407,45 @@ export default function MemberDashboard() {
                         <div className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm">
                             <h3 className="text-lg font-bold text-stone-900 mb-4">Featured Jobs</h3>
                             <div className="space-y-4">
-                                {/* Job Card 1 - Referral Available */}
-                                <div className="bg-white rounded-xl border border-stone-200 p-4 hover:border-brand-200 hover:shadow-md transition-all">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="w-10 h-10 bg-gradient-to-br from-rose-500 to-rose-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                                            CGI
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold text-stone-900 text-sm">CGI</p>
-                                            <p className="text-xs text-stone-400">2 days ago</p>
-                                        </div>
+                                {jobsLoading && (
+                                    <div className="flex items-center justify-center py-6">
+                                        <Loader2 className="animate-spin text-brand-500" size={20} />
                                     </div>
-                                    <h4 className="font-bold text-stone-900 mb-2">Java Developer</h4>
-                                    <div className="flex flex-wrap gap-2 mb-3">
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                            🇨🇦 Toronto, ON
-                                        </span>
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span> Permanent Full-time
-                                        </span>
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> Hybrid
-                                        </span>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button className="flex-1 px-3 py-2 bg-brand-800 text-white font-bold rounded-lg hover:bg-brand-700 transition-colors text-xs">
-                                            Apply
-                                        </button>
-                                        <button className="flex-1 px-3 py-2 bg-accent-100 text-accent-700 font-bold rounded-lg hover:bg-accent-200 transition-colors text-xs flex items-center justify-center gap-1">
-                                            <Users size={12} />
-                                            Seek Referral
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Job Card 2 - No Referral */}
-                                <div className="bg-white rounded-xl border border-stone-200 p-4 hover:border-brand-200 hover:shadow-md transition-all">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="w-10 h-10 bg-gradient-to-br from-rose-500 to-rose-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                                            CGI
+                                )}
+                                {apiJobs.filter(j => j.isFeatured).slice(0, 3).map(job => (
+                                    <div key={job.id} className="bg-white rounded-xl border border-stone-200 p-4 hover:border-brand-200 hover:shadow-md transition-all">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="w-10 h-10 bg-gradient-to-br from-brand-600 to-brand-800 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                                                {job.company.substring(0, 3).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-stone-900 text-sm">{job.company}</p>
+                                                <p className="text-xs text-stone-400">{fmtJobDate(job.createdAt)}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="font-semibold text-stone-900 text-sm">CGI</p>
-                                            <p className="text-xs text-stone-400">a month ago</p>
+                                        <h4 className="font-bold text-stone-900 mb-2 line-clamp-1">{job.title}</h4>
+                                        <div className="flex flex-wrap gap-2 mb-3">
+                                            {job.location && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
+                                                    <MapPin size={10} /> {job.location}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <a href={job.externalUrl} target="_blank" rel="noopener noreferrer" className={`${job.referralAvailable ? "flex-1" : "w-full"} px-3 py-2 bg-brand-800 text-white font-bold rounded-lg hover:bg-brand-700 transition-colors text-xs text-center`}>
+                                                Apply
+                                            </a>
+                                            {job.referralAvailable && (
+                                                <Link href="/member/jobs" className="flex-1 px-3 py-2 bg-accent-100 text-accent-700 font-bold rounded-lg hover:bg-accent-200 transition-colors text-xs flex items-center justify-center gap-1">
+                                                    <Users size={12} /> Seek Referral
+                                                </Link>
+                                            )}
                                         </div>
                                     </div>
-                                    <h4 className="font-bold text-stone-900 mb-2 line-clamp-1">Campus Talent Acquisition...</h4>
-                                    <div className="flex flex-wrap gap-2 mb-3">
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                            🇨🇦 Toronto, ON
-                                        </span>
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span> Contract Full-time
-                                        </span>
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> Hybrid
-                                        </span>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button className="w-full px-3 py-2 bg-brand-800 text-white font-bold rounded-lg hover:bg-brand-700 transition-colors text-xs">
-                                            Apply
-                                        </button>
-                                    </div>
-                                </div>
+                                ))}
+                                {!jobsLoading && apiJobs.filter(j => j.isFeatured).length === 0 && (
+                                    <p className="text-sm text-stone-400 text-center py-4">No featured jobs right now.</p>
+                                )}
                             </div>
 
                             <Link href="/member/jobs" className="block w-full mt-4 bg-accent-500 hover:bg-accent-600 text-white px-6 py-3 rounded-full font-bold text-sm transition-colors text-center">

@@ -1,610 +1,254 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { useUser } from "@/context/UserContext";
-import {
-    Search, Users, MessageSquare, Send, ChevronDown, ChevronUp,
-    Clock, Heart, ThumbsUp, Flame, PartyPopper, Megaphone,
-    Activity, UserPlus, UserMinus, Circle, Hash, BookOpen, Briefcase,
-    Star, Award, Calendar, ExternalLink,
-} from "lucide-react";
+import { MessageSquare, Users, Hash, ArrowLeft, Send, Loader2, LogIn, LogOut, Trash2 } from "lucide-react";
+import { useState, useCallback } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import {
+    useCommunityGroups, useCommunityGroup,
+    useJoinGroup, useLeaveGroup,
+    useChannelPosts, useCreatePost, useDeletePost,
+    useCreateComment, useDeleteComment,
+    fmtPostDate,
+} from "@/hooks/use-community";
+import { useToast } from "@/components/ui/toast";
+import { useUser } from "@/context/UserContext";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import type { Post, Comment, Channel } from "@/lib/types";
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-interface Group {
-    id: number;
-    name: string;
-    description: string;
-    icon: string;
-    members: number;
-    online: number;
-    joined: boolean;
-    color: string;
-}
-
-interface Reply {
-    id: number;
-    author: string;
-    avatar: string;
-    timestamp: string;
-    content: string;
-}
-
-interface Post {
-    id: number;
-    author: string;
-    avatar: string;
-    timestamp: string;
-    title: string;
-    content: string;
-    replies: Reply[];
-    reactions: Record<string, number>;
-    myReactions: string[];
-}
-
-interface Announcement {
-    id: number;
-    author: string;
-    avatar: string;
-    timestamp: string;
-    title: string;
-    content: string;
-    reactions: Record<string, number>;
-    myReactions: string[];
-    comments: { id: number; author: string; avatar: string; text: string; timestamp: string }[];
-}
-
-interface ActivityItem {
-    id: number;
-    type: "join" | "post" | "achievement" | "event";
-    user: string;
-    avatar: string;
-    text: string;
-    timestamp: string;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Mock Data                                                          */
-/* ------------------------------------------------------------------ */
-
-const INITIAL_GROUPS: Group[] = [
-    { id: 1, name: "Product Strategy", description: "Discuss PM frameworks, case studies & strategy", icon: "📊", members: 48, online: 12, joined: true, color: "bg-brand-50 border-brand-200" },
-    { id: 2, name: "Career Growth", description: "Job hunting, networking tips & career advice", icon: "🚀", members: 62, online: 8, joined: true, color: "bg-amber-50 border-amber-200" },
-    { id: 3, name: "Tech & Engineering", description: "Coding projects, tech trends & learning resources", icon: "💻", members: 35, online: 5, joined: false, color: "bg-emerald-50 border-emerald-200" },
-    { id: 4, name: "Design Thinking", description: "UX research, design sprints & portfolios", icon: "🎨", members: 29, online: 3, joined: false, color: "bg-purple-50 border-purple-200" },
-    { id: 5, name: "Wellness & Balance", description: "Self-care, mental health & work-life balance", icon: "🧘", members: 41, online: 6, joined: false, color: "bg-rose-50 border-rose-200" },
-    { id: 6, name: "Side Projects", description: "Show & tell your side hustles and passion projects", icon: "⚡", members: 24, online: 2, joined: true, color: "bg-cyan-50 border-cyan-200" },
-];
-
-const INITIAL_POSTS: Post[] = [
-    {
-        id: 1, author: "Amara Okafor",
-        avatar: "https://images.unsplash.com/photo-1589156280159-27698a70f29e?w=150&h=150&fit=crop&crop=faces",
-        timestamp: "2 hours ago",
-        title: "Tips for acing the Product Strategy case study?",
-        content: "I'm working on my Week 3 assignment and feeling a bit stuck on the market sizing section. Has anyone found a good framework that works for B2B SaaS products specifically?",
-        reactions: { "👍": 5, "🔥": 2 }, myReactions: [],
-        replies: [
-            { id: 101, author: "Jordan Smith", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=faces", timestamp: "1 hour ago", content: "I found the TAM/SAM/SOM framework really helpful! Start with the total addressable market, then narrow down. Happy to share my notes if you want." },
-            { id: 102, author: "Keisha Williams", avatar: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=150&h=150&fit=crop&crop=faces", timestamp: "45 mins ago", content: "Also check out the resource from Week 2 — there's a template that breaks it down step by step. It was a game changer for me." },
-        ],
-    },
-    {
-        id: 2, author: "Sarah Jenkins",
-        avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=faces",
-        timestamp: "5 hours ago",
-        title: "Weekly check-in: How's everyone doing?",
-        content: "Just wanted to create a space for us to share how we're feeling this week. The program can be intense — let's support each other! 💪",
-        reactions: { "❤️": 12, "🎉": 3, "👍": 7 }, myReactions: ["❤️"],
-        replies: [
-            { id: 201, author: "Maya Chen", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=faces", timestamp: "4 hours ago", content: "Honestly feeling a bit overwhelmed but seeing everyone's progress is motivating. We got this!" },
-        ],
-    },
-    {
-        id: 3, author: "David Park",
-        avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=faces",
-        timestamp: "1 day ago",
-        title: "Anyone else working on the synthesis matrix?",
-        content: "I'm trying to organize my user research findings and the matrix is getting quite large. Would love to see how others are approaching this — maybe we can do a virtual co-working session?",
-        reactions: { "👍": 3 }, myReactions: [],
-        replies: [],
-    },
-];
-
-const INITIAL_ANNOUNCEMENTS: Announcement[] = [
-    {
-        id: 1, author: "BGG Team", avatar: "https://i.pravatar.cc/150?u=bgg-team", timestamp: "1 day ago",
-        title: "🎉 Week 4 Kickoff — Guest Speaker Announcement",
-        content: "We're thrilled to announce that Amanda Jones, Senior PM at Uber, will be joining us this Monday at 1 PM EST for a fireside chat on breaking into product management. Don't miss it!",
-        reactions: { "🎉": 18, "🔥": 9, "❤️": 6 }, myReactions: ["🎉"],
-        comments: [
-            { id: 301, author: "Keisha Williams", avatar: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=150&h=150&fit=crop&crop=faces", text: "So excited for this! Already have my questions ready.", timestamp: "20 hours ago" },
-        ],
-    },
-    {
-        id: 2, author: "BGG Team", avatar: "https://i.pravatar.cc/150?u=bgg-team", timestamp: "3 days ago",
-        title: "📋 Reminder: Week 3 Assignments Due Friday",
-        content: "Please submit your research findings and synthesis matrix by Friday 5 PM EST. Reach out in #product-strategy if you need help!",
-        reactions: { "👍": 11, "❤️": 2 }, myReactions: [],
-        comments: [],
-    },
-];
-
-const INITIAL_ACTIVITY: ActivityItem[] = [
-    { id: 1, type: "join", user: "Tanya Brooks", avatar: "https://i.pravatar.cc/150?u=tanya", text: "joined the community", timestamp: "5 min ago" },
-    { id: 2, type: "post", user: "Amara Okafor", avatar: "https://images.unsplash.com/photo-1589156280159-27698a70f29e?w=150&h=150&fit=crop&crop=faces", text: "posted in Product Strategy", timestamp: "2 hr ago" },
-    { id: 3, type: "achievement", user: "Maya Chen", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=faces", text: "earned the \"Helpful Hand\" badge", timestamp: "3 hr ago" },
-    { id: 4, type: "event", user: "Jordan Smith", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=faces", text: "RSVP'd to Guest Speaker event", timestamp: "4 hr ago" },
-    { id: 5, type: "join", user: "Priya Sharma", avatar: "https://i.pravatar.cc/150?u=priya", text: "joined Career Growth group", timestamp: "6 hr ago" },
-    { id: 6, type: "post", user: "Sarah Jenkins", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=faces", text: "started a weekly check-in thread", timestamp: "5 hr ago" },
-];
-
-const REACTION_OPTIONS = ["👍", "❤️", "🔥", "🎉"] as const;
-
-const ACTIVITY_ICON: Record<ActivityItem["type"], React.ReactNode> = {
-    join: <UserPlus size={14} />,
-    post: <MessageSquare size={14} />,
-    achievement: <Award size={14} />,
-    event: <Calendar size={14} />,
-};
-const ACTIVITY_COLOR: Record<ActivityItem["type"], string> = {
-    join: "bg-emerald-100 text-emerald-600",
-    post: "bg-brand-100 text-brand-600",
-    achievement: "bg-amber-100 text-amber-600",
-    event: "bg-blue-100 text-blue-600",
-};
-
-/* ------------------------------------------------------------------ */
-/*  Page Component                                                     */
-/* ------------------------------------------------------------------ */
-
-type Tab = "feed" | "groups" | "announcements";
+type View = { kind: "groups" } | { kind: "group"; groupId: string } | { kind: "channel"; groupId: string; channelId: string; channelName: string };
 
 export default function MemberCommunityPage() {
-    const { user } = useUser();
-    const [tab, setTab] = useState<Tab>("feed");
-    const [searchQuery, setSearchQuery] = useState("");
-
-    /* Groups */
-    const [groups, setGroups] = useState<Group[]>(INITIAL_GROUPS);
-    const toggleJoin = useCallback((id: number) => {
-        setGroups(prev => prev.map(g => g.id === id ? { ...g, joined: !g.joined, members: g.joined ? g.members - 1 : g.members + 1 } : g));
-    }, []);
-    const filteredGroups = useMemo(() => {
-        if (!searchQuery) return groups;
-        const q = searchQuery.toLowerCase();
-        return groups.filter(g => g.name.toLowerCase().includes(q) || g.description.toLowerCase().includes(q));
-    }, [groups, searchQuery]);
-
-    /* Posts */
-    const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-    const [newPostTitle, setNewPostTitle] = useState("");
-    const [newPostContent, setNewPostContent] = useState("");
-    const [expandedPosts, setExpandedPosts] = useState<number[]>([1]);
-    const toggleExpanded = (id: number) => setExpandedPosts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-
-    const handleSubmitPost = () => {
-        if (!newPostTitle.trim() || !newPostContent.trim()) return;
-        const np: Post = { id: Date.now(), author: user.name, avatar: user.avatar, timestamp: "Just now", title: newPostTitle, content: newPostContent, replies: [], reactions: {}, myReactions: [] };
-        setPosts(prev => [np, ...prev]);
-        setNewPostTitle("");
-        setNewPostContent("");
-    };
-
-    const togglePostReaction = (postId: number, emoji: string) => {
-        setPosts(prev => prev.map(p => {
-            if (p.id !== postId) return p;
-            const has = p.myReactions.includes(emoji);
-            return {
-                ...p,
-                myReactions: has ? p.myReactions.filter(e => e !== emoji) : [...p.myReactions, emoji],
-                reactions: { ...p.reactions, [emoji]: (p.reactions[emoji] || 0) + (has ? -1 : 1) },
-            };
-        }));
-    };
-
-    const addReply = (postId: number, content: string) => {
-        setPosts(prev => prev.map(p => {
-            if (p.id !== postId) return p;
-            return { ...p, replies: [...p.replies, { id: Date.now(), author: user.name, avatar: user.avatar, timestamp: "Just now", content }] };
-        }));
-    };
-
-    const filteredPosts = useMemo(() => {
-        if (!searchQuery) return posts;
-        const q = searchQuery.toLowerCase();
-        return posts.filter(p => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q) || p.author.toLowerCase().includes(q));
-    }, [posts, searchQuery]);
-
-    /* Announcements */
-    const [announcements, setAnnouncements] = useState<Announcement[]>(INITIAL_ANNOUNCEMENTS);
-
-    const toggleAnnouncementReaction = (aId: number, emoji: string) => {
-        setAnnouncements(prev => prev.map(a => {
-            if (a.id !== aId) return a;
-            const has = a.myReactions.includes(emoji);
-            return {
-                ...a,
-                myReactions: has ? a.myReactions.filter(e => e !== emoji) : [...a.myReactions, emoji],
-                reactions: { ...a.reactions, [emoji]: (a.reactions[emoji] || 0) + (has ? -1 : 1) },
-            };
-        }));
-    };
-
-    const addAnnouncementComment = (aId: number, text: string) => {
-        setAnnouncements(prev => prev.map(a => {
-            if (a.id !== aId) return a;
-            return { ...a, comments: [...a.comments, { id: Date.now(), author: user.name, avatar: user.avatar, text, timestamp: "Just now" }] };
-        }));
-    };
-
-    /* Activity */
-    const [activity, setActivity] = useState<ActivityItem[]>(INITIAL_ACTIVITY);
-
-    /* Tab config */
-    const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
-        { key: "feed", label: "Discussion", icon: <MessageSquare size={16} /> },
-        { key: "groups", label: "Groups", icon: <Users size={16} /> },
-        { key: "announcements", label: "Announcements", icon: <Megaphone size={16} /> },
-    ];
+    const [view, setView] = useState<View>({ kind: "groups" });
 
     return (
         <ErrorBoundary>
-        <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-8">
-            {/* Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-stone-900">Community</h1>
-                <p className="text-stone-500 mt-1">Connect, learn, and grow with your cohort.</p>
-            </div>
-
-            {/* Search + Tabs */}
-            <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-                    <input
-                        type="text"
-                        placeholder={tab === "groups" ? "Search groups..." : tab === "announcements" ? "Search announcements..." : "Search discussions..."}
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none"
-                    />
-                </div>
-                <div className="flex bg-stone-100 p-1 rounded-xl self-start">
-                    {TABS.map(t => (
-                        <button key={t.key} onClick={() => { setTab(t.key); setSearchQuery(""); }} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.key ? "bg-white shadow-sm text-stone-900" : "text-stone-500 hover:text-stone-900"}`}>
-                            {t.icon} {t.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Main Column (2/3) */}
-                <div className="lg:col-span-2 space-y-6">
-                    {/* --- DISCUSSION TAB --- */}
-                    {tab === "feed" && (
-                        <>
-                            {/* Composer */}
-                            <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
-                                <h2 className="font-bold text-stone-900 mb-4 flex items-center gap-2">
-                                    <MessageSquare size={20} className="text-brand-600" /> Start a Discussion
-                                </h2>
-                                <div className="space-y-4">
-                                    <input type="text" placeholder="Discussion title..." value={newPostTitle} onChange={e => setNewPostTitle(e.target.value)} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none font-medium" />
-                                    <textarea placeholder="What's on your mind?" value={newPostContent} onChange={e => setNewPostContent(e.target.value)} rows={3} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none resize-none" />
-                                    <div className="flex justify-end">
-                                        <button onClick={handleSubmitPost} className="bg-brand-800 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-brand-700 transition-colors flex items-center gap-2 shadow-lg shadow-brand-900/10">
-                                            <Send size={16} /> Post
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Posts */}
-                            <div className="space-y-4">
-                                {filteredPosts.map(post => (
-                                    <PostCard key={post.id} post={post} isExpanded={expandedPosts.includes(post.id)} onToggle={() => toggleExpanded(post.id)} onReact={togglePostReaction} onReply={addReply} currentUser={user} />
-                                ))}
-                                {filteredPosts.length === 0 && (
-                                    <EmptyState
-                                        icon={MessageSquare}
-                                        heading="No discussions found"
-                                        description="Try a different search or start one yourself."
-                                    />
-                                )}
-                            </div>
-                        </>
-                    )}
-
-                    {/* --- GROUPS TAB --- */}
-                    {tab === "groups" && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {filteredGroups.map(g => (
-                                <div key={g.id} className={`rounded-2xl border p-5 transition-all hover:shadow-md ${g.color}`}>
-                                    <div className="flex items-start justify-between mb-3">
-                                        <span className="text-3xl">{g.icon}</span>
-                                        <button onClick={() => toggleJoin(g.id)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${g.joined ? "bg-white text-stone-600 border border-stone-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200" : "bg-brand-800 text-white hover:bg-brand-700"}`}>
-                                            {g.joined ? <><UserMinus size={12} /> Leave</> : <><UserPlus size={12} /> Join</>}
-                                        </button>
-                                    </div>
-                                    <h3 className="font-bold text-stone-900 mb-1">{g.name}</h3>
-                                    <p className="text-sm text-stone-500 mb-3 line-clamp-2">{g.description}</p>
-                                    <div className="flex items-center gap-4 text-xs text-stone-500">
-                                        <span className="flex items-center gap-1"><Users size={12} /> {g.members} members</span>
-                                        <span className="flex items-center gap-1"><Circle size={8} className="fill-emerald-500 text-emerald-500" /> {g.online} online</span>
-                                    </div>
-                                </div>
-                            ))}
-                            {filteredGroups.length === 0 && (
-                                <div className="col-span-2">
-                                    <EmptyState
-                                        icon={Hash}
-                                        heading="No groups match your search"
-                                        description="Try a different keyword."
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* --- ANNOUNCEMENTS TAB --- */}
-                    {tab === "announcements" && (
-                        <div className="space-y-4">
-                            {announcements.filter(a => {
-                                if (!searchQuery) return true;
-                                const q = searchQuery.toLowerCase();
-                                return a.title.toLowerCase().includes(q) || a.content.toLowerCase().includes(q);
-                            }).map(a => (
-                                <AnnouncementCard key={a.id} announcement={a} onReact={toggleAnnouncementReaction} onComment={addAnnouncementComment} currentUser={user} />
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Right Sidebar */}
-                <div className="space-y-6">
-                    {/* Your Groups */}
-                    <div className="bg-white rounded-2xl border border-stone-100 p-5 shadow-sm">
-                        <h3 className="font-bold text-stone-900 mb-3 flex items-center gap-2"><Hash size={16} className="text-brand-600" /> Your Groups</h3>
-                        <div className="space-y-2">
-                            {groups.filter(g => g.joined).map(g => (
-                                <div key={g.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-stone-50 transition-colors cursor-pointer">
-                                    <span className="text-lg">{g.icon}</span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-stone-800 truncate">{g.name}</p>
-                                        <p className="text-xs text-stone-400">{g.members} members</p>
-                                    </div>
-                                    <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-bold"><Circle size={6} className="fill-emerald-500 text-emerald-500" />{g.online}</span>
-                                </div>
-                            ))}
-                            {groups.filter(g => g.joined).length === 0 && <p className="text-sm text-stone-400">You haven&apos;t joined any groups yet.</p>}
-                        </div>
-                    </div>
-
-                    {/* Activity Feed */}
-                    <div className="bg-white rounded-2xl border border-stone-100 p-5 shadow-sm">
-                        <h3 className="font-bold text-stone-900 mb-3 flex items-center gap-2"><Activity size={16} className="text-brand-600" /> Activity Feed</h3>
-                        <div className="space-y-3">
-                            {activity.map(a => (
-                                <div key={a.id} className="flex items-start gap-3">
-                                    <div className={`mt-0.5 p-1.5 rounded-lg ${ACTIVITY_COLOR[a.type]}`}>{ACTIVITY_ICON[a.type]}</div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-stone-700"><span className="font-semibold">{a.user}</span> {a.text}</p>
-                                        <p className="text-xs text-stone-400">{a.timestamp}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Community Stats */}
-                    <div className="bg-gradient-to-br from-brand-900 to-stone-900 rounded-2xl p-5 text-white">
-                        <h3 className="font-bold mb-3">Community Pulse</h3>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div><p className="text-2xl font-bold text-accent-400">156</p><p className="text-xs text-brand-200">Total Members</p></div>
-                            <div><p className="text-2xl font-bold text-accent-400">34</p><p className="text-xs text-brand-200">Online Now</p></div>
-                            <div><p className="text-2xl font-bold text-accent-400">89</p><p className="text-xs text-brand-200">Posts This Week</p></div>
-                            <div><p className="text-2xl font-bold text-accent-400">6</p><p className="text-xs text-brand-200">Active Groups</p></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">
+            {view.kind === "groups" && <GroupsView onSelect={(id) => setView({ kind: "group", groupId: id })} />}
+            {view.kind === "group" && <GroupDetailView groupId={view.groupId} onBack={() => setView({ kind: "groups" })} onSelectChannel={(channelId, channelName) => setView({ kind: "channel", groupId: view.groupId, channelId, channelName })} />}
+            {view.kind === "channel" && <ChannelView groupId={view.groupId} channelId={view.channelId} channelName={view.channelName} onBack={() => setView({ kind: "group", groupId: view.groupId })} />}
         </div>
         </ErrorBoundary>
     );
 }
 
-/* ------------------------------------------------------------------ */
-/*  PostCard Component                                                 */
-/* ------------------------------------------------------------------ */
-
-function PostCard({ post, isExpanded, onToggle, onReact, onReply, currentUser }: {
-    post: Post; isExpanded: boolean; onToggle: () => void;
-    onReact: (postId: number, emoji: string) => void;
-    onReply: (postId: number, content: string) => void;
-    currentUser: { name: string; avatar: string };
-}) {
-    const [replyContent, setReplyContent] = useState("");
-    const [showReplyInput, setShowReplyInput] = useState(false);
-    const [showReactionPicker, setShowReactionPicker] = useState(false);
-
-    const handleSubmitReply = () => {
-        if (!replyContent.trim()) return;
-        onReply(post.id, replyContent);
-        setReplyContent("");
-        setShowReplyInput(false);
-    };
+/* ── Groups List ── */
+function GroupsView({ onSelect }: { onSelect: (id: string) => void }) {
+    const { groups, isLoading } = useCommunityGroups();
 
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden hover:border-brand-200 transition-colors">
-            <div className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                        <AvatarInitials name={post.author} src={post.avatar} size="md" />
-                        <div>
-                            <span className="font-bold text-stone-900">{post.author}</span>
-                            <span className="text-stone-400 text-sm flex items-center gap-1 mt-0.5"><Clock size={12} /> {post.timestamp}</span>
-                        </div>
-                    </div>
-                </div>
-                <h3 className="text-lg font-bold text-stone-900 mb-2">{post.title}</h3>
-                <p className="text-stone-600 leading-relaxed">{post.content}</p>
-
-                {/* Reactions Display */}
-                <div className="flex flex-wrap items-center gap-2 mt-4">
-                    {Object.entries(post.reactions).filter(([, c]) => c > 0).map(([emoji, count]) => (
-                        <button key={emoji} onClick={() => onReact(post.id, emoji)} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border transition-colors ${post.myReactions.includes(emoji) ? "bg-brand-50 border-brand-200 text-brand-700" : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"}`}>
-                            {emoji} {count}
-                        </button>
-                    ))}
-                    <div className="relative">
-                        <button onClick={() => setShowReactionPicker(!showReactionPicker)} className="px-2 py-1 rounded-full text-xs font-bold border border-dashed border-stone-200 text-stone-400 hover:bg-stone-50 hover:text-stone-600 transition-colors">+</button>
-                        {showReactionPicker && (
-                            <div className="absolute bottom-full left-0 mb-2 bg-white border border-stone-200 rounded-xl shadow-lg p-2 flex gap-1 z-10">
-                                {REACTION_OPTIONS.map(e => (
-                                    <button key={e} onClick={() => { onReact(post.id, e); setShowReactionPicker(false); }} className="text-lg hover:scale-125 transition-transform p-1">{e}</button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-stone-100">
-                    <button onClick={onToggle} className="flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-brand-700 transition-colors">
-                        <MessageSquare size={16} /> {post.replies.length} {post.replies.length === 1 ? "Reply" : "Replies"} {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </button>
-                    <button onClick={() => setShowReplyInput(!showReplyInput)} className="text-sm font-medium text-brand-700 hover:text-brand-800 transition-colors">Add Reply</button>
-                </div>
+        <>
+            <div>
+                <h1 className="text-3xl font-bold text-stone-900">Community</h1>
+                <p className="text-stone-500 mt-1">Join groups, participate in discussions, and connect with peers.</p>
             </div>
 
-            {/* Replies */}
-            {isExpanded && post.replies.length > 0 && (
-                <div className="bg-stone-50 border-t border-stone-100 px-6 py-4 space-y-4">
-                    {post.replies.map((reply: Reply) => (
-                        <div key={reply.id} className="flex gap-3">
-                            <div className="w-0.5 bg-brand-200 rounded-full flex-shrink-0 ml-4" />
-                            <div className="flex-1 bg-white rounded-xl p-4 border border-stone-100">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <AvatarInitials name={reply.author} src={reply.avatar} size="xs" />
-                                    <span className="font-semibold text-stone-900 text-sm">{reply.author}</span>
-                                    <span className="text-stone-400 text-xs">{reply.timestamp}</span>
-                                </div>
-                                <p className="text-stone-600 text-sm leading-relaxed">{reply.content}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+            {isLoading && (
+                <div className="flex items-center justify-center py-16"><Loader2 className="animate-spin text-brand-500" size={28} /></div>
             )}
 
-            {/* Reply Input */}
-            {showReplyInput && (
-                <div className="bg-stone-50 border-t border-stone-100 px-6 py-4">
-                    <div className="flex gap-3">
-                        <AvatarInitials name={currentUser.name} src={currentUser.avatar} size="sm" />
-                        <div className="flex-1">
-                            <textarea placeholder="Write your reply..." value={replyContent} onChange={e => setReplyContent(e.target.value)} rows={2} className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none resize-none text-sm" />
-                            <div className="flex justify-end gap-2 mt-2">
-                                <button onClick={() => setShowReplyInput(false)} className="px-4 py-2 text-stone-600 font-medium text-sm hover:bg-stone-100 rounded-lg transition-colors">Cancel</button>
-                                <button onClick={handleSubmitReply} className="px-4 py-2 bg-brand-800 text-white font-medium text-sm rounded-lg hover:bg-brand-700 transition-colors">Reply</button>
-                            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {groups.map(group => (
+                    <button key={group.id} onClick={() => onSelect(group.id)} className="bg-white rounded-2xl border border-stone-200 p-6 text-left hover:border-brand-200 hover:shadow-lg hover:shadow-brand-500/5 transition-all group">
+                        <div className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center text-brand-700 mb-4 group-hover:bg-brand-100 transition-colors">
+                            <Users size={22} />
                         </div>
-                    </div>
-                </div>
+                        <h3 className="font-bold text-stone-900 mb-1 group-hover:text-brand-700 transition-colors">{group.name}</h3>
+                        {group.description && <p className="text-sm text-stone-500 line-clamp-2 mb-3">{group.description}</p>}
+                        <div className="flex items-center gap-4 text-xs text-stone-400">
+                            <span className="flex items-center gap-1"><Users size={12} /> {group.memberCount} members</span>
+                            {group.newPostCount > 0 && <span className="flex items-center gap-1 text-brand-600 font-bold"><MessageSquare size={12} /> {group.newPostCount} new</span>}
+                        </div>
+                    </button>
+                ))}
+            </div>
+
+            {!isLoading && groups.length === 0 && (
+                <EmptyState icon={Users} heading="No groups yet" description="Community groups will appear here once created." variant="plain" />
             )}
-        </div>
+        </>
     );
 }
 
-/* ------------------------------------------------------------------ */
-/*  AnnouncementCard Component                                          */
-/* ------------------------------------------------------------------ */
+/* ── Group Detail ── */
+function GroupDetailView({ groupId, onBack, onSelectChannel }: { groupId: string; onBack: () => void; onSelectChannel: (channelId: string, channelName: string) => void }) {
+    const { group, isLoading, mutate } = useCommunityGroup(groupId);
+    const join = useJoinGroup(groupId);
+    const leave = useLeaveGroup(groupId);
+    const { toast } = useToast();
 
-function AnnouncementCard({ announcement, onReact, onComment, currentUser }: {
-    announcement: Announcement;
-    onReact: (aId: number, emoji: string) => void;
-    onComment: (aId: number, text: string) => void;
-    currentUser: { name: string; avatar: string };
-}) {
-    const [showComments, setShowComments] = useState(false);
-    const [commentText, setCommentText] = useState("");
-    const [showReactionPicker, setShowReactionPicker] = useState(false);
+    const handleJoin = async () => { try { await join.trigger(); mutate(); } catch { toast("Failed to join group", "error"); } };
+    const handleLeave = async () => { try { await leave.trigger(); mutate(); } catch { toast("Failed to leave group", "error"); } };
 
-    const handleSubmit = () => {
-        if (!commentText.trim()) return;
-        onComment(announcement.id, commentText);
-        setCommentText("");
-    };
+    if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="animate-spin text-brand-500" size={28} /></div>;
+    if (!group) return <EmptyState icon={Users} heading="Group not found" description="This group may have been removed." variant="plain" />;
 
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-            <div className="p-6">
-                <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-amber-100 text-amber-600 rounded-xl"><Megaphone size={18} /></div>
-                    <div>
-                        <span className="font-bold text-stone-900">{announcement.author}</span>
-                        <span className="text-stone-400 text-sm flex items-center gap-1 mt-0.5"><Clock size={12} /> {announcement.timestamp}</span>
-                    </div>
-                </div>
-                <h3 className="text-lg font-bold text-stone-900 mb-2">{announcement.title}</h3>
-                <p className="text-stone-600 leading-relaxed">{announcement.content}</p>
+        <>
+            <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold text-stone-500 hover:text-stone-800 transition-colors">
+                <ArrowLeft size={16} /> Back to Groups
+            </button>
 
-                {/* Reactions */}
-                <div className="flex flex-wrap items-center gap-2 mt-4">
-                    {Object.entries(announcement.reactions).filter(([, c]) => c > 0).map(([emoji, count]) => (
-                        <button key={emoji} onClick={() => onReact(announcement.id, emoji)} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border transition-colors ${announcement.myReactions.includes(emoji) ? "bg-brand-50 border-brand-200 text-brand-700" : "bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"}`}>
-                            {emoji} {count}
+            <div className="bg-white rounded-3xl border border-stone-200 p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-stone-900">{group.name}</h1>
+                        {group.description && <p className="text-stone-500 mt-1">{group.description}</p>}
+                        <p className="text-sm text-stone-400 mt-2">{group.memberCount} members</p>
+                    </div>
+                    {group.isMember ? (
+                        <button onClick={handleLeave} disabled={leave.isLoading} className="px-5 py-2.5 border-2 border-stone-200 text-stone-600 font-bold rounded-xl hover:border-red-300 hover:text-red-600 transition-colors flex items-center gap-2 self-start disabled:opacity-50">
+                            {leave.isLoading ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />} Leave
+                        </button>
+                    ) : (
+                        <button onClick={handleJoin} disabled={join.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors flex items-center gap-2 self-start disabled:opacity-50">
+                            {join.isLoading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />} Join Group
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div>
+                <h2 className="text-lg font-bold text-stone-900 mb-4">Channels</h2>
+                {group.channels.length === 0 && <p className="text-sm text-stone-400">No channels yet.</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {group.channels.map(ch => (
+                        <button key={ch.id} onClick={() => onSelectChannel(ch.id, ch.name)} className="bg-white rounded-xl border border-stone-200 p-4 text-left hover:border-brand-200 hover:shadow-md transition-all flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center text-stone-500">
+                                <Hash size={18} />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="font-semibold text-stone-900">{ch.name}</p>
+                                {ch.description && <p className="text-xs text-stone-400 truncate">{ch.description}</p>}
+                            </div>
                         </button>
                     ))}
-                    <div className="relative">
-                        <button onClick={() => setShowReactionPicker(!showReactionPicker)} className="px-2 py-1 rounded-full text-xs font-bold border border-dashed border-stone-200 text-stone-400 hover:bg-stone-50 hover:text-stone-600 transition-colors">+</button>
-                        {showReactionPicker && (
-                            <div className="absolute bottom-full left-0 mb-2 bg-white border border-stone-200 rounded-xl shadow-lg p-2 flex gap-1 z-10">
-                                {REACTION_OPTIONS.map(e => (
-                                    <button key={e} onClick={() => { onReact(announcement.id, e); setShowReactionPicker(false); }} className="text-lg hover:scale-125 transition-transform p-1">{e}</button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
                 </div>
+            </div>
+        </>
+    );
+}
 
-                {/* Comment toggle */}
-                <div className="mt-3 pt-3 border-t border-stone-100">
-                    <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-brand-700 transition-colors">
-                        <MessageSquare size={16} /> {announcement.comments.length} {announcement.comments.length === 1 ? "Comment" : "Comments"} {showComments ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+/* ── Channel / Posts View ── */
+function ChannelView({ groupId, channelId, channelName, onBack }: { groupId: string; channelId: string; channelName: string; onBack: () => void }) {
+    const { posts, isLoading, mutate } = useChannelPosts(groupId, channelId);
+    const createPost = useCreatePost(groupId, channelId);
+    const { toast } = useToast();
+    const { apiUser } = useUser();
+    const [newPostBody, setNewPostBody] = useState("");
+    const [expandedPost, setExpandedPost] = useState<string | null>(null);
+
+    const handleCreatePost = async () => {
+        const body = newPostBody.trim();
+        if (!body) return;
+        try { await createPost.trigger({ body }); setNewPostBody(""); mutate(); } catch { toast("Failed to create post", "error"); }
+    };
+
+    const handleDeletePost = useCallback(async (postId: string) => {
+        // We instantiate deletion inline since we need different postId each time
+        try {
+            const token = await (window as unknown as { __clerk_token?: () => Promise<string> }).__clerk_token?.();
+            const url = `${process.env.NEXT_PUBLIC_API_URL}/community/posts/${postId}`;
+            const res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) throw new Error();
+            mutate();
+            toast("Post deleted", "success");
+        } catch { toast("Failed to delete post", "error"); }
+    }, [mutate, toast]);
+
+    return (
+        <>
+            <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold text-stone-500 hover:text-stone-800 transition-colors">
+                <ArrowLeft size={16} /> Back to Group
+            </button>
+
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center text-brand-700"><Hash size={20} /></div>
+                <h1 className="text-2xl font-bold text-stone-900">{channelName}</h1>
+            </div>
+
+            {/* Compose */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <textarea value={newPostBody} onChange={e => setNewPostBody(e.target.value)} rows={2} placeholder="Share something with the group..." className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none resize-none mb-3" />
+                <div className="flex justify-end">
+                    <button onClick={handleCreatePost} disabled={createPost.isLoading || !newPostBody.trim()} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                        {createPost.isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Post
                     </button>
                 </div>
             </div>
 
-            {/* Comments */}
-            {showComments && (
-                <div className="bg-stone-50 border-t border-stone-100 px-6 py-4 space-y-3">
-                    {announcement.comments.map(c => (
-                        <div key={c.id} className="flex gap-3">
-                            <AvatarInitials name={c.author} src={c.avatar} size="xs" />
-                            <div className="flex-1 bg-white rounded-xl p-3 border border-stone-100">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-semibold text-stone-900 text-sm">{c.author}</span>
-                                    <span className="text-stone-400 text-xs">{c.timestamp}</span>
-                                </div>
-                                <p className="text-stone-600 text-sm">{c.text}</p>
-                            </div>
-                        </div>
-                    ))}
-                    <div className="flex gap-3 pt-2">
-                        <AvatarInitials name={currentUser.name} src={currentUser.avatar} size="xs" />
-                        <div className="flex-1 flex gap-2">
-                            <input type="text" placeholder="Add a comment..." value={commentText} onChange={e => setCommentText(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} className="flex-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
-                            <button onClick={handleSubmit} className="px-3 py-2 bg-brand-800 text-white rounded-lg hover:bg-brand-700 transition-colors"><Send size={14} /></button>
-                        </div>
+            {isLoading && <div className="flex items-center justify-center py-16"><Loader2 className="animate-spin text-brand-500" size={28} /></div>}
+
+            {/* Posts */}
+            <div className="space-y-4">
+                {posts.map(post => (
+                    <PostCard key={post.id} post={post} isOwner={post.author.id === apiUser?.id} expanded={expandedPost === post.id} onToggleExpand={() => setExpandedPost(prev => prev === post.id ? null : post.id)} onDelete={() => handleDeletePost(post.id)} groupId={groupId} channelId={channelId} onMutate={mutate} />
+                ))}
+            </div>
+
+            {!isLoading && posts.length === 0 && (
+                <EmptyState icon={MessageSquare} heading="No posts yet" description="Be the first to start a discussion in this channel." variant="plain" />
+            )}
+        </>
+    );
+}
+
+/* ── Post Card ── */
+function PostCard({ post, isOwner, expanded, onToggleExpand, onDelete, groupId, channelId, onMutate }: {
+    post: Post; isOwner: boolean; expanded: boolean; onToggleExpand: () => void; onDelete: () => void; groupId: string; channelId: string; onMutate: () => void;
+}) {
+    const { toast } = useToast();
+    const { apiUser } = useUser();
+    const createComment = useCreateComment(post.id);
+    const [commentBody, setCommentBody] = useState("");
+
+    const authorName = post.author.profile
+        ? `${post.author.profile.firstName ?? ""} ${post.author.profile.lastName ?? ""}`.trim() || "Member"
+        : "Member";
+
+    const handleAddComment = async () => {
+        const body = commentBody.trim();
+        if (!body) return;
+        try { await createComment.trigger({ body }); setCommentBody(""); onMutate(); } catch { toast("Failed to add comment", "error"); }
+    };
+
+    return (
+        <div className="bg-white rounded-2xl border border-stone-200 p-5">
+            <div className="flex items-start gap-3 mb-3">
+                <AvatarInitials name={authorName} src={post.author.profile?.avatarUrl} size="sm" />
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-stone-900 text-sm">{authorName}</span>
+                        <span className="text-xs text-stone-400">{fmtPostDate(post.createdAt)}</span>
                     </div>
                 </div>
-            )}
+                {isOwner && (
+                    <button onClick={onDelete} className="p-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete post"><Trash2 size={14} /></button>
+                )}
+            </div>
+
+            {post.title && <h3 className="font-bold text-stone-900 mb-2">{post.title}</h3>}
+            <p className="text-sm text-stone-700 whitespace-pre-wrap">{post.body}</p>
+
+            {/* Comments toggle */}
+            <div className="mt-4 pt-3 border-t border-stone-100">
+                <button onClick={onToggleExpand} className="text-xs font-semibold text-stone-500 hover:text-brand-700 transition-colors flex items-center gap-1">
+                    <MessageSquare size={14} /> {post._count.comments} comment{post._count.comments !== 1 ? "s" : ""}
+                </button>
+
+                {expanded && (
+                    <div className="mt-3 space-y-3">
+                        {/* Inline comment compose */}
+                        <div className="flex gap-2">
+                            <input type="text" value={commentBody} onChange={e => setCommentBody(e.target.value)} placeholder="Write a comment..." onKeyDown={e => e.key === "Enter" && handleAddComment()} className="flex-1 px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+                            <button onClick={handleAddComment} disabled={createComment.isLoading || !commentBody.trim()} className="px-3 py-2 bg-brand-800 text-white rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50">
+                                {createComment.isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                            </button>
+                        </div>
+                        <p className="text-xs text-stone-400">Comments load inline with post details.</p>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

@@ -1,12 +1,16 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { Users, Activity, AlertTriangle, Calendar, Plus, X, Check, UserPlus, ChevronDown } from "lucide-react";
+import { Users, Activity, AlertTriangle, Calendar, Plus, X, Check, UserPlus, ChevronDown, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useMembers } from "@/hooks/use-members";
+import { useEvents } from "@/hooks/use-events";
+import { useCohorts, cohortStatusLabel } from "@/hooks/use-cohorts";
+import { useCommunityGroups } from "@/hooks/use-community";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -27,6 +31,16 @@ export default function AdminDashboard() {
     const [recentUsers, setRecentUsers] = useState<{ name: string; email: string; role: string }[]>([]);
     const [recentEvents, setRecentEvents] = useState<{ title: string; date: string; type: string }[]>([]);
 
+    const { members, isLoading: membersLoading } = useMembers();
+    const { events } = useEvents();
+    const { cohorts } = useCohorts();
+    const { groups } = useCommunityGroups();
+
+    const totalMembers = members.length;
+    const upcomingEvents = events.filter(e => new Date(e.scheduledAt) > new Date()).length;
+    const activeCohorts = cohorts.filter(c => cohortStatusLabel(c.status) === "Active");
+    const totalGroups = groups.length;
+
     const chartData = CHART_DATA[dateRange];
 
     return (
@@ -41,9 +55,9 @@ export default function AdminDashboard() {
               <ErrorBoundary>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-min">
                     {/* Stats */}
-                    <AdminStatCard title="Total Members" value="1,248" change="+12%" icon={Users} />
-                    <AdminStatCard title="Active Learners" value="856" change="+5%" icon={Activity} />
-                    <AdminStatCard title="Platform Health" value="99.9%" change="Stable" icon={Activity} isHealth />
+                    <AdminStatCard title="Total Members" value={membersLoading ? "—" : totalMembers.toLocaleString()} change={`${activeCohorts.length} cohorts`} icon={Users} />
+                    <AdminStatCard title="Upcoming Events" value={upcomingEvents.toString()} change={`${events.length} total`} icon={Calendar} />
+                    <AdminStatCard title="Community Groups" value={totalGroups.toString()} change="Active" icon={Activity} isHealth />
 
                     {/* Growth Chart */}
                     <div className="md:col-span-2 bg-white rounded-3xl p-6 border border-stone-100 shadow-sm flex flex-col">
@@ -145,8 +159,10 @@ export default function AdminDashboard() {
                             <Link href="/admin/cohorts" className="text-sm font-medium text-brand-700 hover:text-brand-800">Manage All</Link>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <CohortStatusCard name="Cohort Alpha" phase="Week 3: Research" health="High" stats="42 Members • 95% Active" />
-                            <CohortStatusCard name="Cohort Beta" phase="Week 1: Onboarding" health="Medium" stats="28 Members • 82% Active" />
+                            {cohorts.slice(0, 4).map(c => (
+                                <CohortStatusCard key={c.id} name={c.name} phase={cohortStatusLabel(c.status)} health={c.status === "ACTIVE" ? "High" : "Medium"} stats={`${c._count.members} Members`} />
+                            ))}
+                            {cohorts.length === 0 && <p className="text-sm text-stone-400 col-span-2">No cohorts yet.</p>}
                         </div>
                     </div>
                 </div>

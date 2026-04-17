@@ -24,6 +24,7 @@ interface AuthContextType {
     user: AuthUser | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    onboardingComplete: boolean | null;
     logout: () => void;
 }
 
@@ -91,12 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signOut();
     }, [getToken, signOut]);
 
+    // null = still loading or no API data; true/false = definitive
+    const onboardingComplete = apiUser ? apiUser.onboardingComplete : null;
+
     return (
         <AuthContext.Provider
             value={{
                 user,
                 isAuthenticated: !!isSignedIn,
                 isLoading,
+                onboardingComplete,
                 logout,
             }}
         >
@@ -121,7 +126,7 @@ interface RouteGuardProps {
 }
 
 export function RouteGuard({ children, allowedRoles, redirectTo = "/sign-in" }: RouteGuardProps) {
-    const { user, isAuthenticated, isLoading } = useAuth();
+    const { user, isAuthenticated, isLoading, onboardingComplete } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
 
@@ -136,11 +141,17 @@ export function RouteGuard({ children, allowedRoles, redirectTo = "/sign-in" }: 
             return;
         }
 
+        // Redirect to onboarding if not completed (skip if already on /onboarding)
+        if (onboardingComplete === false && !pathname.startsWith("/onboarding")) {
+            router.replace("/onboarding");
+            return;
+        }
+
         if (allowedRoles && user && !allowedRoles.includes(user.role)) {
             const roleHome = user.role === "admin" ? "/admin" : user.role === "mentor" ? "/mentor" : "/member";
             router.replace(roleHome);
         }
-    }, [isAuthenticated, isLoading, user, allowedRoles, router, pathname, redirectTo]);
+    }, [isAuthenticated, isLoading, user, allowedRoles, router, pathname, redirectTo, onboardingComplete]);
 
     if (isLoading) {
         return (
