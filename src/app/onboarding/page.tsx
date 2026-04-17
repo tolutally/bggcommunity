@@ -8,6 +8,7 @@ import {
     Eye, Camera,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useApiMutation } from "@/hooks/use-api-mutation";
 import { useToast } from "@/components/ui/toast";
 
 /* ── Types ── */
@@ -86,11 +87,19 @@ export default function OnboardingPage() {
     const router = useRouter();
     const { toast } = useToast();
 
+    /* --- API mutations --- */
+    const profileMutation = useApiMutation<unknown, Record<string, unknown>>("/users/me/profile", { method: "PATCH" });
+    const avatarMutation = useApiMutation<unknown, FormData>("/users/me/avatar", { method: "POST" });
+    const onboardingCompleteMutation = useApiMutation<unknown, Record<string, never>>("/users/me/onboarding-complete", { method: "POST" });
+
     const [step, setStep] = useState(0);
     const [data, setData] = useState<OnboardingData>(DEFAULT_DATA);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [hydrated, setHydrated] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    /** Stores the raw File object selected in Step 2 for avatar upload */
+    const photoFileRef = useRef<File | null>(null);
 
     // Hydrate from localStorage
     useEffect(() => {
@@ -106,7 +115,7 @@ export default function OnboardingPage() {
     // Redirect if not authenticated
     useEffect(() => {
         if (!isLoading && !isAuthenticated) {
-            router.replace("/auth");
+            router.replace("/sign-in");
         }
     }, [isLoading, isAuthenticated, router]);
 
@@ -148,64 +157,104 @@ export default function OnboardingPage() {
 
     const finish = async () => {
         setSubmitting(true);
-        // Simulate saving to backend
-        await new Promise(r => setTimeout(r, 1000));
+        try {
+            // Split displayName into firstName / lastName for the BE
+            const nameParts = data.displayName.trim().split(/\s+/);
+            const firstName = nameParts[0] ?? "";
+            const lastName = nameParts.slice(1).join(" ") || "";
 
-        // Persist completed flag + profile data for other pages
-        localStorage.setItem(COMPLETED_KEY, "true");
-        localStorage.setItem("bgg-profile", JSON.stringify({
-            occupation: data.occupation,
-            industry: data.industry,
-            location: data.location,
-            bio: data.bio,
-            website: data.website,
-            linkedin: data.linkedin,
-            twitter: data.twitter,
-            company: "",
-        }));
-        if (data.photoUrl) {
-            localStorage.setItem("bgg-avatar", JSON.stringify(data.photoUrl));
-        }
-        // Save dev plan goals if set
-        if (data.devGoalTitle || data.milestones.length > 0) {
-            const goals = data.milestones.map((m, i) => ({
-                id: m.id || i + 1,
-                text: m.text,
-                done: m.done,
-                details: "",
-                status: m.done ? "completed" as const : "not-started" as const,
-                evidence: [],
-                createdAt: new Date().toISOString().split("T")[0],
-            }));
-            localStorage.setItem("bgg-goals", JSON.stringify(goals));
-            localStorage.setItem("bgg-plan-title", JSON.stringify(data.devGoalTitle));
-        }
+            // 1) Save profile
+            await profileMutation.trigger({
+                firstName,
+                lastName,
+                displayName: data.displayName.trim(),
+                jobTitle: data.occupation,
+                industry: data.industry,
+                location: data.location,
+                bio: data.bio,
+                websiteUrl: data.website,
+                linkedinUrl: data.linkedin,
+                twitterUrl: data.twitter,
+                isPublic: data.profileVisible,
+            });
 
-        setSubmitting(false);
-        toast("Welcome to BGG! Your profile is set up.", "success");
-        router.push("/member");
+            // 2) Upload avatar if a file was selected
+            if (photoFileRef.current) {
+                const fd = new FormData();
+                fd.append("avatar", photoFileRef.current);
+                await avatarMutation.trigger(fd);
+            }
+
+            // 3) Mark onboarding complete on BE
+            await onboardingCompleteMutation.trigger({});
+
+            // 4) Save dev plan goals locally (no BE endpoint yet)
+            if (data.devGoalTitle || data.milestones.length > 0) {
+                const goals = data.milestones.map((m, i) => ({
+                    id: m.id || i + 1,
+                    text: m.text,
+                    done: m.done,
+                    details: "",
+                    status: m.done ? "completed" as const : "not-started" as const,
+                    evidence: [],
+                    createdAt: new Date().toISOString().split("T")[0],
+                }));
+                localStorage.setItem("bgg-goals", JSON.stringify(goals));
+                localStorage.setItem("bgg-plan-title", JSON.stringify(data.devGoalTitle));
+            }
+
+            localStorage.setItem(COMPLETED_KEY, "true");
+            localStorage.removeItem(STORAGE_KEY);
+
+            toast("Welcome to BGG! Your profile is set up.", "success");
+            router.push("/member");
+        } catch {
+            toast("Something went wrong. Please try again.", "error");
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const skipDevPlan = async () => {
-        // Mark that they skipped
-        localStorage.setItem("bgg_devplan_skipped", "true");
-        localStorage.setItem(COMPLETED_KEY, "true");
-        // Still save profile data
-        localStorage.setItem("bgg-profile", JSON.stringify({
-            occupation: data.occupation,
-            industry: data.industry,
-            location: data.location,
-            bio: data.bio,
-            website: data.website,
-            linkedin: data.linkedin,
-            twitter: data.twitter,
-            company: "",
-        }));
-        if (data.photoUrl) {
-            localStorage.setItem("bgg-avatar", JSON.stringify(data.photoUrl));
+        setSubmitting(true);
+        try {
+            const nameParts = data.displayName.trim().split(/\s+/);
+            const firstName = nameParts[0] ?? "";
+            const lastName = nameParts.slice(1).join(" ") || "";
+
+            await profileMutation.trigger({
+                firstName,
+                lastName,
+                displayName: data.displayName.trim(),
+                jobTitle: data.occupation,
+                industry: data.industry,
+                location: data.location,
+                bio: data.bio,
+                websiteUrl: data.website,
+                linkedinUrl: data.linkedin,
+                twitterUrl: data.twitter,
+                isPublic: data.profileVisible,
+            });
+
+            if (photoFileRef.current) {
+                const fd = new FormData();
+                fd.append("avatar", photoFileRef.current);
+                await avatarMutation.trigger(fd);
+            }
+
+            await onboardingCompleteMutation.trigger({});
+
+            localStorage.setItem("bgg_devplan_skipped", "true");
+            localStorage.setItem(COMPLETED_KEY, "true");
+            localStorage.removeItem(STORAGE_KEY);
+
+            toast("Welcome to BGG! You can set up your Dev Plan later.", "success");
+            router.push("/member");
+        } catch {
+            toast("Something went wrong. Please try again.", "error");
+        } finally {
+            setSubmitting(false);
         }
-        toast("Welcome to BGG! You can set up your Dev Plan later.", "success");
-        router.push("/member");
     };
 
     if (isLoading || !hydrated) {
@@ -264,7 +313,7 @@ export default function OnboardingPage() {
             <div className="flex-1 flex items-start justify-center pt-8 pb-16 px-6">
                 <div className="w-full max-w-2xl">
                     {step === 0 && <Step1BasicInfo data={data} errors={errors} update={update} />}
-                    {step === 1 && <Step2Photo data={data} update={update} />}
+                    {step === 1 && <Step2Photo data={data} update={update} onFileSelect={(f) => { photoFileRef.current = f; }} />}
                     {step === 2 && <Step3Socials data={data} errors={errors} update={update} />}
                     {step === 3 && <Step4Privacy data={data} update={update} />}
                     {step === 4 && <Step5DevPlan data={data} update={update} />}
@@ -404,16 +453,18 @@ function Step1BasicInfo({ data, errors, update }: {
 /* ════════════════════════════════════════════════════════════════════
    Step 2 — Profile Photo
    ════════════════════════════════════════════════════════════════════ */
-function Step2Photo({ data, update }: {
+function Step2Photo({ data, update, onFileSelect }: {
     data: OnboardingData;
     update: (p: Partial<OnboardingData>) => void;
+    onFileSelect: (file: File) => void;
 }) {
     const fileRef = useRef<HTMLInputElement>(null);
     const [dragOver, setDragOver] = useState(false);
 
     const handleFile = (file: File) => {
         if (!file.type.startsWith("image/")) return;
-        if (file.size > 5 * 1024 * 1024) return; // 5MB max
+        if (file.size > 2 * 1024 * 1024) return; // 2MB max (BE limit)
+        onFileSelect(file);
         const reader = new FileReader();
         reader.onload = () => {
             update({ photoUrl: reader.result as string });

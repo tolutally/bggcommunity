@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { SWRProvider } from "@/lib/swr";
 import { ToastProvider } from "@/components/ui/toast";
+import { AuthProvider } from "@/context/AuthContext";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -26,9 +28,13 @@ export default function RootLayout({
         <body
           className={`${plusJakarta.variable} font-sans antialiased bg-stone-50 text-stone-800`}
         >
-          <ToastProvider>
-            {children}
-          </ToastProvider>
+          <SWRProvider>
+            <AuthProvider>
+              <ToastProvider>
+                {children}
+              </ToastProvider>
+            </AuthProvider>
+          </SWRProvider>
         </body>
       </html>
     </ClerkProvider>

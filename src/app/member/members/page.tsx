@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
     Search,
     MapPin,
@@ -8,112 +8,58 @@ import {
     Linkedin,
     X,
     MessageSquare,
-    BadgeCheck
+    BadgeCheck,
+    Loader2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { useMembers, useMember } from "@/hooks/use-members";
+import type { MemberCard } from "@/lib/types";
 
-// --- Mock Data: Members ---
-const MEMBERS = [
-    {
-        id: 1,
-        name: "Theresa Edem-Isemin",
-        avatar: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=faces",
-        occupation: "Product Manager",
-        industry: "FinTech",
-        location: "Toronto, ON",
-        bio: "Passionate about building inclusive financial products. 5+ years in product leadership helping startups scale zero to one.",
-        isOpenToWork: true,
-        joined: "Oct 2023"
-    },
-    {
-        id: 2,
-        name: "Seriff Salaudeen",
-        avatar: "https://images.unsplash.com/photo-1589156280159-27698a70f29e?w=400&h=400&fit=crop&crop=faces",
-        occupation: "UX Designer",
-        industry: "HealthTech",
-        location: "London, UK",
-        bio: "Designing interfaces that save lives. Focused on accessibility and user research in the healthcare space.",
-        isOpenToWork: false,
-        joined: "Sep 2023"
-    },
-    {
-        id: 3,
-        name: "Dacia Rohlehr",
-        avatar: "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=400&h=400&fit=crop&crop=faces",
-        occupation: "Entrepreneur",
-        industry: "E-commerce",
-        location: "Ontario, CA",
-        bio: "Founder of SheaGlow. Developing sustainable beauty products for melanin-rich skin.",
-        isOpenToWork: true,
-        joined: "Nov 2023"
-    },
-    {
-        id: 4,
-        name: "Kidus Gebru",
-        avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=faces",
-        occupation: "Software Engineer",
-        industry: "SaaS",
-        location: "Nova Scotia, CA",
-        bio: "Full-stack developer with a love for clean code and scalable architecture. React & Node.js expert.",
-        isOpenToWork: true,
-        joined: "Aug 2023"
-    },
-    {
-        id: 5,
-        name: "Arash Rahimi",
-        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=400&fit=crop&crop=faces",
-        occupation: "Marketing Lead",
-        industry: "Media",
-        location: "New York, USA",
-        bio: "Storyteller at heart. specialized in brand strategy and digital marketing for creative agencies.",
-        isOpenToWork: false,
-        joined: "Dec 2023"
-    },
-    {
-        id: 6,
-        name: "Shamsan Cherumala",
-        avatar: "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=400&h=400&fit=crop&crop=faces",
-        occupation: "Data Analyst",
-        industry: "EdTech",
-        location: "Berlin, DE",
-        bio: "Turning data into actionable insights. Python & SQL wizard helping educational platforms improve student outcomes.",
-        isOpenToWork: true,
-        joined: "Jan 2024"
-    },
-    {
-        id: 7,
-        name: "Hafijur Tarafder",
-        avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=faces",
-        occupation: "Product Designer",
-        industry: "Design Systems",
-        location: "Lagos, NG",
-        bio: "Obsessed with design systems and micro-interactions. Creating delightful experiences one pixel at a time.",
-        isOpenToWork: false,
-        joined: "Oct 2023"
-    },
-    {
-        id: 8,
-        name: "Amara Ndiaye",
-        avatar: "https://images.unsplash.com/photo-1522512119668-00917633c4c2?w=400&h=400&fit=crop&crop=faces",
-        occupation: "Community Mgr",
-        industry: "Non-Profit",
-        location: "Accra, GH",
-        bio: "Building communities that thrive. Expert in engagement strategy and member retention.",
-        isOpenToWork: true,
-        joined: "Nov 2023"
-    }
-];
+/** Build display name from a MemberCard's profile */
+function memberName(m: MemberCard): string {
+    if (!m.profile) return m.email;
+    if (m.profile.displayName) return m.profile.displayName;
+    if (m.profile.firstName || m.profile.lastName)
+        return `${m.profile.firstName ?? ""} ${m.profile.lastName ?? ""}`.trim();
+    return m.email;
+}
 
 export default function MembersPage() {
     const [searchTerm, setSearchTerm] = useState("");
-    const [selectedMember, setSelectedMember] = useState<typeof MEMBERS[0] | null>(null);
+    const [cursor, setCursor] = useState<string | undefined>();
+    const [allMembers, setAllMembers] = useState<MemberCard[]>([]);
+    const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
-    const filteredMembers = MEMBERS.filter(member =>
-        member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        member.occupation.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        member.location.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const { members, nextCursor, isLoading, error } = useMembers(cursor);
+
+    // Accumulate pages as cursors change
+    const displayMembers = useMemo(() => {
+        // On first load or reset, use API data directly
+        if (!cursor) return members;
+        // After "load more", combine previous + new
+        const ids = new Set(allMembers.map((m) => m.id));
+        const newOnes = members.filter((m) => !ids.has(m.id));
+        return [...allMembers, ...newOnes];
+    }, [members, cursor, allMembers]);
+
+    const filteredMembers = useMemo(() => {
+        if (!searchTerm) return displayMembers;
+        const q = searchTerm.toLowerCase();
+        return displayMembers.filter((m) => {
+            const name = memberName(m).toLowerCase();
+            const job = m.profile?.jobTitle?.toLowerCase() ?? "";
+            const loc = m.profile?.location?.toLowerCase() ?? "";
+            return name.includes(q) || job.includes(q) || loc.includes(q);
+        });
+    }, [displayMembers, searchTerm]);
+
+    function handleLoadMore() {
+        if (!nextCursor) return;
+        setAllMembers(displayMembers);
+        setCursor(nextCursor);
+    }
 
     return (
         <ErrorBoundary>
@@ -138,58 +84,107 @@ export default function MembersPage() {
                 />
             </div>
 
+            {/* Loading state */}
+            {isLoading && displayMembers.length === 0 && (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="animate-spin text-brand-500" size={32} />
+                </div>
+            )}
+
+            {/* Error state */}
+            {error && displayMembers.length === 0 && !isLoading && (
+                <div className="text-center py-20">
+                    <p className="text-stone-500">Unable to load members. Please try again later.</p>
+                </div>
+            )}
+
+            {/* Empty state */}
+            {!isLoading && !error && displayMembers.length === 0 && (
+                <div className="text-center py-20">
+                    <p className="text-stone-500">No members found.</p>
+                </div>
+            )}
+
             {/* Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredMembers.map(member => (
-                    <motion.div
-                        key={member.id}
-                        layoutId={`card-${member.id}`}
-                        onClick={() => setSelectedMember(member)}
-                        className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-lg hover:border-brand-100 transition-all cursor-pointer group flex flex-col items-center text-center relative"
-                    >
-                        {/* Avatar */}
-                        <div className="relative mb-4">
-                            <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-brand-100 to-orange-100 group-hover:from-brand-300 group-hover:to-orange-300 transition-colors">
-                                <img
-                                    src={member.avatar}
-                                    alt={member.name}
-                                    className="w-full h-full rounded-full object-cover border-2 border-white"
-                                />
-                            </div>
-                            {member.isOpenToWork && (
-                                <div className="absolute -bottom-1 -right-1 bg-green-500 text-white p-1.5 rounded-full border-2 border-white" title="Open to Opportunities">
-                                    <Briefcase size={12} strokeWidth={3} />
-                                </div>
-                            )}
+            {displayMembers.length > 0 && (
+                <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {filteredMembers.map((member) => {
+                            const name = memberName(member);
+                            const avatarUrl = member.profile?.avatarUrl;
+                            return (
+                                <motion.div
+                                    key={member.id}
+                                    layoutId={`card-${member.id}`}
+                                    onClick={() => setSelectedMemberId(member.id)}
+                                    className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-lg hover:border-brand-100 transition-all cursor-pointer group flex flex-col items-center text-center relative"
+                                >
+                                    {/* Avatar */}
+                                    <div className="relative mb-4">
+                                        <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-brand-100 to-orange-100 group-hover:from-brand-300 group-hover:to-orange-300 transition-colors">
+                                            {avatarUrl ? (
+                                                <img
+                                                    src={avatarUrl}
+                                                    alt={name}
+                                                    className="w-full h-full rounded-full object-cover border-2 border-white"
+                                                />
+                                            ) : (
+                                                <AvatarInitials name={name} size="xl" className="border-2 border-white w-full h-full" />
+                                            )}
+                                        </div>
+                                        {member.profile?.isOpenToWork && (
+                                            <div className="absolute -bottom-1 -right-1 bg-green-500 text-white p-1.5 rounded-full border-2 border-white" title="Open to Opportunities">
+                                                <Briefcase size={12} strokeWidth={3} />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Info */}
+                                    <h3 className="font-bold text-stone-900 text-lg mb-1 group-hover:text-brand-700 transition-colors">{name}</h3>
+
+                                    {member.profile?.jobTitle && (
+                                        <p className="text-sm font-medium text-stone-600 mb-0.5">{member.profile.jobTitle}</p>
+                                    )}
+
+                                    {member.profile?.location && (
+                                        <p className="text-xs text-stone-400 flex items-center justify-center gap-1 mb-3">
+                                            <MapPin size={10} /> {member.profile.location}
+                                        </p>
+                                    )}
+
+                                    {/* Tag */}
+                                    {member.profile?.industry && (
+                                        <div className="mt-auto pt-3 border-t border-stone-50 w-full">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full">{member.profile.industry}</span>
+                                        </div>
+                                    )}
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Load More */}
+                    {nextCursor && (
+                        <div className="flex justify-center pt-4">
+                            <button
+                                onClick={handleLoadMore}
+                                disabled={isLoading}
+                                className="px-6 py-3 bg-brand-600 text-white rounded-xl font-bold hover:bg-brand-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                            >
+                                {isLoading && <Loader2 className="animate-spin" size={16} />}
+                                Load More
+                            </button>
                         </div>
-
-                        {/* Info */}
-                        <h3 className="font-bold text-stone-900 text-lg mb-1 group-hover:text-brand-700 transition-colors">{member.name}</h3>
-
-                        {member.occupation && (
-                            <p className="text-sm font-medium text-stone-600 mb-0.5">{member.occupation}</p>
-                        )}
-
-                        {member.location && (
-                            <p className="text-xs text-stone-400 flex items-center justify-center gap-1 mb-3">
-                                <MapPin size={10} /> {member.location}
-                            </p>
-                        )}
-
-                        {/* Tag */}
-                        <div className="mt-auto pt-3 border-t border-stone-50 w-full">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full">{member.industry}</span>
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
+                    )}
+                </>
+            )}
 
             {/* Modal */}
             <AnimatePresence>
-                {selectedMember && (
+                {selectedMemberId && (
                     <MemberDetailModal
-                        member={selectedMember}
-                        onClose={() => setSelectedMember(null)}
+                        memberId={selectedMemberId}
+                        onClose={() => setSelectedMemberId(null)}
                     />
                 )}
             </AnimatePresence>
@@ -198,7 +193,17 @@ export default function MembersPage() {
     );
 }
 
-function MemberDetailModal({ member, onClose }: { member: typeof MEMBERS[0], onClose: () => void }) {
+function MemberDetailModal({ memberId, onClose }: { memberId: string; onClose: () => void }) {
+    const { member, isLoading } = useMember(memberId);
+
+    const name = member
+        ? (member.profile?.displayName ||
+          `${member.profile?.firstName ?? ""} ${member.profile?.lastName ?? ""}`.trim() ||
+          member.email)
+        : "";
+    const avatarUrl = member?.profile?.avatarUrl;
+    const joinedDate = member ? new Date(member.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "";
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
             <motion.div
@@ -210,7 +215,7 @@ function MemberDetailModal({ member, onClose }: { member: typeof MEMBERS[0], onC
             />
 
             <motion.div
-                layoutId={`card-${member.id}`}
+                layoutId={`card-${memberId}`}
                 className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md relative z-10 overflow-hidden"
             >
                 {/* Header Background */}
@@ -229,67 +234,93 @@ function MemberDetailModal({ member, onClose }: { member: typeof MEMBERS[0], onC
 
                 {/* Content */}
                 <div className="px-8 pb-8 -mt-16 flex flex-col items-center text-center">
-                    {/* Avatar */}
-                    <div className="relative mb-6">
-                        <div className="w-32 h-32 rounded-full p-1.5 bg-white shadow-xl">
-                            <img
-                                src={member.avatar}
-                                alt={member.name}
-                                className="w-full h-full rounded-full object-cover bg-stone-100"
-                            />
+                    {isLoading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <Loader2 className="animate-spin text-brand-500" size={32} />
                         </div>
-                        {member.isOpenToWork && (
-                            <div className="absolute bottom-2 right-2 bg-green-500 text-white p-2 rounded-full border-4 border-white shadow-sm flex items-center justify-center" title="Open to Opportunities">
-                                <Briefcase size={16} strokeWidth={3} />
+                    ) : member ? (
+                        <>
+                            {/* Avatar */}
+                            <div className="relative mb-6">
+                                <div className="w-32 h-32 rounded-full p-1.5 bg-white shadow-xl">
+                                    {avatarUrl ? (
+                                        <img
+                                            src={avatarUrl}
+                                            alt={name}
+                                            className="w-full h-full rounded-full object-cover bg-stone-100"
+                                        />
+                                    ) : (
+                                        <AvatarInitials name={name} size="xl" className="w-full h-full" />
+                                    )}
+                                </div>
+                                {member.profile?.isOpenToWork && (
+                                    <div className="absolute bottom-2 right-2 bg-green-500 text-white p-2 rounded-full border-4 border-white shadow-sm flex items-center justify-center" title="Open to Opportunities">
+                                        <Briefcase size={16} strokeWidth={3} />
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
 
-                    {/* Name & Title */}
-                    <h2 className="text-2xl font-bold text-stone-900 mb-1 flex items-center gap-2 justify-center">
-                        {member.name}
-                        <BadgeCheck size={20} className="text-blue-500" fill="currentColor" />
-                    </h2>
-                    <p className="text-lg font-medium text-brand-700 mb-1">{member.occupation}</p>
-                    <p className="text-stone-500 text-sm flex items-center gap-1.5 mb-6">
-                        <MapPin size={14} /> {member.location}
-                    </p>
+                            {/* Name & Title */}
+                            <h2 className="text-2xl font-bold text-stone-900 mb-1 flex items-center gap-2 justify-center">
+                                {name}
+                                <BadgeCheck size={20} className="text-blue-500" fill="currentColor" />
+                            </h2>
+                            {member.profile?.jobTitle && (
+                                <p className="text-lg font-medium text-brand-700 mb-1">{member.profile.jobTitle}</p>
+                            )}
+                            {member.profile?.location && (
+                                <p className="text-stone-500 text-sm flex items-center gap-1.5 mb-6">
+                                    <MapPin size={14} /> {member.profile.location}
+                                </p>
+                            )}
 
-                    {/* Tags */}
-                    <div className="flex flex-wrap justify-center gap-2 mb-8">
-                        {member.isOpenToWork && (
-                            <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold border border-green-100">
-                                Open to Opportunities
-                            </span>
-                        )}
-                        <span className="px-3 py-1 bg-brand-50 text-brand-700 rounded-full text-xs font-bold border border-brand-100">
-                            {member.industry}
-                        </span>
-                        <span className="px-3 py-1 bg-stone-100 text-stone-600 rounded-full text-xs font-bold border border-stone-200">
-                            Since {member.joined}
-                        </span>
-                    </div>
+                            {/* Tags */}
+                            <div className="flex flex-wrap justify-center gap-2 mb-8">
+                                {member.profile?.isOpenToWork && (
+                                    <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold border border-green-100">
+                                        Open to Opportunities
+                                    </span>
+                                )}
+                                {member.profile?.industry && (
+                                    <span className="px-3 py-1 bg-brand-50 text-brand-700 rounded-full text-xs font-bold border border-brand-100">
+                                        {member.profile.industry}
+                                    </span>
+                                )}
+                                {joinedDate && (
+                                    <span className="px-3 py-1 bg-stone-100 text-stone-600 rounded-full text-xs font-bold border border-stone-200">
+                                        Since {joinedDate}
+                                    </span>
+                                )}
+                            </div>
 
-                    {/* Bio */}
-                    <div className="w-full bg-stone-50 rounded-2xl p-6 mb-8 text-left border border-stone-100">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-stone-400 mb-3">About</h4>
-                        <p className="text-stone-700 leading-relaxed font-medium">
-                            "{member.bio}"
-                        </p>
-                    </div>
+                            {/* Bio */}
+                            {member.profile?.bio && (
+                                <div className="w-full bg-stone-50 rounded-2xl p-6 mb-8 text-left border border-stone-100">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-stone-400 mb-3">About</h4>
+                                    <p className="text-stone-700 leading-relaxed font-medium">
+                                        &ldquo;{member.profile.bio}&rdquo;
+                                    </p>
+                                </div>
+                            )}
 
-                    {/* Actions */}
-                    <div className="w-full grid grid-cols-2 gap-4">
-                        <button className="flex items-center justify-center gap-2 px-6 py-3.5 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors">
-                            <MessageSquare size={18} /> Message
-                        </button>
-                        <a
-                            href="#"
-                            className="flex items-center justify-center gap-2 px-6 py-3.5 border-2 border-stone-200 text-stone-700 rounded-xl font-bold hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-all"
-                        >
-                            <Linkedin size={18} /> LinkedIn
-                        </a>
-                    </div>
+                            {/* Actions */}
+                            <div className="w-full grid grid-cols-2 gap-4">
+                                <button className="flex items-center justify-center gap-2 px-6 py-3.5 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors">
+                                    <MessageSquare size={18} /> Message
+                                </button>
+                                <a
+                                    href={member.profile?.linkedinUrl ?? "#"}
+                                    target={member.profile?.linkedinUrl ? "_blank" : undefined}
+                                    rel={member.profile?.linkedinUrl ? "noopener noreferrer" : undefined}
+                                    className="flex items-center justify-center gap-2 px-6 py-3.5 border-2 border-stone-200 text-stone-700 rounded-xl font-bold hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-all"
+                                >
+                                    <Linkedin size={18} /> LinkedIn
+                                </a>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="py-20 text-stone-500">Member not found.</div>
+                    )}
                 </div>
             </motion.div>
         </div>

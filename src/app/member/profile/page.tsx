@@ -1,7 +1,9 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { useState, useEffect, useRef } from "react";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { useApiMutation } from "@/hooks/use-api-mutation";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
     MapPin, Building2, Linkedin, Twitter, Globe, Mail, Edit2, Save,
@@ -16,7 +18,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-interface FormData {
+interface ProfileFormData {
     occupation: string;
     industry: string;
     location: string;
@@ -46,7 +48,7 @@ interface FieldErrors {
 /*  Defaults                                                           */
 /* ------------------------------------------------------------------ */
 
-const DEFAULT_FORM: FormData = {
+const DEFAULT_FORM: ProfileFormData = {
     occupation: "Product Designer",
     industry: "EdTech",
     location: "Lagos, Nigeria",
@@ -89,19 +91,76 @@ function isValidURL(s: string): boolean {
 /* ------------------------------------------------------------------ */
 
 export default function MemberProfilePage() {
-    const { user } = useUser();
+    const { user, apiUser, refetchUser } = useUser();
+    const { mutate: mutateCurrentUser } = useCurrentUser();
+
+    /* --- API mutations --- */
+    const profileMutation = useApiMutation<unknown, Record<string, unknown>>("/users/me/profile", {
+        method: "PATCH",
+        onSuccess: () => {
+            refetchUser();
+            mutateCurrentUser();
+        },
+    });
+    const avatarMutation = useApiMutation<unknown, FormData>("/users/me/avatar", {
+        method: "POST",
+        onSuccess: () => {
+            refetchUser();
+            mutateCurrentUser();
+        },
+    });
+    const privacyMutation = useApiMutation<unknown, { isPublic: boolean }>("/users/me/privacy", {
+        method: "PATCH",
+        onSuccess: () => {
+            refetchUser();
+            mutateCurrentUser();
+        },
+    });
+
+    /* --- Derive form state from API user --- */
+    const profile = apiUser?.profile;
+
+    const buildFormFromApi = useCallback((): ProfileFormData => ({
+        occupation: profile?.jobTitle ?? "",
+        industry: profile?.industry ?? "",
+        location: profile?.location ?? "",
+        bio: profile?.bio ?? "",
+        website: profile?.websiteUrl ?? "",
+        linkedin: profile?.linkedinUrl ?? "",
+        twitter: profile?.twitterUrl ?? "",
+        company: profile?.company ?? "",
+    }), [profile]);
 
     /* --- Profile form --- */
-    const [formData, setFormData] = useState<FormData>(() => loadJSON("bgg-profile", DEFAULT_FORM));
-    const [savedData, setSavedData] = useState<FormData>(formData);
+    const [formData, setFormData] = useState<ProfileFormData>(buildFormFromApi);
+    const [savedData, setSavedData] = useState<ProfileFormData>(formData);
     const [isEditing, setIsEditing] = useState(false);
     const [errors, setErrors] = useState<FieldErrors>({});
     const { toast } = useToast();
-    const [isOpenToWork, setIsOpenToWork] = useState(() => loadJSON("bgg-otw", false));
+    const [isOpenToWork, setIsOpenToWork] = useState(profile?.isOpenToWork ?? false);
+
+    /* Sync form when API data loads */
+    const [hydrated, setHydrated] = useState(false);
+    useEffect(() => {
+        if (profile && !hydrated) {
+            const apiForm = buildFormFromApi();
+            setFormData(apiForm);
+            setSavedData(apiForm);
+            setIsOpenToWork(profile.isOpenToWork ?? false);
+            setHydrated(true);
+        }
+    }, [profile, hydrated, buildFormFromApi]);
 
     /* --- Avatar --- */
-    const [avatarSrc, setAvatarSrc] = useState(() => loadJSON("bgg-avatar", user.avatar));
+    const [avatarSrc, setAvatarSrc] = useState(user.avatar);
     const fileRef = useRef<HTMLInputElement>(null);
+
+    /* Sync avatar when API data loads */
+    useEffect(() => {
+        if (profile?.avatarUrl) {
+            setAvatarSrc(profile.avatarUrl);
+        }
+    }, [profile?.avatarUrl]);
 
     /* --- Dev Plan (read-only preview) --- */
     const [goals] = useState<DevGoal[]>(() => loadJSON("bgg-goals", DEFAULT_GOALS));
@@ -117,10 +176,6 @@ export default function MemberProfilePage() {
     const [deleteModal, setDeleteModal] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState("");
 
-    /* Persist to localStorage */
-    useEffect(() => { localStorage.setItem("bgg-profile", JSON.stringify(formData)); }, [formData]);
-    useEffect(() => { localStorage.setItem("bgg-otw", JSON.stringify(isOpenToWork)); }, [isOpenToWork]);
-    useEffect(() => { localStorage.setItem("bgg-avatar", JSON.stringify(avatarSrc)); }, [avatarSrc]);
     /* --- Handlers --- */
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -142,11 +197,26 @@ export default function MemberProfilePage() {
         return Object.keys(errs).length === 0;
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!validate()) return;
-        setSavedData(formData);
-        setIsEditing(false);
-        toast("Profile saved");
+        try {
+            await profileMutation.trigger({
+                jobTitle: formData.occupation,
+                industry: formData.industry,
+                location: formData.location,
+                bio: formData.bio,
+                company: formData.company,
+                websiteUrl: formData.website,
+                linkedinUrl: formData.linkedin,
+                twitterUrl: formData.twitter,
+                isOpenToWork: isOpenToWork,
+            });
+            setSavedData(formData);
+            setIsEditing(false);
+            toast("Profile saved");
+        } catch {
+            toast("Failed to save profile", "error");
+        }
     };
 
     const handleCancel = () => {
@@ -155,12 +225,32 @@ export default function MemberProfilePage() {
         setIsEditing(false);
     };
 
-    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        // Validate size (2MB max)
+        if (file.size > 2 * 1024 * 1024) {
+            toast("Image must be under 2 MB", "error");
+            return;
+        }
+        // Validate type
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+            toast("Only JPEG, PNG, or WebP images are allowed", "error");
+            return;
+        }
+        // Optimistic preview
         const reader = new FileReader();
         reader.onload = () => { if (typeof reader.result === "string") setAvatarSrc(reader.result); };
         reader.readAsDataURL(file);
+        // Upload
+        const fd = new FormData();
+        fd.append("avatar", file);
+        try {
+            await avatarMutation.trigger(fd);
+            toast("Avatar updated");
+        } catch {
+            toast("Failed to upload avatar", "error");
+        }
     };
 
     const handlePasswordSave = () => {
@@ -216,7 +306,16 @@ export default function MemberProfilePage() {
                                 <div>
                                     <div className="flex items-center gap-3">
                                         <h1 className="text-3xl font-bold text-stone-900">{user.name}</h1>
-                                        <div onClick={() => setIsOpenToWork(!isOpenToWork)} className={`cursor-pointer flex items-center gap-2 px-3 py-1 rounded-full border transition-all select-none ${isOpenToWork ? "bg-green-50 border-green-200 text-green-700" : "bg-stone-50 border-stone-200 text-stone-400 hover:border-stone-300"}`}>
+                                        <div onClick={async () => {
+                                            const next = !isOpenToWork;
+                                            setIsOpenToWork(next);
+                                            try {
+                                                await profileMutation.trigger({ isOpenToWork: next });
+                                            } catch {
+                                                setIsOpenToWork(!next); // revert
+                                                toast("Failed to update status", "error");
+                                            }
+                                        }} className={`cursor-pointer flex items-center gap-2 px-3 py-1 rounded-full border transition-all select-none ${isOpenToWork ? "bg-green-50 border-green-200 text-green-700" : "bg-stone-50 border-stone-200 text-stone-400 hover:border-stone-300"}`}>
                                             <div className={`w-3 h-3 rounded-full transition-colors ${isOpenToWork ? "bg-green-500" : "bg-stone-300"}`} />
                                             <span className="text-xs font-bold whitespace-nowrap">{isOpenToWork ? "Open to Work" : "Not Open"}</span>
                                         </div>

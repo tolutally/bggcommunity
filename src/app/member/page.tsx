@@ -1,12 +1,13 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { Calendar, Clock, ArrowRight, AlertTriangle, Activity, CheckCircle, Video, MapPin, Users, BookOpen, Briefcase, MessageSquare, Target, X } from "lucide-react";
+import { Calendar, Clock, ArrowRight, AlertTriangle, Activity, CheckCircle, Video, MapPin, Users, BookOpen, Briefcase, MessageSquare, Target, X, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useEvents, eventTypeLabel, fmtEventTime, fmtDuration, isEventPast } from "@/hooks/use-events";
 
 const container = {
     hidden: { opacity: 0 },
@@ -25,6 +26,7 @@ const item = {
 
 export default function MemberDashboard() {
     const { user } = useUser();
+    const { events: apiEvents, isLoading: eventsLoading } = useEvents();
     const [scheduleView, setScheduleView] = useState<'upcoming' | 'past'>('upcoming');
     const [showDevPlanBanner, setShowDevPlanBanner] = useState(false);
 
@@ -37,83 +39,16 @@ export default function MemberDashboard() {
         }
     }, []);
 
-    const upcomingSessions = [
-        {
-            id: 1,
-            day: "24",
-            month: "OCT",
-            dayLabel: "TODAY",
-            title: "Deep Dive: Systems Thinking",
-            time: "2:00 PM - 3:30 PM EST",
-            type: "Workshop",
-            host: "Sarah Jenkins",
-            hostAvatar: "https://i.pravatar.cc/150?u=sarah",
-            isRequired: true,
-            isRsvped: true,
-            location: "Virtual - Zoom",
-        },
-        {
-            id: 2,
-            day: "25",
-            month: "OCT",
-            dayLabel: "TOMORROW",
-            title: "Weekly Office Hours",
-            time: "4:00 PM - 5:00 PM EST",
-            type: "Q&A",
-            host: "Dr. Alisha Reid",
-            hostAvatar: "https://i.pravatar.cc/150?u=alisha",
-            isRequired: false,
-            isRsvped: true,
-            location: "Virtual - Zoom",
-        },
-        {
-            id: 3,
-            day: "26",
-            month: "OCT",
-            dayLabel: "SAT",
-            title: "Group Crits: Week 3 Work",
-            time: "4:00 PM - 5:30 PM EST",
-            type: "Interactive",
-            host: "Peer Group A",
-            hostAvatar: null,
-            isRequired: true,
-            isRsvped: false,
-            location: "Virtual - Zoom",
-        },
-        {
-            id: 4,
-            day: "28",
-            month: "OCT",
-            dayLabel: "MON",
-            title: "Guest Speaker: Product at Uber",
-            time: "1:00 PM - 2:00 PM EST",
-            type: "Speaker Series",
-            host: "Amanda Jones",
-            hostAvatar: "https://i.pravatar.cc/150?u=amanda",
-            isRequired: false,
-            isRsvped: false,
-            location: "Virtual - Zoom",
-        },
-    ];
+    // Derive upcoming + past sessions from API events
+    const upcomingSessions = apiEvents
+        .filter(e => !isEventPast(e.scheduledAt, e.durationMinutes))
+        .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
+        .slice(0, 4);
 
-    const pastSessions = [
-        {
-            id: 101,
-            day: "21",
-            month: "OCT",
-            title: "Week 2: Research Methods",
-            duration: "1h 45m",
-            hasRecording: true,
-        },
-        {
-            id: 102,
-            day: "17",
-            month: "OCT",
-            title: "Week 1: Program Kickoff",
-            duration: "2h 00m",
-            hasRecording: true,
-        },
-    ];
+    const pastSessions = apiEvents
+        .filter(e => isEventPast(e.scheduledAt, e.durationMinutes) && e.recordingUrl)
+        .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
+        .slice(0, 3);
 
     const getTypeColor = (type: string) => {
         switch (type) {
@@ -292,110 +227,138 @@ export default function MemberDashboard() {
                             <div className="p-6">
                                 {scheduleView === 'upcoming' ? (
                                     <div className="space-y-4">
-                                        {upcomingSessions.map((session) => (
-                                            <div
-                                                key={session.id}
-                                                className="group bg-stone-50 hover:bg-white border border-stone-100 hover:border-brand-200 rounded-2xl p-5 transition-all hover:shadow-md"
-                                            >
-                                                <div className="flex flex-col lg:flex-row gap-5">
-                                                    {/* Date Badge */}
-                                                    <div className="flex-shrink-0 flex lg:flex-col items-center lg:items-center gap-4 lg:gap-0">
-                                                        <div className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center ${session.dayLabel === 'TODAY' ? 'bg-gradient-to-br from-brand-600 to-brand-800 text-white' : 'bg-white border border-stone-200'}`}>
-                                                            <span className={`text-[10px] font-bold uppercase tracking-wider ${session.dayLabel === 'TODAY' ? 'text-brand-200' : 'text-stone-400'}`}>
-                                                                {session.month}
-                                                            </span>
-                                                            <span className={`text-2xl font-bold ${session.dayLabel === 'TODAY' ? 'text-white' : 'text-stone-900'}`}>
-                                                                {session.day}
+                                        {eventsLoading && upcomingSessions.length === 0 && (
+                                            <div className="flex items-center justify-center py-10">
+                                                <Loader2 className="animate-spin text-brand-500" size={24} />
+                                            </div>
+                                        )}
+                                        {upcomingSessions.map((session) => {
+                                            const dt = new Date(session.scheduledAt);
+                                            const day = String(dt.getDate());
+                                            const monthStr = dt.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+                                            const today = new Date();
+                                            const isToday = dt.toDateString() === today.toDateString();
+                                            const tomorrow = new Date(today);
+                                            tomorrow.setDate(tomorrow.getDate() + 1);
+                                            const isTomorrow = dt.toDateString() === tomorrow.toDateString();
+                                            const dayLabel = isToday ? "TODAY" : isTomorrow ? "TOMORROW" : dt.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+                                            const typeLabel = eventTypeLabel(session.type);
+                                            const timeStr = fmtEventTime(session.scheduledAt);
+                                            const endTime = new Date(dt.getTime() + session.durationMinutes * 60_000);
+                                            const endTimeStr = endTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                                            const platform = session.platform ?? (session.meetingLink?.includes("zoom") ? "Zoom" : session.meetingLink?.includes("meet.google") ? "Google Meet" : "Virtual");
+
+                                            return (
+                                                <div
+                                                    key={session.id}
+                                                    className="group bg-stone-50 hover:bg-white border border-stone-100 hover:border-brand-200 rounded-2xl p-5 transition-all hover:shadow-md"
+                                                >
+                                                    <div className="flex flex-col lg:flex-row gap-5">
+                                                        {/* Date Badge */}
+                                                        <div className="flex-shrink-0 flex lg:flex-col items-center lg:items-center gap-4 lg:gap-0">
+                                                            <div className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center ${isToday ? 'bg-gradient-to-br from-brand-600 to-brand-800 text-white' : 'bg-white border border-stone-200'}`}>
+                                                                <span className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-brand-200' : 'text-stone-400'}`}>
+                                                                    {monthStr}
+                                                                </span>
+                                                                <span className={`text-2xl font-bold ${isToday ? 'text-white' : 'text-stone-900'}`}>
+                                                                    {day}
+                                                                </span>
+                                                            </div>
+                                                            <span className={`text-xs font-bold uppercase tracking-wide ${isToday ? 'text-brand-600' : 'text-stone-400'}`}>
+                                                                {dayLabel}
                                                             </span>
                                                         </div>
-                                                        <span className={`text-xs font-bold uppercase tracking-wide ${session.dayLabel === 'TODAY' ? 'text-brand-600' : 'text-stone-400'}`}>
-                                                            {session.dayLabel}
-                                                        </span>
-                                                    </div>
 
-                                                    {/* Session Details */}
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                            <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide border ${getTypeColor(session.type)}`}>
-                                                                {session.type}
-                                                            </span>
-                                                            {session.isRequired && (
-                                                                <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide bg-rose-100 text-rose-600 border border-rose-200">
-                                                                    Required
+                                                        {/* Session Details */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                                <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide border ${getTypeColor(typeLabel)}`}>
+                                                                    {typeLabel}
                                                                 </span>
-                                                            )}
-                                                            {session.isRsvped && (
-                                                                <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide bg-green-100 text-green-700 border border-green-200">
-                                                                    <CheckCircle size={12} /> Going
+                                                            </div>
+
+                                                            <h3 className="text-lg font-bold text-stone-900 group-hover:text-brand-800 transition-colors mb-2">
+                                                                {session.title}
+                                                            </h3>
+
+                                                            <div className="flex flex-wrap items-center gap-4 text-sm text-stone-500">
+                                                                <span className="flex items-center gap-1.5">
+                                                                    <Clock size={15} className="text-stone-400" />
+                                                                    {timeStr} - {endTimeStr}
                                                                 </span>
-                                                            )}
-                                                        </div>
-
-                                                        <h3 className="text-lg font-bold text-stone-900 group-hover:text-brand-800 transition-colors mb-2">
-                                                            {session.title}
-                                                        </h3>
-
-                                                        <div className="flex flex-wrap items-center gap-4 text-sm text-stone-500">
-                                                            <span className="flex items-center gap-1.5">
-                                                                <Clock size={15} className="text-stone-400" />
-                                                                {session.time}
-                                                            </span>
-                                                            <span className="flex items-center gap-1.5">
-                                                                <MapPin size={15} className="text-stone-400" />
-                                                                {session.location}
-                                                            </span>
-                                                            <span className="flex items-center gap-1.5">
-                                                                {session.hostAvatar ? (
-                                                                    <AvatarInitials name={session.host} src={session.hostAvatar} size="xs" className="!w-5 !h-5" />
-                                                                ) : (
+                                                                <span className="flex items-center gap-1.5">
+                                                                    <MapPin size={15} className="text-stone-400" />
+                                                                    Virtual - {platform}
+                                                                </span>
+                                                                <span className="flex items-center gap-1.5">
                                                                     <Users size={15} className="text-stone-400" />
-                                                                )}
-                                                                {session.host}
-                                                            </span>
+                                                                    {session.host}
+                                                                </span>
+                                                            </div>
                                                         </div>
-                                                    </div>
 
-                                                    {/* Action Button */}
-                                                    <div className="flex-shrink-0 flex items-center">
-                                                        {session.isRsvped ? (
-                                                            <button className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors flex items-center gap-2">
-                                                                <Video size={16} /> Join Session
-                                                            </button>
-                                                        ) : (
-                                                            <button className="px-5 py-2.5 bg-white border-2 border-stone-200 text-stone-700 font-bold rounded-xl hover:border-brand-300 hover:text-brand-700 transition-colors">
-                                                                RSVP Now
-                                                            </button>
-                                                        )}
+                                                        {/* Action Button */}
+                                                        <div className="flex-shrink-0 flex items-center">
+                                                            {session.meetingLink ? (
+                                                                <a href={session.meetingLink} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors flex items-center gap-2">
+                                                                    <Video size={16} /> Join Session
+                                                                </a>
+                                                            ) : (
+                                                                <Link href="/member/schedule" className="px-5 py-2.5 bg-white border-2 border-stone-200 text-stone-700 font-bold rounded-xl hover:border-brand-300 hover:text-brand-700 transition-colors">
+                                                                    View Details
+                                                                </Link>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
+                                            );
+                                        })}
+                                        {!eventsLoading && upcomingSessions.length === 0 && (
+                                            <div className="text-center py-10 text-stone-500">
+                                                <Calendar size={32} className="mx-auto mb-2 text-stone-300" />
+                                                <p className="font-semibold">No upcoming events</p>
+                                                <p className="text-sm">Check back soon for new events.</p>
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                        {pastSessions.map((session) => (
-                                            <div key={session.id} className="group cursor-pointer">
-                                                {/* Video Thumbnail */}
-                                                <div className="aspect-video bg-stone-800 rounded-2xl flex items-center justify-center mb-3 group-hover:bg-stone-700 transition-colors overflow-hidden relative">
-                                                    <div className="w-14 h-14 bg-stone-700 group-hover:bg-stone-600 rounded-xl flex items-center justify-center transition-colors">
-                                                        <Video size={28} className="text-stone-400" />
-                                                    </div>
-                                                    {/* Play overlay on hover */}
-                                                    <div className="absolute inset-0 bg-brand-800/0 group-hover:bg-brand-800/20 transition-colors flex items-center justify-center">
-                                                        <div className="w-16 h-16 bg-white/0 group-hover:bg-white/90 rounded-full flex items-center justify-center transition-all scale-75 group-hover:scale-100 opacity-0 group-hover:opacity-100">
-                                                            <ArrowRight size={28} className="text-brand-800 ml-1" />
-                                                        </div>
-                                                    </div>
-                                                    {/* Duration Badge */}
-                                                    <div className="absolute bottom-3 right-3 px-2 py-1 bg-black/70 rounded-md text-white text-xs font-medium">
-                                                        {session.duration}
-                                                    </div>
-                                                </div>
-                                                {/* Recording Info */}
-                                                <h4 className="font-bold text-stone-900 group-hover:text-brand-800 transition-colors">{session.title}</h4>
-                                                <p className="text-sm text-stone-500">{session.month} {session.day}</p>
+                                        {eventsLoading && pastSessions.length === 0 && (
+                                            <div className="col-span-full flex items-center justify-center py-10">
+                                                <Loader2 className="animate-spin text-brand-500" size={24} />
                                             </div>
-                                        ))}
+                                        )}
+                                        {pastSessions.map((session) => {
+                                            const dt = new Date(session.scheduledAt);
+                                            const monthStr = dt.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+                                            const day = String(dt.getDate());
+
+                                            return (
+                                                <div key={session.id} className="group cursor-pointer">
+                                                    {/* Video Thumbnail */}
+                                                    <a href={session.recordingUrl ?? "#"} target="_blank" rel="noopener noreferrer" className="block">
+                                                        <div className="aspect-video bg-stone-800 rounded-2xl flex items-center justify-center mb-3 group-hover:bg-stone-700 transition-colors overflow-hidden relative">
+                                                            <div className="w-14 h-14 bg-stone-700 group-hover:bg-stone-600 rounded-xl flex items-center justify-center transition-colors">
+                                                                <Video size={28} className="text-stone-400" />
+                                                            </div>
+                                                            {/* Play overlay on hover */}
+                                                            <div className="absolute inset-0 bg-brand-800/0 group-hover:bg-brand-800/20 transition-colors flex items-center justify-center">
+                                                                <div className="w-16 h-16 bg-white/0 group-hover:bg-white/90 rounded-full flex items-center justify-center transition-all scale-75 group-hover:scale-100 opacity-0 group-hover:opacity-100">
+                                                                    <ArrowRight size={28} className="text-brand-800 ml-1" />
+                                                                </div>
+                                                            </div>
+                                                            {/* Duration Badge */}
+                                                            <div className="absolute bottom-3 right-3 px-2 py-1 bg-black/70 rounded-md text-white text-xs font-medium">
+                                                                {fmtDuration(session.durationMinutes)}
+                                                            </div>
+                                                        </div>
+                                                    </a>
+                                                    {/* Recording Info */}
+                                                    <h4 className="font-bold text-stone-900 group-hover:text-brand-800 transition-colors">{session.title}</h4>
+                                                    <p className="text-sm text-stone-500">{monthStr} {day}</p>
+                                                </div>
+                                            );
+                                        })}
 
                                         {/* View All Card */}
                                         <Link href="/member/schedule" className="aspect-video border-2 border-dashed border-stone-200 rounded-2xl flex flex-col items-center justify-center text-stone-400 hover:border-accent-400 hover:text-accent-500 transition-colors cursor-pointer group">
