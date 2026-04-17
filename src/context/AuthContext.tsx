@@ -92,8 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signOut();
     }, [getToken, signOut]);
 
-    // null = still loading or no API data; true/false = definitive
-    const onboardingComplete = apiUser ? apiUser.onboardingComplete : null;
+    // null = still loading; true/false = definitive
+    // If the API returned a user, use their flag.
+    // If API finished loading but returned no user (error/no profile), treat as incomplete.
+    const onboardingComplete = apiLoading
+        ? null
+        : apiUser
+          ? apiUser.onboardingComplete
+          : isSignedIn
+            ? false
+            : null;
 
     return (
         <AuthContext.Provider
