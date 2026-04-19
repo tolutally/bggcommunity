@@ -149,6 +149,8 @@ export default function AdminModerationPage() {
         if (!report) return;
         const resolved: ResolvedReport = {
             ...report,
+            // For "Delete" action, replace content with "[deleted]" placeholder
+            content: action === "Delete" ? "[deleted]" : report.content,
             status: action === "Dismiss" ? "Dismissed" : "Resolved",
             action,
             resolvedAt: "just now",
@@ -297,8 +299,8 @@ export default function AdminModerationPage() {
                                             <div>
                                                 <p className="font-bold text-stone-900">{selectedReport.reportedUser.name}</p>
                                                 <p className="text-stone-500 text-xs mb-3">User ID: {selectedReport.reportedUser.id} &middot; Type: {selectedReport.type}</p>
-                                                <p className="text-lg font-medium text-stone-800 leading-relaxed bg-white/50 p-4 rounded-xl border border-red-100/50 backdrop-blur-sm">
-                                                    &ldquo;{selectedReport.content}&rdquo;
+                                                <p className={`text-lg font-medium leading-relaxed bg-white/50 p-4 rounded-xl border border-red-100/50 backdrop-blur-sm ${selectedReport.content === "[deleted]" ? "text-stone-400 italic" : "text-stone-800"}`}>
+                                                    {selectedReport.content === "[deleted]" ? "[deleted]" : <>&ldquo;{selectedReport.content}&rdquo;</>}
                                                 </p>
                                             </div>
                                         </div>

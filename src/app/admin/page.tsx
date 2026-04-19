@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { Users, Activity, AlertTriangle, Calendar, Plus, X, Check, UserPlus, ChevronDown, Loader2 } from "lucide-react";
+import { Users, Activity, AlertTriangle, Calendar, Plus, X, Check, UserPlus, ChevronDown, Loader2, TrendingUp, TrendingDown, Info } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useState, useMemo } from "react";
@@ -55,9 +55,9 @@ export default function AdminDashboard() {
               <ErrorBoundary>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-min">
                     {/* Stats */}
-                    <AdminStatCard title="Total Members" value={membersLoading ? "—" : totalMembers.toLocaleString()} change={`${activeCohorts.length} cohorts`} icon={Users} />
-                    <AdminStatCard title="Upcoming Events" value={upcomingEvents.toString()} change={`${events.length} total`} icon={Calendar} />
-                    <AdminStatCard title="Community Groups" value={totalGroups.toString()} change="Active" icon={Activity} isHealth />
+                    <AdminStatCard title="Total Members" value={membersLoading ? "—" : totalMembers.toLocaleString()} change={`${activeCohorts.length} cohorts`} icon={Users} trend="up" tooltip="Total registered members across all cohorts" />
+                    <AdminStatCard title="Upcoming Events" value={upcomingEvents.toString()} change={`${events.length} total`} icon={Calendar} trend="neutral" tooltip="Events scheduled in the future" />
+                    <AdminStatCard title="Community Groups" value={totalGroups.toString()} change="Active" icon={Activity} isHealth trend="up" tooltip="Number of active community groups" />
 
                     {/* Growth Chart */}
                     <div className="md:col-span-2 bg-white rounded-3xl p-6 border border-stone-100 shadow-sm flex flex-col">
@@ -296,16 +296,34 @@ function NewEventModal({ onClose, onCreate }: { onClose: () => void; onCreate: (
     );
 }
 
-function AdminStatCard({ title, value, change, negative, icon: Icon, isHealth }: any) {
+function AdminStatCard({ title, value, change, negative, icon: Icon, isHealth, trend, tooltip }: { title: string; value: string; change: string; negative?: boolean; icon: React.ElementType; isHealth?: boolean; trend?: "up" | "down" | "neutral"; tooltip?: string }) {
+    const [showTooltip, setShowTooltip] = useState(false);
+    const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : null;
     return (
         <div className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group">
             <div className="flex justify-between items-start z-10">
                 <div className={`p-2 rounded-xl ${isHealth ? "bg-emerald-50 text-emerald-600" : "bg-stone-50 text-stone-600"} group-hover:scale-110 transition-transform`}>{Icon && <Icon size={20} />}</div>
-                <span className={`text-xs font-bold px-2 py-1 rounded-full ${negative ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>{change}</span>
+                <div className="flex items-center gap-1.5">
+                    {TrendIcon && <TrendIcon size={14} className={negative ? "text-red-500" : "text-green-500"} />}
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${negative ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>{change}</span>
+                </div>
             </div>
-            <div className="z-10">
-                <p className="text-stone-500 text-xs font-semibold uppercase tracking-wider mb-1">{title}</p>
-                <h3 className="text-2xl font-bold text-stone-900 tracking-tight">{value}</h3>
+            <div className="z-10 flex items-end justify-between">
+                <div>
+                    <p className="text-stone-500 text-xs font-semibold uppercase tracking-wider mb-1">{title}</p>
+                    <h3 className="text-2xl font-bold text-stone-900 tracking-tight">{value}</h3>
+                </div>
+                {tooltip && (
+                    <div className="relative">
+                        <button onMouseEnter={() => setShowTooltip(true)} onMouseLeave={() => setShowTooltip(false)} className="p-1 text-stone-300 hover:text-stone-500 transition-colors"><Info size={14} /></button>
+                        {showTooltip && (
+                            <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-stone-900 text-white text-xs rounded-lg shadow-lg z-20 pointer-events-none">
+                                {tooltip}
+                                <div className="absolute top-full right-3 w-2 h-2 bg-stone-900 rotate-45 -mt-1" />
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
             <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-stone-50 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
         </div>

@@ -12,6 +12,7 @@ import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Skeleton, SkeletonCard } from "@/components/ui/skeleton";
 import { useMembers } from "@/hooks/use-members";
+import { exportCSV } from "@/lib/export";
 import type { MemberCard } from "@/lib/types";
 
 export default function AdminMembersPage() {
@@ -46,7 +47,20 @@ export default function AdminMembersPage() {
             <span className="bg-stone-100 text-stone-600 px-3 py-1 rounded-lg text-sm font-bold">
               {filteredMembers.length} Members
             </span>
-            <button className="bg-stone-900 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-stone-800 transition-colors">
+            <button
+              onClick={() => {
+                const headers = ["Name", "Email", "Role", "Status", "Joined"];
+                const rows = filteredMembers.map(m => [
+                  m.profile ? `${m.profile.firstName} ${m.profile.lastName}` : "—",
+                  m.email,
+                  m.role ?? "—",
+                  m.status ?? "—",
+                  m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—",
+                ]);
+                exportCSV(headers, rows, `members-export-${new Date().toISOString().split("T")[0]}`);
+              }}
+              className="bg-stone-900 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-stone-800 transition-colors"
+            >
               Export CSV
             </button>
             <button

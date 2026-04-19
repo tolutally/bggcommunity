@@ -1,6 +1,7 @@
 # API Integration Tasks
 
 > **Created:** April 16, 2026
+> **Last Updated:** April 19, 2026
 > **Backend:** `https://bggather-api.duckdns.org/api/v1`
 > **Stack:** SWR + Clerk `getToken()` + centralized `apiClient`
 > **Total Phases:** 12 (0–11) | **Ready:** 8 | **Blocked:** 4
@@ -37,6 +38,21 @@
 8. **Public routes** (no auth): events, cohorts, members, jobs list/detail
 9. **Event type enum**: `WORKSHOP | QA | SPEAKER_SERIES | SOCIAL | HACKATHON`
 10. **RSVP response**: `POST /events/:id/rsvp` → `{ success: true, data: { rsvped: boolean } }`
+11. **User sync**: BE does NOT auto-create users on first Clerk token — `/users/me` returns 401 for new sign-ups until BE creates the record (webhook or manual)
+12. **Onboarding resilience**: FE now saves data locally and proceeds if API calls fail (pending sync stored in `bgg_onboarding_pending_sync`)
+13. **Auth page guard**: `(auth)/layout.tsx` redirects authenticated users away from sign-in/sign-up to prevent Clerk `authorization_invalid` errors
+14. **Social SSO error recovery**: Sign-in/sign-up social buttons auto-sign-out and retry if Clerk rejects due to stale session
+
+---
+
+## Known Backend Issues (as of April 19, 2026)
+
+| Endpoint | Issue | Impact |
+|----------|-------|--------|
+| `GET /events` | Returns 500 (with or without auth) | Events page broken |
+| `GET /jobs` | Returns 500 | Jobs page broken |
+| `GET /cohorts` | Returns 500 | Cohorts page broken |
+| `GET /users/me` | Returns 401 for new Clerk sign-ups | User not created in BE on first auth |
 
 ---
 
@@ -69,6 +85,12 @@
 | 5 | Wire onboarding — `PATCH /users/me/profile` + `POST /users/me/avatar` + `POST /users/me/onboarding-complete` | ✅ Done | `src/app/onboarding/page.tsx` (MODIFY) |
 | 6 | Wire `DELETE /auth/account` + sign-out in settings | ✅ Done | `src/app/member/settings/page.tsx` (MODIFY) |
 | 7 | Legacy `/auth` page — replaced with redirect to Clerk `/sign-in` | ✅ Done | `src/app/auth/page.tsx` (MODIFY) |
+| 8 | Fix sign-up social SSO redirect to `/onboarding` instead of `/member` | ✅ Done | `src/app/(auth)/sign-up/page.tsx` (MODIFY) |
+| 9 | Fix sign-in/sign-up: add `router.push()` after `finalize()` | ✅ Done | `src/app/(auth)/sign-in/page.tsx`, `sign-up/page.tsx` (MODIFY) |
+| 10 | Auth layout: redirect authenticated users away from sign-in/sign-up | ✅ Done | `src/app/(auth)/layout.tsx` (MODIFY) |
+| 11 | Social SSO error recovery: auto-signout + retry on stale session | ✅ Done | `src/app/(auth)/sign-in/page.tsx`, `sign-up/page.tsx` (MODIFY) |
+| 12 | Onboarding resilience: proceed even if API calls fail, save locally | ✅ Done | `src/app/onboarding/page.tsx` (MODIFY) |
+| 13 | AuthContext: check localStorage `bgg_onboarding_complete` as fallback for onboarding status | ✅ Done | `src/context/AuthContext.tsx` (MODIFY) |
 
 ---
 
@@ -209,7 +231,7 @@
 | Phase | Name | Tasks | Status |
 |:-----:|------|:-----:|:------:|
 | 0 | Foundation | 9 | ✅ **COMPLETE** |
-| 1 | Auth & User Profile | 7 | ✅ **COMPLETE** |
+| 1 | Auth & User Profile | 13 | ✅ **COMPLETE** |
 | 2 | Members Directory | 2 | ✅ **COMPLETE** |
 | 3 | Events (member + admin) | 6 | ✅ **COMPLETE** |
 | 4 | Cohorts (member + admin) | 6 | ✅ **COMPLETE** |
@@ -220,4 +242,4 @@
 | 9 | Analytics & Export | 2 | ⛔ Blocked |
 | 10 | Notifications | 1 | ⛔ Blocked |
 | 11 | Dev Plan | 2 | ⛔ Blocked |
-| | **TOTAL** | **49** | **5/12 phases done** |
+| | **TOTAL** | **55** | **5/12 phases done** |

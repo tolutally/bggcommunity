@@ -226,6 +226,8 @@ function AnnouncementForm({ groups }: { groups: CommunityGroup[] }) {
     const [body, setBody] = useState("");
     const [groupId, setGroupId] = useState("");
 
+    const targetGroup = groups.find(g => g.id === groupId);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim() || !body.trim()) { toast("Title and body are required", "error"); return; }
@@ -237,33 +239,68 @@ function AnnouncementForm({ groups }: { groups: CommunityGroup[] }) {
     };
 
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 max-w-2xl">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-brand-50 text-brand-700 rounded-lg"><Megaphone size={20} /></div>
-                <h2 className="text-lg font-bold text-stone-900">Send Announcement</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Form */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-6">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-brand-50 text-brand-700 rounded-lg"><Megaphone size={20} /></div>
+                    <h2 className="text-lg font-bold text-stone-900">Send Announcement</h2>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="text-sm font-semibold text-stone-700 mb-1 block">Title *</label>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+                    </div>
+                    <div>
+                        <label className="text-sm font-semibold text-stone-700 mb-1 block">Body *</label>
+                        <textarea value={body} onChange={e => setBody(e.target.value)} rows={4} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none resize-none" />
+                    </div>
+                    <div>
+                        <label className="text-sm font-semibold text-stone-700 mb-1 block">Target Group (optional)</label>
+                        <select value={groupId} onChange={e => setGroupId(e.target.value)} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none">
+                            <option value="">All groups</option>
+                            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex justify-end">
+                        <button type="submit" disabled={announce.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                            {announce.isLoading ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Send
+                        </button>
+                    </div>
+                </form>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="text-sm font-semibold text-stone-700 mb-1 block">Title *</label>
-                    <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+
+            {/* Live Preview */}
+            <div>
+                <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">Preview</p>
+                <div className={`rounded-2xl border p-6 transition-all ${title.trim() || body.trim() ? "bg-white border-stone-200 shadow-sm" : "bg-stone-50 border-dashed border-stone-200"}`}>
+                    {!title.trim() && !body.trim() ? (
+                        <div className="text-center py-8">
+                            <Megaphone size={32} className="mx-auto text-stone-300 mb-3" />
+                            <p className="text-sm text-stone-400">Start typing to see a live preview</p>
+                        </div>
+                    ) : (
+                        <div>
+                            <div className="flex items-start gap-3 mb-4">
+                                <div className="p-2 bg-brand-50 text-brand-700 rounded-lg flex-shrink-0"><Megaphone size={18} /></div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">Announcement</span>
+                                        {targetGroup && <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">{targetGroup.name}</span>}
+                                        {!groupId && <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">All Groups</span>}
+                                    </div>
+                                    <h3 className="font-bold text-stone-900 text-lg leading-tight">{title || "Untitled"}</h3>
+                                </div>
+                            </div>
+                            <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">{body || "No body text yet..."}</p>
+                            <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+                                <span className="text-xs text-stone-400">Just now</span>
+                                <span className="text-xs text-stone-400">Admin</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
-                <div>
-                    <label className="text-sm font-semibold text-stone-700 mb-1 block">Body *</label>
-                    <textarea value={body} onChange={e => setBody(e.target.value)} rows={4} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none resize-none" />
-                </div>
-                <div>
-                    <label className="text-sm font-semibold text-stone-700 mb-1 block">Target Group (optional)</label>
-                    <select value={groupId} onChange={e => setGroupId(e.target.value)} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none">
-                        <option value="">All groups</option>
-                        {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                    </select>
-                </div>
-                <div className="flex justify-end">
-                    <button type="submit" disabled={announce.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
-                        {announce.isLoading ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Send
-                    </button>
-                </div>
-            </form>
+            </div>
         </div>
     );
 }

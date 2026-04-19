@@ -12,6 +12,18 @@ export class ApiRequestError extends Error {
   }
 }
 
+/**
+ * Handle 401 globally — redirect to sign-in.
+ * Uses a flag to prevent multiple simultaneous redirects.
+ */
+let redirecting = false;
+export function handle401() {
+  if (redirecting || typeof window === "undefined") return;
+  redirecting = true;
+  try { window.localStorage.removeItem("__clerk_db_jwt"); } catch {}
+  window.location.replace("/sign-in");
+}
+
 interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
   token?: string | null;
@@ -58,6 +70,7 @@ export async function apiClient<T>(
   if (!res.ok) {
     const message =
       (json as ApiError | null)?.message ?? res.statusText ?? "Request failed";
+    if (res.status === 401) handle401();
     throw new ApiRequestError(message, res.status);
   }
 

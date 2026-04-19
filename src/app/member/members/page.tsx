@@ -45,9 +45,13 @@ export default function MembersPage() {
     }, [members, cursor, allMembers]);
 
     const filteredMembers = useMemo(() => {
-        if (!searchTerm) return displayMembers;
+        // Filter out members with private profiles
+        const publicMembers = displayMembers.filter(
+            (m) => m.profile?.isPublic !== false,
+        );
+        if (!searchTerm) return publicMembers;
         const q = searchTerm.toLowerCase();
-        return displayMembers.filter((m) => {
+        return publicMembers.filter((m) => {
             const name = memberName(m).toLowerCase();
             const job = m.profile?.jobTitle?.toLowerCase() ?? "";
             const loc = m.profile?.location?.toLowerCase() ?? "";

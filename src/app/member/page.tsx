@@ -10,6 +10,26 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useEvents, eventTypeLabel, fmtEventTime, fmtDuration, isEventPast } from "@/hooks/use-events";
 import { useJobs, fmtJobDate } from "@/hooks/use-jobs";
 
+interface DevGoal {
+    id: number;
+    text: string;
+    done: boolean;
+    status: "not-started" | "in-progress" | "completed";
+    details: string;
+    evidence: unknown[];
+    createdAt: string;
+}
+
+function loadGoals(): DevGoal[] {
+    if (typeof window === "undefined") return [];
+    try {
+        const raw = localStorage.getItem("bgg-goals");
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
 const container = {
     hidden: { opacity: 0 },
     show: {
@@ -31,6 +51,12 @@ export default function MemberDashboard() {
     const { jobs: apiJobs, isLoading: jobsLoading } = useJobs();
     const [scheduleView, setScheduleView] = useState<'upcoming' | 'past'>('upcoming');
     const [showDevPlanBanner, setShowDevPlanBanner] = useState(false);
+    const [devGoals, setDevGoals] = useState<DevGoal[]>([]);
+
+    // Load dev plan goals from localStorage
+    useEffect(() => {
+        setDevGoals(loadGoals());
+    }, []);
 
     // Check if user skipped dev plan during onboarding
     useEffect(() => {
@@ -153,36 +179,47 @@ export default function MemberDashboard() {
                                         <h3 className="text-3xl font-bold leading-tight">Dev Plan</h3>
                                         <p className="text-brand-200 text-sm mt-1">Track your growth & hit your goals</p>
                                     </div>
-                                    <div className="text-right hidden sm:block">
-                                        <div className="text-4xl font-bold text-accent-400">3<span className="text-lg text-white/60">/5</span></div>
-                                        <div className="text-xs text-brand-200 font-medium uppercase tracking-wide">Goals Completed</div>
-                                    </div>
+                                    {devGoals.length > 0 && (
+                                        <div className="text-right hidden sm:block">
+                                            <div className="text-4xl font-bold text-accent-400">
+                                                {devGoals.filter(g => g.status === "completed").length}
+                                                <span className="text-lg text-white/60">/{devGoals.length}</span>
+                                            </div>
+                                            <div className="text-xs text-brand-200 font-medium uppercase tracking-wide">Goals Completed</div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Goal Progress Pills */}
-                                <div className="flex flex-wrap gap-2 mb-6">
-                                    <span className="bg-accent-500 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
-                                        <CheckCircle size={12} /> Build Portfolio
-                                    </span>
-                                    <span className="bg-accent-500 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
-                                        <CheckCircle size={12} /> 10 Coffee Chats
-                                    </span>
-                                    <span className="bg-accent-500 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
-                                        <CheckCircle size={12} /> Update Resume
-                                    </span>
-                                    <span className="bg-white/10 border border-white/20 text-white/80 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5">
-                                        <Clock size={12} className="text-accent-400" /> Apply to 5 Jobs
-                                    </span>
-                                    <span className="bg-white/10 border border-white/20 text-white/80 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5">
-                                        <Clock size={12} className="text-accent-400" /> Mock Interview
-                                    </span>
-                                </div>
+                                {devGoals.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2 mb-6">
+                                        {devGoals.map(g => (
+                                            <span
+                                                key={g.id}
+                                                className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                                                    g.status === "completed"
+                                                        ? "bg-accent-500 text-white"
+                                                        : "bg-white/10 border border-white/20 text-white/80"
+                                                }`}
+                                            >
+                                                {g.status === "completed" ? <CheckCircle size={12} /> : <Clock size={12} className="text-accent-400" />}
+                                                {g.text}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-brand-200 text-sm mb-6">No goals set yet — start building your plan!</p>
+                                )}
 
                                 <div className="flex items-center gap-4">
-                                    <button className="bg-accent-500 hover:bg-accent-600 text-white px-6 py-3 rounded-xl font-bold text-sm transition-colors flex items-center gap-2 shadow-lg shadow-accent-500/20">
-                                        Update Dev Plan <ArrowRight size={16} />
-                                    </button>
-                                    <span className="text-sm font-medium text-brand-200">60% to your goals 🔥</span>
+                                    <Link href="/member/devplan" className="bg-accent-500 hover:bg-accent-600 text-white px-6 py-3 rounded-xl font-bold text-sm transition-colors flex items-center gap-2 shadow-lg shadow-accent-500/20">
+                                        {devGoals.length > 0 ? "Update Dev Plan" : "Create Dev Plan"} <ArrowRight size={16} />
+                                    </Link>
+                                    {devGoals.length > 0 && (
+                                        <span className="text-sm font-medium text-brand-200">
+                                            {Math.round((devGoals.filter(g => g.status === "completed").length / devGoals.length) * 100)}% to your goals 🔥
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -376,7 +413,7 @@ export default function MemberDashboard() {
 
                     {/* Right Column (1/3): Action Center & Daily Standup */}
                     <div className="space-y-6">
-                        {/* Action Center (Due Soon) */}
+                        {/* Action Center (Dev Plan Goals) */}
                         <div className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm flex flex-col">
                             <div className="flex items-center gap-2 mb-4">
                                 <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
@@ -386,20 +423,42 @@ export default function MemberDashboard() {
                             </div>
 
                             <div className="space-y-3 flex-1">
-                                <div className="p-3 bg-stone-50 rounded-xl border border-stone-100 flex items-start gap-3 hover:bg-stone-100 transition-colors cursor-pointer group">
-                                    <div className="mt-0.5 w-4 h-4 rounded border-2 border-stone-300 group-hover:border-accent-400 transition-colors bg-white"></div>
-                                    <div>
-                                        <p className="text-sm font-bold text-stone-800 leading-tight group-hover:text-brand-800">Submit Research Findings</p>
-                                        <p className="text-xs text-rose-500 font-bold mt-1">Due Today, 5:00 PM</p>
+                                {devGoals.filter(g => g.status !== "completed").length === 0 ? (
+                                    <div className="text-center py-6">
+                                        {devGoals.length > 0 ? (
+                                            <>
+                                                <CheckCircle size={28} className="mx-auto text-green-400 mb-2" />
+                                                <p className="text-sm font-semibold text-stone-700">All goals completed!</p>
+                                                <Link href="/member/devplan" className="text-xs text-brand-600 font-bold hover:text-brand-800 mt-1 inline-block">Set new goals</Link>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Target size={28} className="mx-auto text-stone-300 mb-2" />
+                                                <p className="text-sm text-stone-400">No goals set yet</p>
+                                                <Link href="/member/devplan" className="text-xs text-brand-600 font-bold hover:text-brand-800 mt-1 inline-block">Create your Dev Plan</Link>
+                                            </>
+                                        )}
                                     </div>
-                                </div>
-                                <div className="p-3 bg-stone-50 rounded-xl border border-stone-100 flex items-start gap-3 hover:bg-stone-100 transition-colors cursor-pointer group">
-                                    <div className="mt-0.5 w-4 h-4 rounded border-2 border-stone-300 group-hover:border-accent-400 transition-colors bg-white"></div>
-                                    <div>
-                                        <p className="text-sm font-bold text-stone-800 leading-tight group-hover:text-brand-800">RSVP for Fireside Chat</p>
-                                        <p className="text-xs text-stone-400 font-medium mt-1">Tomorrow</p>
-                                    </div>
-                                </div>
+                                ) : (
+                                    devGoals
+                                        .filter(g => g.status !== "completed")
+                                        .slice(0, 4)
+                                        .map(goal => (
+                                            <Link
+                                                key={goal.id}
+                                                href="/member/devplan"
+                                                className="p-3 bg-stone-50 rounded-xl border border-stone-100 flex items-start gap-3 hover:bg-stone-100 transition-colors cursor-pointer group block"
+                                            >
+                                                <div className={`mt-0.5 w-4 h-4 rounded border-2 flex-shrink-0 ${goal.status === "in-progress" ? "border-amber-400 bg-amber-50" : "border-stone-300 bg-white"} group-hover:border-accent-400 transition-colors`} />
+                                                <div>
+                                                    <p className="text-sm font-bold text-stone-800 leading-tight group-hover:text-brand-800">{goal.text}</p>
+                                                    <p className={`text-xs font-medium mt-1 ${goal.status === "in-progress" ? "text-amber-600" : "text-stone-400"}`}>
+                                                        {goal.status === "in-progress" ? "In Progress" : "Not Started"}
+                                                    </p>
+                                                </div>
+                                            </Link>
+                                        ))
+                                )}
                             </div>
                         </div>
 

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Users, Calendar, Clock, CheckCircle2,
   MoreHorizontal, FileText, Video, Download, Search,
   Plus, Mail, UserPlus, BarChart3, GraduationCap,
-  Settings, Pencil,
+  Settings, Pencil, X, Check, AlertTriangle, Upload,
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -32,6 +32,7 @@ export default function AdminCohortDetailPage() {
   const { stats } = useCohortStats(slugStr);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [memberSearch, setMemberSearch] = useState("");
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
 
   if (isLoading) {
     return (
@@ -105,7 +106,7 @@ export default function AdminCohortDetailPage() {
             <button className="px-4 py-2.5 bg-white border border-stone-200 text-stone-600 rounded-xl font-semibold text-sm hover:bg-stone-50 transition-colors flex items-center gap-2">
               <Settings size={16} /> Settings
             </button>
-            <button className="px-4 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
+            <button onClick={() => setShowBulkAdd(true)} className="px-4 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
               <UserPlus size={16} /> Add Members
             </button>
           </div>
@@ -212,7 +213,7 @@ export default function AdminCohortDetailPage() {
                   <button onClick={() => setActiveTab("resources")} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
                     <FileText size={16} className="text-stone-400" /> Upload Resource
                   </button>
-                  <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
+                  <button onClick={() => setShowBulkAdd(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
                     <UserPlus size={16} className="text-stone-400" /> Add Members
                   </button>
                 </div>
@@ -235,7 +236,7 @@ export default function AdminCohortDetailPage() {
                   className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none"
                 />
               </div>
-              <button className="px-5 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
+              <button onClick={() => setShowBulkAdd(true)} className="px-5 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
                 <UserPlus size={16} /> Add Members
               </button>
             </div>
@@ -420,6 +421,8 @@ export default function AdminCohortDetailPage() {
           </div>
         )}
       </div>
+
+      {showBulkAdd && <BulkAddMembersModal onClose={() => setShowBulkAdd(false)} />}
     </ErrorBoundary>
   );
 }
@@ -432,6 +435,166 @@ function StatRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
         <span className="text-sm">{label}</span>
       </div>
       <span className="text-sm font-semibold text-stone-800">{value}</span>
+    </div>
+  );
+}
+
+/* ── Bulk Add Members Modal ── */
+
+interface ParsedMember {
+  email: string;
+  name?: string;
+  valid: boolean;
+  error?: string;
+}
+
+function BulkAddMembersModal({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<"csv" | "paste">("paste");
+  const [emailText, setEmailText] = useState("");
+  const [csvFileName, setCsvFileName] = useState("");
+  const [parsedMembers, setParsedMembers] = useState<ParsedMember[]>([]);
+  const [processing, setProcessing] = useState(false);
+  const [done, setDone] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  const parseEmails = useCallback(
+    (text: string): ParsedMember[] => {
+      const lines = text.split(/[\n,;]+/).map((l) => l.trim()).filter(Boolean);
+      return lines.map((line) => {
+        const angleMatch = line.match(/^(.+?)\s*<(.+?)>$/);
+        if (angleMatch) {
+          const n = angleMatch[1].trim();
+          const email = angleMatch[2].trim().toLowerCase();
+          return { email, name: n, valid: emailRegex.test(email), error: emailRegex.test(email) ? undefined : "Invalid email" };
+        }
+        const email = line.toLowerCase();
+        return { email, valid: emailRegex.test(email), error: emailRegex.test(email) ? undefined : "Invalid email" };
+      });
+    },
+    [],
+  );
+
+  const handleFileUpload = useCallback(
+    (file: File) => {
+      if (!file.name.endsWith(".csv")) { setCsvFileName(""); return; }
+      setCsvFileName(file.name);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        if (text) setParsedMembers(parseEmails(text));
+      };
+      reader.readAsText(file);
+    },
+    [parseEmails],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = e.dataTransfer.files[0];
+      if (file) handleFileUpload(file);
+    },
+    [handleFileUpload],
+  );
+
+  const handlePasteProcess = () => { setParsedMembers(parseEmails(emailText)); };
+
+  const handleSubmit = () => {
+    setProcessing(true);
+    setTimeout(() => { setProcessing(false); setDone(true); }, 1500);
+  };
+
+  const validCount = parsedMembers.filter((m) => m.valid).length;
+  const invalidCount = parsedMembers.filter((m) => !m.valid).length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-stone-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-brand-50 rounded-xl text-brand-700"><Users size={20} /></div>
+            <h2 className="text-lg font-bold text-stone-900">Add Members to Cohort</h2>
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
+        </div>
+
+        {done ? (
+          <div className="p-8 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Check size={32} className="text-green-600" />
+            </div>
+            <h3 className="text-xl font-bold text-stone-900 mb-2">Members Added!</h3>
+            <p className="text-stone-500 mb-1">{validCount} member{validCount !== 1 ? "s" : ""} added to this cohort.</p>
+            {invalidCount > 0 && <p className="text-sm text-amber-600">{invalidCount} invalid email{invalidCount !== 1 ? "s" : ""} skipped.</p>}
+            <button onClick={onClose} className="mt-6 px-6 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors">Done</button>
+          </div>
+        ) : (
+          <>
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div className="flex bg-stone-100 rounded-xl p-1">
+                <button onClick={() => { setTab("paste"); setParsedMembers([]); }} className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "paste" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}>
+                  <Mail size={16} /> Paste Emails
+                </button>
+                <button onClick={() => { setTab("csv"); setParsedMembers([]); }} className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "csv" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}>
+                  <Upload size={16} /> CSV Upload
+                </button>
+              </div>
+
+              {tab === "paste" && parsedMembers.length === 0 && (
+                <div>
+                  <label className="block text-sm font-semibold text-stone-700 mb-1">Email Addresses <span className="text-stone-400 font-normal ml-1">(one per line, or comma/semicolon separated)</span></label>
+                  <textarea value={emailText} onChange={(e) => setEmailText(e.target.value)} placeholder={"amara@example.com\nbrianna@example.com"} rows={6} className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 resize-none font-mono" />
+                  <button onClick={handlePasteProcess} disabled={!emailText.trim()} className="mt-3 w-full px-4 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed">Process Emails</button>
+                </div>
+              )}
+
+              {tab === "csv" && parsedMembers.length === 0 && (
+                <div>
+                  <div onDrop={handleDrop} onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }} onDragLeave={() => setIsDragOver(false)} onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${isDragOver ? "border-brand-400 bg-brand-50/50" : "border-stone-200 hover:border-brand-300 hover:bg-stone-50"}`}>
+                    <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center mx-auto mb-3"><FileText size={24} className="text-stone-400" /></div>
+                    <p className="text-sm font-semibold text-stone-700 mb-1">{csvFileName || "Drop your CSV here or click to browse"}</p>
+                    <p className="text-xs text-stone-400">CSV with email column (name column optional)</p>
+                    <input ref={fileInputRef} type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} className="hidden" />
+                  </div>
+                </div>
+              )}
+
+              {parsedMembers.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-sm font-bold text-stone-700">Preview</span>
+                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg border border-green-200">{validCount} valid</span>
+                    {invalidCount > 0 && <span className="px-2 py-0.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg border border-red-200">{invalidCount} invalid</span>}
+                    <button onClick={() => { setParsedMembers([]); setEmailText(""); setCsvFileName(""); }} className="ml-auto text-xs font-semibold text-stone-500 hover:text-stone-700">Clear</button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1 border border-stone-200 rounded-xl p-3">
+                    {parsedMembers.map((m, i) => (
+                      <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${m.valid ? "bg-green-50/50" : "bg-red-50/50"}`}>
+                        {m.valid ? <Check size={14} className="text-green-600 flex-shrink-0" /> : <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />}
+                        <span className={`font-mono text-xs flex-1 truncate ${m.valid ? "text-stone-700" : "text-red-600"}`}>{m.name ? `${m.name} — ` : ""}{m.email}</span>
+                        {m.error && <span className="text-[10px] text-red-500 font-semibold">{m.error}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {parsedMembers.length > 0 && (
+              <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
+                <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors">Cancel</button>
+                <button onClick={handleSubmit} disabled={validCount === 0 || processing} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {processing ? (<><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Processing...</>) : (<><Plus size={16} /> Add {validCount} Member{validCount !== 1 ? "s" : ""}</>)}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -8,3 +8,4 @@ export { ToastProvider, useToast, type Toast, type ToastVariant } from "./toast"
 export { AvatarInitials, type AvatarInitialsProps, type AvatarSize } from "./avatar-initials";
 export { Skeleton, SkeletonCard, SkeletonRow, type SkeletonProps, type SkeletonCardProps } from "./skeleton";
 export { ErrorBoundary, type ErrorBoundaryProps } from "./error-boundary";
+export { DatePicker, type DatePickerProps } from "./date-picker";

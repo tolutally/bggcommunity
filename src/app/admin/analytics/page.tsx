@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Users, Calendar, TrendingUp, Activity, Download, Check, ChevronDown, X, Eye } from "lucide-react";
+import { ArrowDown, ArrowUp, Users, Calendar, TrendingUp, Activity, Download, Check, ChevronDown, X, Eye, FileSpreadsheet, FileText } from "lucide-react";
 import { useState } from "react";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { DatePicker } from "@/components/ui/date-picker";
+import { exportCSV, exportXLSX, exportPDF } from "@/lib/export";
 
 // Demo data for platform growth
 const GROWTH_DATA = {
@@ -64,6 +66,7 @@ export default function AdminAnalyticsPage() {
     const [customEnd, setCustomEnd] = useState("");
     const [showCustomPicker, setShowCustomPicker] = useState(false);
     const [exportSuccess, setExportSuccess] = useState(false);
+    const [showExportMenu, setShowExportMenu] = useState(false);
     const [drillDownCohort, setDrillDownCohort] = useState<string | null>(null);
 
     // Generate custom range data
@@ -87,19 +90,20 @@ export default function AdminAnalyticsPage() {
 
     const data = timeRange === "custom" ? getCustomData() : GROWTH_DATA[timeRange];
 
-    const handleExport = () => {
-        const csvRows = ["Period,Total Members,Active Users"];
-        data.labels.forEach((label, i) => {
-            csvRows.push(`${label},${data.members[i]},${data.active[i]}`);
-        });
-        const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `analytics-report-${timeRange}-${new Date().toISOString().split("T")[0]}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+    const getExportData = () => {
+        const headers = ["Period", "Total Members", "Active Users"];
+        const rows = data.labels.map((label, i) => [label, data.members[i], data.active[i]] as (string | number)[]);
+        return { headers, rows };
+    };
+
+    const handleExport = (format: "csv" | "xlsx" | "pdf" = "csv") => {
+        const { headers, rows } = getExportData();
+        const basename = `analytics-report-${timeRange}-${new Date().toISOString().split("T")[0]}`;
+        if (format === "csv") exportCSV(headers, rows, basename);
+        else if (format === "xlsx") exportXLSX(headers, rows, basename);
+        else exportPDF(headers, rows, basename, { title: "Platform Analytics Report", subtitle: `Time range: ${timeRange}` });
         setExportSuccess(true);
+        setShowExportMenu(false);
         setTimeout(() => setExportSuccess(false), 3000);
     };
 
@@ -149,26 +153,35 @@ export default function AdminAnalyticsPage() {
                         </div>
                     )}
 
-                    <button
-                        onClick={handleExport}
-                        className="bg-stone-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors flex items-center gap-2"
-                    >
-                        {exportSuccess ? <><Check size={16} /> Exported!</> : <><Download size={16} /> Export Report</>}
-                    </button>
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowExportMenu(m => !m)}
+                            className="bg-stone-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors flex items-center gap-2"
+                        >
+                            {exportSuccess ? <><Check size={16} /> Exported!</> : <><Download size={16} /> Export Report <ChevronDown size={14} /></>}
+                        </button>
+                        {showExportMenu && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl border border-stone-200 shadow-xl z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                                <button onClick={() => handleExport("csv")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
+                                    <Download size={15} className="text-stone-400" /> Export as CSV
+                                </button>
+                                <button onClick={() => handleExport("xlsx")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
+                                    <FileSpreadsheet size={15} className="text-green-600" /> Export as Excel
+                                </button>
+                                <button onClick={() => handleExport("pdf")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
+                                    <FileText size={15} className="text-red-500" /> Export as PDF
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {/* Custom Date Picker */}
             {showCustomPicker && (
                 <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-lg flex flex-col sm:flex-row items-end gap-4">
-                    <div className="flex-1">
-                        <label className="block text-sm font-semibold text-stone-700 mb-1">Start Date</label>
-                        <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="w-full px-4 py-2.5 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
-                    </div>
-                    <div className="flex-1">
-                        <label className="block text-sm font-semibold text-stone-700 mb-1">End Date</label>
-                        <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="w-full px-4 py-2.5 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
-                    </div>
+                    <DatePicker value={customStart} onChange={setCustomStart} label="Start Date" max={customEnd || undefined} className="flex-1" />
+                    <DatePicker value={customEnd} onChange={setCustomEnd} label="End Date" min={customStart || undefined} className="flex-1" />
                     <div className="flex gap-2">
                         <button onClick={() => setShowCustomPicker(false)} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-stone-50 transition-colors">Cancel</button>
                         <button onClick={applyCustomRange} disabled={!customStart || !customEnd} className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Apply</button>
@@ -265,7 +278,7 @@ export default function AdminAnalyticsPage() {
                             </div>
                         </div>
                         <div className="p-6 border-t border-stone-100 bg-stone-50 flex justify-end">
-                            <button onClick={() => { setDrillDownCohort(null); handleExport(); }} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-bold hover:bg-stone-800 transition-colors">
+                            <button onClick={() => { setDrillDownCohort(null); handleExport("xlsx"); }} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-bold hover:bg-stone-800 transition-colors">
                                 <Download size={14} /> Export Cohort Data
                             </button>
                         </div>

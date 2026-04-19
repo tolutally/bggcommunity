@@ -94,13 +94,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // null = still loading; true/false = definitive
     // If the API returned a user, use their flag.
-    // If API finished loading but returned no user (error/no profile), treat as incomplete.
+    // If API finished loading but returned no user (error/no profile),
+    // check localStorage for local onboarding completion flag.
+    const localOnboardingDone = typeof window !== "undefined"
+        && localStorage.getItem("bgg_onboarding_complete") === "true";
+
     const onboardingComplete = apiLoading
         ? null
         : apiUser
           ? apiUser.onboardingComplete
           : isSignedIn
-            ? false
+            ? localOnboardingDone || false
             : null;
 
     return (

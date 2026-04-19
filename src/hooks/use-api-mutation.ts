@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useSWRConfig } from "swr";
-import { apiClient, ApiRequestError } from "@/lib/api";
+import { apiClient, ApiRequestError, handle401 } from "@/lib/api";
 
 type HttpMethod = "POST" | "PATCH" | "PUT" | "DELETE";
 
@@ -76,6 +76,8 @@ export function useApiMutation<TData = unknown, TBody = unknown>(
           err instanceof ApiRequestError
             ? err
             : new ApiRequestError("Unknown error", 0);
+
+        if (apiErr.status === 401) handle401();
 
         setState({ data: null, error: apiErr, isLoading: false });
         onError?.(apiErr);

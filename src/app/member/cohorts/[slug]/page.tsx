@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Calendar, Users, Clock, FolderOpen,
   FileText, Download, Search, Video, Play,
-  MapPin, X, ExternalLink,
+  MapPin, X, ExternalLink, Lock,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,13 +15,22 @@ import {
   useCohort, useCohortMembers, useCohortSessions, useCohortResources,
   fmtCohortDate, fmtSessionMonth, fmtSessionDay, fmtSessionTime, fmtDuration,
 } from "@/hooks/use-cohorts";
+import { useUser } from "@/context/UserContext";
 import type { CohortMember } from "@/lib/types";
 
 export default function MemberCohortPage() {
   const { slug } = useParams();
   const slugStr = slug as string;
   const { cohort, isLoading, error } = useCohort(slugStr);
+  const { members } = useCohortMembers(slugStr);
+  const { apiUser } = useUser();
   const [activeTab, setActiveTab] = useState("sessions");
+
+  // Check if current user is a member of this cohort
+  const isMember = useMemo(() => {
+    if (!apiUser?.id || members.length === 0) return true; // default to true while loading
+    return members.some((m) => m.id === apiUser.id);
+  }, [apiUser?.id, members]);
 
   if (isLoading) {
     return (
@@ -75,9 +84,23 @@ export default function MemberCohortPage() {
 
         {/* Tab Content */}
         <div>
-          {activeTab === "sessions" && <SessionsTab slug={slugStr} />}
-          {activeTab === "resources" && <ResourcesTab slug={slugStr} />}
-          {activeTab === "members" && <MembersTab slug={slugStr} />}
+          {!isMember ? (
+            <div className="text-center py-16">
+              <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Lock size={28} className="text-stone-400" />
+              </div>
+              <h3 className="text-lg font-bold text-stone-900 mb-2">Members Only</h3>
+              <p className="text-sm text-stone-500 max-w-md mx-auto">
+                You need to be a member of this cohort to view sessions, resources, and other content. Contact an admin to get added.
+              </p>
+            </div>
+          ) : (
+            <>
+              {activeTab === "sessions" && <SessionsTab slug={slugStr} />}
+              {activeTab === "resources" && <ResourcesTab slug={slugStr} />}
+              {activeTab === "members" && <MembersTab slug={slugStr} />}
+            </>
+          )}
         </div>
       </div>
     </ErrorBoundary>

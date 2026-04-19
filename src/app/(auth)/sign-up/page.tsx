@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
-import { useSignUp } from "@clerk/nextjs";
+import { useSignUp, useClerk } from "@clerk/nextjs";
 
 function GoogleIcon() {
   return (
@@ -37,6 +38,8 @@ type Step = "form" | "verify";
 
 export default function SignUpPage() {
   const { signUp } = useSignUp();
+  const { signOut } = useClerk();
+  const router = useRouter();
 
   const [step, setStep] = useState<Step>("form");
   const [firstName, setFirstName] = useState("");
@@ -51,11 +54,20 @@ export default function SignUpPage() {
 
   const handleSocialSignUp = async (strategy: OAuthStrategy) => {
     if (!signUp) return;
-    await signUp.sso({
-      strategy,
-      redirectUrl: `${window.location.origin}/sso-callback`,
-      redirectCallbackUrl: `${window.location.origin}/member`,
-    });
+    try {
+      await signUp.sso({
+        strategy,
+        redirectUrl: `${window.location.origin}/sso-callback`,
+        redirectCallbackUrl: `${window.location.origin}/onboarding`,
+      });
+    } catch {
+      await signOut();
+      await signUp.sso({
+        strategy,
+        redirectUrl: `${window.location.origin}/sso-callback`,
+        redirectCallbackUrl: `${window.location.origin}/onboarding`,
+      });
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -101,6 +113,7 @@ export default function SignUpPage() {
       }
       if (signUp.status === "complete") {
         await signUp.finalize();
+        router.push("/onboarding");
       }
     } catch (err: unknown) {
       const e = err as { errors?: { message: string }[]; message?: string };

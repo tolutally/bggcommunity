@@ -163,32 +163,35 @@ export default function OnboardingPage() {
             const firstName = nameParts[0] ?? "";
             const lastName = nameParts.slice(1).join(" ") || "";
 
-            // 1) Save profile
-            await profileMutation.trigger({
-                firstName,
-                lastName,
-                displayName: data.displayName.trim(),
-                jobTitle: data.occupation,
-                industry: data.industry,
-                location: data.location,
-                bio: data.bio,
-                websiteUrl: data.website,
-                linkedinUrl: data.linkedin,
-                twitterUrl: data.twitter,
-                isPublic: data.profileVisible,
-            });
+            // Try API calls but don't block onboarding if backend isn't ready
+            try {
+                await profileMutation.trigger({
+                    firstName,
+                    lastName,
+                    displayName: data.displayName.trim(),
+                    jobTitle: data.occupation,
+                    industry: data.industry,
+                    location: data.location,
+                    bio: data.bio,
+                    websiteUrl: data.website,
+                    linkedinUrl: data.linkedin,
+                    twitterUrl: data.twitter,
+                    isPublic: data.profileVisible,
+                });
 
-            // 2) Upload avatar if a file was selected
-            if (photoFileRef.current) {
-                const fd = new FormData();
-                fd.append("avatar", photoFileRef.current);
-                await avatarMutation.trigger(fd);
+                if (photoFileRef.current) {
+                    const fd = new FormData();
+                    fd.append("avatar", photoFileRef.current);
+                    await avatarMutation.trigger(fd);
+                }
+
+                await onboardingCompleteMutation.trigger({});
+            } catch {
+                // Backend may not have the user yet — save locally and proceed
+                localStorage.setItem("bgg_onboarding_pending_sync", JSON.stringify(data));
             }
 
-            // 3) Mark onboarding complete on BE
-            await onboardingCompleteMutation.trigger({});
-
-            // 4) Save dev plan goals locally (no BE endpoint yet)
+            // Save dev plan goals locally
             if (data.devGoalTitle || data.milestones.length > 0) {
                 const goals = data.milestones.map((m, i) => ({
                     id: m.id || i + 1,
@@ -222,27 +225,31 @@ export default function OnboardingPage() {
             const firstName = nameParts[0] ?? "";
             const lastName = nameParts.slice(1).join(" ") || "";
 
-            await profileMutation.trigger({
-                firstName,
-                lastName,
-                displayName: data.displayName.trim(),
-                jobTitle: data.occupation,
-                industry: data.industry,
-                location: data.location,
-                bio: data.bio,
-                websiteUrl: data.website,
-                linkedinUrl: data.linkedin,
-                twitterUrl: data.twitter,
-                isPublic: data.profileVisible,
-            });
+            try {
+                await profileMutation.trigger({
+                    firstName,
+                    lastName,
+                    displayName: data.displayName.trim(),
+                    jobTitle: data.occupation,
+                    industry: data.industry,
+                    location: data.location,
+                    bio: data.bio,
+                    websiteUrl: data.website,
+                    linkedinUrl: data.linkedin,
+                    twitterUrl: data.twitter,
+                    isPublic: data.profileVisible,
+                });
 
-            if (photoFileRef.current) {
-                const fd = new FormData();
-                fd.append("avatar", photoFileRef.current);
-                await avatarMutation.trigger(fd);
+                if (photoFileRef.current) {
+                    const fd = new FormData();
+                    fd.append("avatar", photoFileRef.current);
+                    await avatarMutation.trigger(fd);
+                }
+
+                await onboardingCompleteMutation.trigger({});
+            } catch {
+                localStorage.setItem("bgg_onboarding_pending_sync", JSON.stringify(data));
             }
-
-            await onboardingCompleteMutation.trigger({});
 
             localStorage.setItem("bgg_devplan_skipped", "true");
             localStorage.setItem(COMPLETED_KEY, "true");

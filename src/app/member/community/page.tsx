@@ -212,23 +212,31 @@ function PostCard({ post, isOwner, expanded, onToggleExpand, onDelete, groupId, 
         try { await createComment.trigger({ body }); setCommentBody(""); onMutate(); } catch { toast("Failed to add comment", "error"); }
     };
 
+    const isDeleted = post.deletedAt != null || post.body === "[deleted]";
+
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 p-5">
+        <div className={`bg-white rounded-2xl border border-stone-200 p-5 ${isDeleted ? "opacity-60" : ""}`}>
             <div className="flex items-start gap-3 mb-3">
-                <AvatarInitials name={authorName} src={post.author.profile?.avatarUrl} size="sm" />
+                <AvatarInitials name={isDeleted ? "?" : authorName} src={isDeleted ? undefined : post.author.profile?.avatarUrl} size="sm" />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                        <span className="font-semibold text-stone-900 text-sm">{authorName}</span>
+                        <span className="font-semibold text-stone-900 text-sm">{isDeleted ? "[deleted]" : authorName}</span>
                         <span className="text-xs text-stone-400">{fmtPostDate(post.createdAt)}</span>
                     </div>
                 </div>
-                {isOwner && (
+                {isOwner && !isDeleted && (
                     <button onClick={onDelete} className="p-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete post"><Trash2 size={14} /></button>
                 )}
             </div>
 
-            {post.title && <h3 className="font-bold text-stone-900 mb-2">{post.title}</h3>}
-            <p className="text-sm text-stone-700 whitespace-pre-wrap">{post.body}</p>
+            {isDeleted ? (
+                <p className="text-sm text-stone-400 italic">[This post has been deleted]</p>
+            ) : (
+                <>
+                    {post.title && <h3 className="font-bold text-stone-900 mb-2">{post.title}</h3>}
+                    <p className="text-sm text-stone-700 whitespace-pre-wrap">{post.body}</p>
+                </>
+            )}
 
             {/* Comments toggle */}
             <div className="mt-4 pt-3 border-t border-stone-100">

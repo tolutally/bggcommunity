@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
-import { useSignIn } from "@clerk/nextjs";
+import { useSignIn, useClerk } from "@clerk/nextjs";
 
 function GoogleIcon() {
   return (
@@ -36,6 +37,8 @@ type OAuthStrategy = "oauth_google" | "oauth_linkedin_oidc" | "oauth_facebook";
 
 export default function SignInPage() {
   const { signIn } = useSignIn();
+  const { signOut } = useClerk();
+  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,6 +59,7 @@ export default function SignInPage() {
       }
       if (signIn.status === "complete") {
         await signIn.finalize();
+        router.push("/member");
       }
     } catch (err: unknown) {
       const e = err as { message?: string };
@@ -67,11 +71,20 @@ export default function SignInPage() {
 
   const handleSocialSignIn = async (strategy: OAuthStrategy) => {
     if (!signIn) return;
-    await signIn.sso({
-      strategy,
-      redirectUrl: `${window.location.origin}/sso-callback`,
-      redirectCallbackUrl: `${window.location.origin}/member`,
-    });
+    try {
+      await signIn.sso({
+        strategy,
+        redirectUrl: `${window.location.origin}/sso-callback`,
+        redirectCallbackUrl: `${window.location.origin}/member`,
+      });
+    } catch {
+      await signOut();
+      await signIn.sso({
+        strategy,
+        redirectUrl: `${window.location.origin}/sso-callback`,
+        redirectCallbackUrl: `${window.location.origin}/member`,
+      });
+    }
   };
 
   return (
