@@ -212,7 +212,7 @@ function PostCard({ post, isOwner, expanded, onToggleExpand, onDelete, groupId, 
         try { await createComment.trigger({ body }); setCommentBody(""); onMutate(); } catch { toast("Failed to add comment", "error"); }
     };
 
-    const isDeleted = post.deletedAt != null || post.body === "[deleted]";
+    const isDeleted = post.isDeleted || post.body === "[deleted]";
 
     return (
         <div className={`bg-white rounded-2xl border border-stone-200 p-5 ${isDeleted ? "opacity-60" : ""}`}>
