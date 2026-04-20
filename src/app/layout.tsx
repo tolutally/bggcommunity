@@ -15,6 +15,8 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "BGG Community",
   description: "Black Girls Gather - Member Dashboard",
+  manifest: "/site.webmanifest",
+  themeColor: "#f9f3f3",
 };
 
 export default function RootLayout({
