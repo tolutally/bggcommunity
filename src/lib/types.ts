@@ -223,4 +223,7 @@ export interface MemberCard {
   id: string;
   email: string;
   profile: Profile | null;
+  role?: string;
+  status?: string;
+  createdAt?: string;
 }
