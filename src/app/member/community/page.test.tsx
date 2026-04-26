@@ -98,7 +98,8 @@ describe("member community page smoke", () => {
         await screen.findByText("Backend Guild");
         await screen.findByText("Welcome everyone");
 
-        await user.type(screen.getByPlaceholderText("Write a reply..."), "Looks good");
+        const replyInput = await screen.findByPlaceholderText("Write a reply...");
+        await user.type(replyInput, "Looks good");
         await user.click(screen.getByRole("button", { name: "Reply" }));
         await waitFor(() => {
             expect(communityApi.addCommunityComment).toHaveBeenCalledTimes(1);
