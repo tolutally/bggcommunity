@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
 import { useSignUp } from "@clerk/nextjs";
 
@@ -37,6 +38,7 @@ type Step = "form" | "verify";
 
 export default function SignUpPage() {
   const { signUp } = useSignUp();
+  const router = useRouter();
 
   const [step, setStep] = useState<Step>("form");
   const [firstName, setFirstName] = useState("");
@@ -54,7 +56,7 @@ export default function SignUpPage() {
     await signUp.sso({
       strategy,
       redirectUrl: `${window.location.origin}/sso-callback`,
-      redirectCallbackUrl: `${window.location.origin}/member`,
+      redirectCallbackUrl: `${window.location.origin}/onboarding`,
     });
   };
 
@@ -101,6 +103,7 @@ export default function SignUpPage() {
       }
       if (signUp.status === "complete") {
         await signUp.finalize();
+        router.replace("/onboarding");
       }
     } catch (err: unknown) {
       const e = err as { errors?: { message: string }[]; message?: string };

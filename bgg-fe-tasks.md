@@ -1,52 +1,52 @@
 # BGG Frontend Tasks — Audit Report
 
-> **Audited:** March 6, 2026
+> **Audited:** April 26, 2026
 > **Codebase:** `bgg-fe` (Next.js)
-> **Total Tasks:** 103 | **Complete:** 45 | **Partial:** 19 | **Not Started:** 39
+> **Total Tasks:** 103 | **Complete:** 69 | **Partial:** 18 | **Not Started:** 16
 
 ---
 
 ## Sprint 1 — Auth & Onboarding (16 tasks)
 
-### M0 Landing/Auth — NOT STARTED (0/8)
+### M0 Landing/Auth — PARTIALLY COMPLETE (7/8)
 
 | Task | Status | Details |
 |------|--------|---------|
-| **FE-M0-01** Auth page layout | ❌ Not started | No auth page exists. Root `/` just redirects to `/member` |
-| **FE-M0-02** Google OAuth button | ❌ Not started | No OAuth component |
-| **FE-M0-03** Email + password sign-in form | ❌ Not started | No login form |
-| **FE-M0-04** Email + password sign-up form | ❌ Not started | No registration form |
-| **FE-M0-05** Form validation (signup) | ❌ Not started | No validation hooks |
-| **FE-M0-06** Forgot Password flow | ❌ Not started | No forgot password page |
-| **FE-M0-07** Auth routing logic | ❌ Not started | No auth guards, no useAuth hook. Root redirects blindly to `/member` |
-| **FE-M0-08** Auth page responsive styling | ❌ Not started | N/A — no auth page to style |
+| **FE-M0-01** Auth page layout | ✅ Complete | Auth route layout and branded split-screen auth shell implemented in `src/app/(auth)/layout.tsx` |
+| **FE-M0-02** Google OAuth button | ✅ Complete | Google social auth button implemented in sign-in/sign-up pages via Clerk SSO |
+| **FE-M0-03** Email + password sign-in form | ✅ Complete | Sign-in form implemented with Clerk password strategy in `src/app/(auth)/sign-in/page.tsx` |
+| **FE-M0-04** Email + password sign-up form | ✅ Complete | Sign-up form with email verification flow implemented in `src/app/(auth)/sign-up/page.tsx` |
+| **FE-M0-05** Form validation (signup) | 🟡 Partial | Core field validation and Clerk error handling are in place; no dedicated reusable validation hook yet |
+| **FE-M0-06** Forgot Password flow | ✅ Complete | Clerk forgot-password flow now supports code request, code verification, and new password submission |
+| **FE-M0-07** Auth routing logic | ✅ Complete | Clerk middleware route protection + post-auth redirects and onboarding gating are in place |
+| **FE-M0-08** Auth page responsive styling | ✅ Complete | Auth pages are styled responsively across desktop/mobile |
 
-### M1 Onboarding — NOT STARTED (0/8)
+### M1 Onboarding — COMPLETE (8/8)
 
 | Task | Status | Details |
 |------|--------|---------|
-| **FE-M1-01** Multi-step onboarding shell | ❌ Not started | No onboarding route or component |
-| **FE-M1-02** Step 1 — Basic info form | ❌ Not started | |
-| **FE-M1-03** Step 2 — Profile photo upload | ❌ Not started | |
-| **FE-M1-04** Step 3 — Social links input | ❌ Not started | |
-| **FE-M1-05** Step 4 — Privacy toggles | ❌ Not started | |
-| **FE-M1-06** Step 5 — Optional Dev Plan | ❌ Not started | |
-| **FE-M1-07** Onboarding state persistence | ❌ Not started | |
-| **FE-M1-08** 'Complete Dev Plan' banner | ❌ Not started | |
+| **FE-M1-01** Multi-step onboarding shell | ✅ Complete | `/onboarding` route with stepper shell and navigation implemented |
+| **FE-M1-02** Step 1 — Basic info form | ✅ Complete | Basic info form implemented with required fields and optional company |
+| **FE-M1-03** Step 2 — Profile photo upload | ✅ Complete | Avatar upload and preview flow implemented |
+| **FE-M1-04** Step 3 — Social links input | ✅ Complete | Website, LinkedIn, and X/Twitter inputs implemented |
+| **FE-M1-05** Step 4 — Privacy toggles | ✅ Complete | Privacy preferences toggles implemented |
+| **FE-M1-06** Step 5 — Optional Dev Plan | ✅ Complete | Optional step supports skip and dynamic milestone add/remove |
+| **FE-M1-07** Onboarding state persistence | ✅ Complete | Per-user onboarding draft persisted in localStorage with completion tracking |
+| **FE-M1-08** 'Complete Dev Plan' banner | ✅ Complete | Home dashboard reminder banner now appears until dev plan milestones are completed |
 
 ---
 
 ## Sprint 2 — Member Dashboard & Events (12 tasks)
 
-### M2.0 App Shell/Navigation — COMPLETE (4/5)
+### M2.0 App Shell/Navigation — COMPLETE (5/5)
 
 | Task | Status | Details |
 |------|--------|---------|
 | **FE-M2-01** Global app shell layout | ✅ Complete | `member/layout.tsx` uses `FloatingNav` with SideNav (desktop) + BottomNav (mobile) + TopBar with notification bell + user avatar |
 | **FE-M2-02** SideNav links + active states | ✅ Complete | `FloatingNav` renders nav items: Dashboard, Community, Members, Jobs, Cohorts with active route highlighting and dynamic cohort sub-links |
-| **FE-M2-03** Notification bell dropdown | ✅ Complete (UI) | `NotificationsTray` component with unread badge, filter tabs, mark-all-read, notification items with icons/timestamps. **Mock data only** |
+| **FE-M2-03** Notification bell dropdown | ✅ Complete | `NotificationsTray` now loads backend-derived feed (events + joined-community activity) and persists per-user read/dismiss state in localStorage |
 | **FE-M2-04** User avatar menu | ✅ Complete | `FloatingNav` has profile dropdown with View Profile, Settings, Sign Out links |
-| **FE-M2-05** Auth route guards | ❌ Not started | No `ProtectedRoute` HOC, no auth check. All routes are accessible without login |
+| **FE-M2-05** Auth route guards | ✅ Complete | Clerk middleware guards protected routes and member layout enforces onboarding completion |
 
 ### M3 Dashboard Home — PARTIALLY COMPLETE (5/7)
 
@@ -58,7 +58,7 @@
 | **FE-M3-04** Past Recordings section | ✅ Complete (UI) | RecordingCard with YouTube thumbnail + title. Click opens YouTube URL. Empty placeholder state. Filter by cohort. Mock data |
 | **FE-M3-05** Featured Jobs section | ✅ Complete (UI) | JobCardMini with title, company, location. Apply button (external URL). Seek Referral button. Mock data |
 | **FE-M3-06** Action Center panel | ✅ Complete (UI) | ActionCenterPanel with milestone items (title, due date, overdue flag). Link to dev plan. "Set new plan" CTA. Mock data |
-| **FE-M3-07** Wire dashboard data fetching | ❌ Not started | No hooks (`useSchedule`, `useRecordings`, `useFeaturedJobs`, `useActionCenter`). No error boundaries per section. All data is inline mock arrays |
+| **FE-M3-07** Wire dashboard data fetching | ✅ Complete | Dashboard now fetches live schedule and featured jobs data (`fetchEvents`, `fetchJobs`) with loading/error states and invalidation-driven reloads |
 
 ---
 
@@ -75,7 +75,7 @@
 | **FE-C3-05** Recordings tab | ✅ Complete (UI) | RecordingCard reused. Cohort-filtered. Mock data |
 | **FE-C3-06** Cohort Feed tab | ✅ Complete (UI) | PostCard with author, timestamp, body. Reply thread. CreatePostForm (title + body). CreateReplyForm. DeletePostButton with confirm modal. Empty state. All mock/local state |
 | **FE-C3-07** Cohort feed access control | ❌ Not started | No membership check. Feed tab is visible to everyone |
-| **FE-C3-08** Wire cohort data fetching | ❌ Not started | No `useCohort` hook. No API calls. All data is hardcoded inline |
+| **FE-C3-08** Wire cohort data fetching | ✅ Complete | Cohort detail, sessions, resources, and members now load from API clients with retry UX and optimistic RSVP rollback support |
 
 ---
 
@@ -118,9 +118,9 @@
 | **FE-D6-03** PostCard component | ✅ Complete (UI) | Author avatar + name + timestamp, post title + body, reply count, delete button (own posts), expand replies toggle. Mock data |
 | **FE-D6-04** ReplyThread component | ✅ Complete (UI) | ReplyItems (chronological), inline CreateReplyForm, delete own replies with confirm. "[deleted]" placeholder. Mock data |
 | **FE-D6-05** Delete flow (soft delete) | 🟡 Partial | Confirm modal exists. Removes from local state. No API call. "[deleted]" display not implemented for replies (just removes entirely) |
-| **FE-D6-06** Wire community feed data | ❌ Not started | No `useCommunityFeed` hook. No pagination/infinite scroll. No optimistic updates. All mock |
+| **FE-D6-06** Wire community feed data | ✅ Complete | Community feed now uses cursor pagination with API-backed load/reload, optimistic create/reply/join-leave mutations, rollback, and retry UX |
 
-### M5 Member Directory — PARTIALLY COMPLETE (4/6)
+### M5 Member Directory — PARTIALLY COMPLETE (3/6)
 
 | Task | Status | Details |
 |------|--------|---------|
@@ -129,7 +129,7 @@
 | **FE-MD6-03** Profile Card/modal | ✅ Complete (UI) | ProfileModal with full avatar, name, occupation, bio. Social links row. Close button. Mock data |
 | **FE-MD6-04** Visibility rules | 🟡 Partial | Some visibility toggle exists but `profileVisible` / `socialsVisible` enforcement is incomplete or not driven by real user data |
 | **FE-MD6-05** Member search (real-time) | 🟡 Partial | Debounced search input filters client-side by name. No API search. No no-results empty state |
-| **FE-MD6-06** Profile Settings page | ✅ Complete (UI) | `member/profile/page.tsx` — Edit name, occupation, photo, social links, privacy toggles. Saves to localStorage only |
+| **FE-MD6-06** Profile Settings page | 🟡 Partial | `member/profile/page.tsx` now loads/saves profile fields via `/users/me` + `/users/me/profile`, updates privacy via `/users/me/privacy`, and uploads avatar via `/users/me/avatar`; password/change-account UX still needs full backend completion flow |
 
 ---
 
@@ -139,7 +139,9 @@
 
 | Task | Status | Details |
 |------|--------|---------|
-| **FE-DP7-01** Dev Plan page | ✅ Complete (UI) | `member/devplan/page.tsx` — PlanHeader with goal + date. MilestoneList. Add Milestone CTA. Empty state. localStorage persistence |
+| **FE-DP7-01** Dev Plan page | ✅ Complete (UI) | `member/devplan/page.tsx` — PlanHeader with goal + date. MilestoneList. Add Milestone CTA. Empty state. per-user localStorage persistence (backend endpoint not yet available) |
+
+Note: When a real dev-plan API is added, this storage layer can be swapped behind a small client helper with minimal UI churn.
 | **FE-DP7-02** CreateDevPlanForm | ✅ Complete (UI) | GoalTitleInput + DescriptionTextarea + AddFirstMilestone + Save Plan. Works in local state, saves to localStorage |
 | **FE-DP7-03** MilestoneItem component | ✅ Complete (UI) | Title + DueDate + StatusBadge (Pending/Overdue/Complete) + MarkComplete checkbox + DeleteMilestone. localStorage |
 | **FE-DP7-04** AddMilestoneForm | ✅ Complete (UI) | TitleInput + DatePicker + Save/Cancel. Appends to milestone list in localStorage |
@@ -165,23 +167,23 @@
 | **FE-A8-03** Admin Dashboard overview | ✅ Complete (UI) | `admin/page.tsx` — StatCards (Total Members, Active, Inactive), CohortEngagementTable (posts/replies/RSVPs per cohort). Mock data |
 | **FE-A8-04** StatCard component | 🟡 Partial | StatCards exist with number + label. No trend indicator, no definition tooltip |
 
-### A3 Admin Members Management — PARTIALLY COMPLETE (3/5)
+### A3 Admin Members Management — PARTIALLY COMPLETE (2/5)
 
 | Task | Status | Details |
 |------|--------|---------|
-| **FE-A8-05** Members List page | ✅ Complete (UI) | `admin/members/page.tsx` — Table with name, email, joined date, status badge. Search + filter. Pagination. Mock data |
+| **FE-A8-05** Members List page | 🟡 Partial | `admin/members/page.tsx` now loads paginated members from backend (`/members`) with search/filter/view modes; admin-only member actions are still placeholder UI |
 | **FE-A8-06** Add Single Member modal | ✅ Complete (UI) | Email input + invite option + submit. Mock/local state |
 | **FE-A8-07** Bulk Add Members modal | ❌ Not started | No CSV dropzone, no paste emails, no bulk add UI |
 | **FE-A8-08** Member action menu | ✅ Complete (UI) | Dropdown: Suspend, Send Warning, Remove. Confirm modals. Mock state |
 | **FE-A8-09** Send warning flow | 🟡 Partial | Warning textarea exists in modal. Submit updates local state. No POST to API |
 
-### A4 Admin Cohorts Management — PARTIALLY COMPLETE (4/7)
+### A4 Admin Cohorts Management — PARTIALLY COMPLETE (5/7)
 
 | Task | Status | Details |
 |------|--------|---------|
 | **FE-A8-10** Cohorts List page | ✅ Complete (UI) | `admin/cohorts/page.tsx` — List with name, member count, date. Create New Cohort button. Click navigates to detail. Mock data |
 | **FE-A8-11** Create Cohort modal/form | ✅ Complete (UI) | Name + Description + Submit. Local state |
-| **FE-A8-12** Cohort Detail page (admin) | ✅ Complete (UI) | `admin/cohorts/[slug]/page.tsx` — Tabs: Members, Resources, Sessions, Recordings, Announcements. Header with edit option. Mock data |
+| **FE-A8-12** Cohort Detail page (admin) | ✅ Complete | `admin/cohorts/[slug]/page.tsx` now loads cohort detail, members, sessions, resources, and admin stats from backend APIs with loading/error states; action buttons remain UI-only |
 | **FE-A8-13** Add Members to Cohort panel | 🟡 Partial | Basic add-member UI exists but no CSV/bulk add reuse |
 | **FE-A8-14** Upload Resources panel | ✅ Complete (UI) | ResourceForm (title + URL) + ResourceList with delete. Mock data |
 | **FE-A8-15** Add Recording to Cohort | ✅ Complete (UI) | RecordingForm (title + YouTube URL) + auto-preview thumbnail + list with delete. Mock data |
@@ -208,8 +210,8 @@
 
 | Task | Status | Details |
 |------|--------|---------|
-| **FE-A8-24** Moderation view | ✅ Complete (UI) | `admin/moderation/page.tsx` — Combined post/reply list. Filter by Community/Cohort. Author, content, timestamp, delete button. Mock data |
-| **FE-A8-25** Admin delete flow | 🟡 Partial | Delete button exists on all posts. Removes from local state. No soft-delete "[deleted]" display, no API call |
+| **FE-A8-24** Moderation view | ✅ Complete | `admin/moderation/page.tsx` now loads live community posts/comments for review using backend community endpoints with search/filter/history states |
+| **FE-A8-25** Admin delete flow | 🟡 Partial | Delete now calls backend soft-delete endpoints for posts/comments; no dedicated profile/report lifecycle endpoint yet for full parity |
 | **FE-A8-26** Send Warning to member | 🟡 Partial | Modal with member name + warning textarea. Submit is local state only |
 
 ### A8.1 Admin Analytics & Export — PARTIALLY COMPLETE (1/4)
@@ -235,7 +237,7 @@
 | **FE-G-06** AvatarInitials fallback | ✅ Complete | `src/components/ui/avatar-initials` — 5 size presets, deterministic color from name hash, image fallback on error. Adopted in 10+ pages. |
 | **FE-G-07** StatusBadge | ✅ Complete | `src/components/ui/status-badge` — pill/tag/dot-only variants, 20+ presets (Active/Upcoming/Completed/etc). Adopted in admin/jobs, events, cohorts, devplan. |
 | **FE-G-08** DatePicker | 🟡 Partial | Native HTML date inputs used. No custom accessible DatePicker |
-| **FE-G-09** Global API error handling + 401 redirect | ❌ Not started | No API layer, no error interceptors |
+| **FE-G-09** Global API error handling + 401 redirect | 🟡 Partial | Shared `apiRequest`/`ApiError` layer is in place and used across clients, but centralized 401 redirect interception is still pending |
 | **FE-G-10** Responsive breakpoint system | ✅ Complete | Tailwind config with brand colors, responsive breakpoints, custom theme in `globals.css` |
 
 ---
@@ -244,25 +246,25 @@
 
 | Area | Total | ✅ Complete | 🟡 Partial | ❌ Not Started |
 |------|:-----:|:----------:|:----------:|:-------------:|
-| Sprint 1 — Auth & Onboarding | 16 | 0 | 0 | **16** |
-| Sprint 2 — App Shell | 5 | 4 | 0 | **1** |
-| Sprint 2 — Dashboard | 7 | 4 | 1 | **2** |
-| Sprint 3 — Cohorts | 8 | 6 | 0 | **2** |
+| Sprint 1 — Auth & Onboarding | 16 | 15 | 1 | **0** |
+| Sprint 2 — App Shell | 5 | 5 | 0 | **0** |
+| Sprint 2 — Dashboard | 7 | 5 | 1 | **1** |
+| Sprint 3 — Cohorts | 8 | 7 | 0 | **1** |
 | Sprint 4 — Recordings | 4 | 1 | 2 | **1** |
 | Sprint 5 — Jobs | 6 | 3 | 2 | **1** |
-| Sprint 6 — Community | 6 | 4 | 1 | **1** |
-| Sprint 6 — Member Directory | 6 | 4 | 1 | **1** |
+| Sprint 6 — Community | 6 | 5 | 1 | **0** |
+| Sprint 6 — Member Directory | 6 | 3 | 2 | **1** |
 | Sprint 7 — Dev Plan | 7 | 4 | 1 | **2** |
-| Sprint 8 — Admin Portal | 28 | 14 | 6 | **8** |
-| Global/Shared | 10 | 8 | 0 | **2** |
-| **TOTAL** | **103** | **52** | **14** | **37** |
+| Sprint 8 — Admin Portal | 28 | 13 | 7 | **8** |
+| Global/Shared | 10 | 8 | 1 | **1** |
+| **TOTAL** | **103** | **69** | **18** | **16** |
 
 ---
 
 ## Biggest Gaps (Blockers)
 
-1. **Entire auth system (Sprint 1)** — 16 tasks, zero done. No login, register, OAuth, forgot password, onboarding, or route guards
-2. **No API integration anywhere** — Every page uses hardcoded mock data. Zero hooks, zero fetch calls, zero real backend connectivity
+1. **Backend/API integration is now the main blocker** — Core auth/onboarding UI is implemented, but app state is still mostly local/mock until backend contracts are fully wired
+2. **Backend coverage is still incomplete** — Core member flows are now API-backed, but backend notification lifecycle and dev-plan endpoints/admin cohorts-list CRUD and some admin actions still rely on mock or local state
 3. **~~No shared component library~~** — ✅ RESOLVED. All 7 shared components (Toast, ConfirmModal, EmptyState, SkeletonLoader, ErrorBoundary, AvatarInitials, StatusBadge) built in `src/components/ui/` with barrel export. Inline duplicates migrated. ErrorBoundary wraps all 27 data pages.
 4. **Missing pages** — Recordings full list, Event Detail+RSVP, Referral Requests panel, Bulk Add Members, PDF export
 5. **DM Widget is a prototype** — send doesn't persist messages

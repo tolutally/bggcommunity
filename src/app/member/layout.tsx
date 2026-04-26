@@ -1,8 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { UserProvider } from "@/context/UserContext";
 import FloatingNav from "@/components/layout/FloatingNav";
+import { isOnboardingComplete } from "@/lib/onboarding";
 import {
     LayoutDashboard,
     MessageSquare,
@@ -46,6 +50,39 @@ export default function MemberLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const { isLoaded, userId } = useAuth();
+    const router = useRouter();
+    const [canRender, setCanRender] = useState(false);
+
+    useEffect(() => {
+        if (!isLoaded) {
+            return;
+        }
+
+        if (!userId) {
+            setCanRender(true);
+            return;
+        }
+
+        if (!isOnboardingComplete(userId)) {
+            router.replace("/onboarding");
+            return;
+        }
+
+        setCanRender(true);
+    }, [isLoaded, router, userId]);
+
+    if (!canRender) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-stone-50">
+                <div className="flex items-center gap-3 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm text-stone-500 shadow-sm">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-300 border-t-brand-700" />
+                    Loading your workspace...
+                </div>
+            </div>
+        );
+    }
+
     return (
         <SidebarProvider>
             <UserProvider>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { 
     Bell, 
     X, 
@@ -13,71 +14,36 @@ import {
     Clock,
     Trash2
 } from "lucide-react";
+import {
+    fetchNotificationsFeed,
+    loadNotificationState,
+    saveNotificationState,
+    type NotificationRecord,
+    type NotificationType,
+} from "@/lib/notifications";
+import { getApiErrorMessage } from "@/lib/jobs";
+import { useToast } from "@/components/ui/toast";
 
-type NotificationType = "event" | "message" | "achievement" | "community" | "system" | "reminder";
-
-interface Notification {
-    id: number;
-    type: NotificationType;
-    title: string;
-    description: string;
-    time: string;
+interface Notification extends NotificationRecord {
     read: boolean;
-    avatar?: string;
 }
 
-const MOCK_NOTIFICATIONS: Notification[] = [
-    {
-        id: 1,
-        type: "event",
-        title: "Upcoming Workshop",
-        description: "Leadership in Tech starts in 2 hours",
-        time: "2h",
-        read: false,
-    },
-    {
-        id: 2,
-        type: "message",
-        title: "Dr. Alisha Reid",
-        description: "Sent you a message about your mentorship session",
-        time: "3h",
-        read: false,
-        avatar: "https://i.pravatar.cc/150?u=alisha",
-    },
-    {
-        id: 3,
-        type: "achievement",
-        title: "Badge Earned!",
-        description: "You've completed your first workshop 🎉",
-        time: "1d",
-        read: false,
-    },
-    {
-        id: 4,
-        type: "community",
-        title: "New Discussion",
-        description: "Maya started a thread in Tech Careers",
-        time: "1d",
-        read: true,
-        avatar: "https://i.pravatar.cc/150?u=maya",
-    },
-    {
-        id: 5,
-        type: "system",
-        title: "Profile Update",
-        description: "Please complete your profile to unlock more features",
-        time: "2d",
-        read: true,
-    },
-    {
-        id: 6,
-        type: "reminder",
-        title: "Session Reminder",
-        description: "Don't forget your 1:1 session tomorrow at 3pm",
-        time: "2d",
-        read: true,
-    },
-];
+function formatRelativeTime(value: string) {
+    const date = new Date(value);
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+    if (diffMinutes < 1) return "now";
+    if (diffMinutes < 60) return `${diffMinutes}m`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}h`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d`;
+
+    return date.toLocaleDateString();
+}
 
 const notificationIcons: Record<NotificationType, React.ReactNode> = {
     event: <Calendar className="w-4 h-4 text-brand-600" />,
@@ -98,15 +64,65 @@ const notificationBgColors: Record<NotificationType, string> = {
 };
 
 export default function NotificationsTray() {
+    const { getToken, userId } = useAuth();
+    const { toast } = useToast();
     const [isOpen, setIsOpen] = useState(false);
-    const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+    const [feed, setFeed] = useState<NotificationRecord[]>([]);
+    const [state, setState] = useState<{ readIds: string[]; dismissedIds: string[] }>({ readIds: [], dismissedIds: [] });
     const [filter, setFilter] = useState<"all" | "unread">("all");
+    const [isLoading, setIsLoading] = useState(true);
     const trayRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setState(loadNotificationState(userId ?? null));
+    }, [userId]);
+
+    useEffect(() => {
+        saveNotificationState(userId ?? null, state);
+    }, [state, userId]);
+
+    const notifications: Notification[] = (() => {
+        const readSet = new Set(state.readIds);
+        const dismissedSet = new Set(state.dismissedIds);
+        return feed
+            .filter((item) => !dismissedSet.has(item.id))
+            .map((item) => ({ ...item, read: readSet.has(item.id) }));
+    })();
 
     const unreadCount = notifications.filter((n) => !n.read).length;
     const filteredNotifications = filter === "all" 
         ? notifications 
         : notifications.filter((n) => !n.read);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadNotifications() {
+            setIsLoading(true);
+            try {
+                const items = await fetchNotificationsFeed(getToken);
+                if (!cancelled) {
+                    setFeed(items);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    toast(getApiErrorMessage(error, "Unable to load notifications right now."), "error");
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoading(false);
+                }
+            }
+        }
+
+        if (isOpen) {
+            void loadNotifications();
+        }
+
+        return () => {
+            cancelled = true;
+        };
+    }, [getToken, isOpen, toast]);
 
     // Close tray when clicking outside
     useEffect(() => {
@@ -125,19 +141,24 @@ export default function NotificationsTray() {
         };
     }, [isOpen]);
 
-    const markAsRead = (id: number) => {
-        setNotifications((prev) =>
-            prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-        );
+    const markAsRead = (id: string) => {
+        setState((prev) => prev.readIds.includes(id)
+            ? prev
+            : { ...prev, readIds: [...prev.readIds, id] });
     };
 
     const markAllAsRead = () => {
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        setState((prev) => ({
+            ...prev,
+            readIds: Array.from(new Set([...prev.readIds, ...notifications.map((n) => n.id)])),
+        }));
     };
 
-    const deleteNotification = (id: number, e: React.MouseEvent) => {
+    const deleteNotification = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        setState((prev) => prev.dismissedIds.includes(id)
+            ? prev
+            : { ...prev, dismissedIds: [...prev.dismissedIds, id] });
     };
 
     return (
@@ -174,6 +195,8 @@ export default function NotificationsTray() {
                         </div>
                         <button
                             onClick={() => setIsOpen(false)}
+                            title="Close notifications"
+                            aria-label="Close notifications"
                             className="hover:bg-white/10 p-1.5 rounded-lg transition-colors"
                         >
                             <X size={18} />
@@ -217,7 +240,12 @@ export default function NotificationsTray() {
 
                     {/* Notifications List */}
                     <div className="max-h-80 overflow-y-auto divide-y divide-stone-100">
-                        {filteredNotifications.length === 0 ? (
+                        {isLoading ? (
+                            <div className="p-8 text-center">
+                                <Clock className="w-10 h-10 text-stone-300 mx-auto mb-3 animate-pulse" />
+                                <p className="text-sm text-stone-500 font-medium">Loading notifications...</p>
+                            </div>
+                        ) : filteredNotifications.length === 0 ? (
                             <div className="p-8 text-center">
                                 <Bell className="w-10 h-10 text-stone-300 mx-auto mb-3" />
                                 <p className="text-sm text-stone-500 font-medium">
@@ -240,9 +268,9 @@ export default function NotificationsTray() {
                                 >
                                     {/* Icon or Avatar */}
                                     <div className="flex-shrink-0">
-                                        {notification.avatar ? (
+                                        {notification.avatarUrl ? (
                                             <img
-                                                src={notification.avatar}
+                                                src={notification.avatarUrl}
                                                 alt=""
                                                 className="w-10 h-10 rounded-full object-cover"
                                             />
@@ -274,7 +302,7 @@ export default function NotificationsTray() {
                                                     <span className="w-2 h-2 bg-accent-500 rounded-full"></span>
                                                 )}
                                                 <span className="text-xs text-stone-400">
-                                                    {notification.time}
+                                                    {formatRelativeTime(notification.createdAt)}
                                                 </span>
                                             </div>
                                         </div>
@@ -286,6 +314,8 @@ export default function NotificationsTray() {
                                     {/* Delete Button */}
                                     <button
                                         onClick={(e) => deleteNotification(notification.id, e)}
+                                        title="Dismiss notification"
+                                        aria-label="Dismiss notification"
                                         className="opacity-0 group-hover:opacity-100 p-1.5 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all flex-shrink-0 self-center"
                                     >
                                         <Trash2 className="w-4 h-4" />

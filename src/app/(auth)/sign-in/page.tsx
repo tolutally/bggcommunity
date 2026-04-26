@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useSignIn } from "@clerk/nextjs";
 
@@ -36,6 +37,7 @@ type OAuthStrategy = "oauth_google" | "oauth_linkedin_oidc" | "oauth_facebook";
 
 export default function SignInPage() {
   const { signIn } = useSignIn();
+  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,6 +58,7 @@ export default function SignInPage() {
       }
       if (signIn.status === "complete") {
         await signIn.finalize();
+        router.replace("/member");
       }
     } catch (err: unknown) {
       const e = err as { message?: string };

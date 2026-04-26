@@ -1,0 +1,272 @@
+# Frontend Integration Guide
+
+This document describes how the frontend should integrate with the backend after the auth decision to use Clerk as the source of truth.
+
+## 1) Base URL and Global Rules
+
+- Local frontend base URL: `http://localhost:3000`
+- API prefix: `/api/v1`
+- Full API base: `http://localhost:3000/api/v1`
+- Content type: `application/json`
+- Auth style for protected backend calls: `Authorization: Bearer <clerkToken>`
+
+Important:
+
+- Clerk owns sign-up, sign-in, sign-out, email verification, password reset, and social OAuth.
+- The backend does not issue app-specific access tokens or refresh tokens.
+- The backend trusts and verifies Clerk-issued tokens.
+- Frontend should never call backend login/register/refresh endpoints for primary authentication.
+
+## 2) Auth Architecture
+
+### Source of truth
+
+Clerk is the identity provider and session authority for the application.
+
+Responsibilities:
+
+- Frontend uses Clerk SDK and Clerk-hosted/session APIs for auth flows.
+- Backend verifies Clerk JWTs on protected endpoints.
+- Backend loads or creates the local app user using the Clerk user ID as the stable external identity key.
+
+### Identity mapping
+
+The backend should persist a mapping such as:
+
+- `clerkUserId` or equivalent external auth subject
+- app user `id`
+- app-specific fields like `role`, `status`, `onboardingComplete`, and profile data
+
+### What this replaces
+
+The previous custom auth contract is no longer the target architecture. Specifically:
+
+- No backend-issued `accessToken`
+- No backend-issued `refreshToken`
+- No frontend-managed refresh rotation
+- No backend-owned email/password login as the primary auth path
+
+## 3) Standard Response Shapes
+
+### Success (typical)
+
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+### Success (message only)
+
+```json
+{
+  "success": true,
+  "message": "..."
+}
+```
+
+### Validation Error (`400`)
+
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "fieldName": ["Human readable message"]
+  }
+}
+```
+
+### App Error (`4xx`/`5xx`)
+
+```json
+{
+  "success": false,
+  "message": "Human readable error"
+}
+```
+
+## 4) Health Endpoint
+
+### `GET /api/v1/health`
+
+Use this for environment checks and deployment readiness.
+
+Response `200`:
+
+```json
+{
+  "success": true,
+  "status": "ok",
+  "timestamp": "2026-03-22T00:00:00.000Z",
+  "uptime": 123.45
+}
+```
+
+## 5) Frontend Auth Flows
+
+These flows are handled by Clerk in the frontend.
+
+### Sign up
+
+- Use Clerk sign-up APIs/components.
+- Email verification is handled by Clerk.
+- Social sign-up is handled by Clerk.
+
+### Sign in
+
+- Use Clerk sign-in APIs/components.
+- Social sign-in is handled by Clerk.
+
+### Sign out
+
+- Use Clerk sign-out APIs/components.
+- Frontend should clear app-local user state after sign-out.
+
+### Password reset
+
+- Use Clerk password reset flow.
+- Do not build a parallel backend-owned password reset contract unless there is a deliberate migration plan.
+
+## 6) Protected Backend Requests
+
+For protected backend endpoints, the frontend should send a Clerk token in the `Authorization` header.
+
+Header format:
+
+```http
+Authorization: Bearer <clerkToken>
+```
+
+Recommended client behavior:
+
+1. Get the active Clerk session token from Clerk.
+2. Attach it to protected backend requests.
+3. If the backend returns `401`, treat the session as expired/invalid and let Clerk handle session recovery or force re-auth.
+
+Client example:
+
+```ts
+import axios from "axios";
+
+const api = axios.create({
+  baseURL: "http://localhost:3000/api/v1",
+  headers: { "Content-Type": "application/json" },
+});
+
+export async function authorizedGet<T>(
+  path: string,
+  getToken: () => Promise<string | null>,
+) {
+  const token = await getToken();
+
+  return api.get<T>(path, {
+    headers: token
+      ? { Authorization: `Bearer ${token}` }
+      : undefined,
+  });
+}
+```
+
+## 7) Backend Responsibilities
+
+For any protected API route, the backend should:
+
+1. Read the bearer token.
+2. Verify the Clerk JWT using Clerk's server-side tooling or JWKS verification.
+3. Extract the Clerk subject/user ID.
+4. Resolve the corresponding app user record.
+5. Enforce app-specific authorization such as `member`, `mentor`, or `admin` role checks.
+
+The backend should own authorization and domain rules, even though Clerk owns authentication.
+
+## 8) Backend Endpoint Expectations
+
+The backend should expose app-domain endpoints that work with Clerk-authenticated users.
+
+### Recommended authenticated bootstrap endpoint
+
+### `GET /api/v1/auth/me`
+
+Purpose:
+
+- Return the app-specific user record for the currently authenticated Clerk user.
+- Create or sync the local user record if your backend chooses just-in-time provisioning.
+
+Headers:
+
+```http
+Authorization: Bearer <clerkToken>
+```
+
+Response `200`:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "app-user-id",
+    "clerkUserId": "user_123",
+    "email": "nia@example.com",
+    "role": "MEMBER",
+    "status": "ACTIVE",
+    "onboardingComplete": false,
+    "createdAt": "2026-03-22T00:00:00.000Z",
+    "profile": {
+      "firstName": "Nia",
+      "lastName": "Johnson",
+      "displayName": null,
+      "avatarUrl": null,
+      "bio": null,
+      "jobTitle": null,
+      "company": null,
+      "industry": null,
+      "location": null,
+      "isOpenToWork": false,
+      "isPublic": true,
+      "memberType": "MEMBER",
+      "linkedinUrl": null,
+      "twitterUrl": null,
+      "websiteUrl": null
+    }
+  }
+}
+```
+
+Possible errors:
+
+- `401` missing bearer token
+- `401` invalid or expired Clerk token
+- `403` authenticated but not allowed
+
+## 9) Deprecated Custom Auth Endpoints
+
+Under this architecture, these backend endpoints are deprecated for frontend auth flows and should not be used as the primary contract:
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/forgot-password`
+- `POST /api/v1/auth/reset-password`
+- `PATCH /api/v1/auth/change-password`
+- `DELETE /api/v1/auth/account`
+
+If any of these still exist during migration, they should either:
+
+- be removed,
+- be marked legacy and unused by the frontend, or
+- be repurposed into authenticated app-domain endpoints that verify Clerk tokens.
+
+## 10) Minimal Frontend Checklist
+
+- Configure Clerk keys and redirect URLs.
+- Use Clerk for sign-up, sign-in, sign-out, verification, password reset, and social auth.
+- Attach Clerk bearer tokens to protected backend API calls.
+- Call `GET /auth/me` after session establishment to load app-specific user data.
+- Store app profile/role separately from Clerk identity if needed.
+
+## 11) Current Scope Note
+
+At the moment, frontend auth screens already follow the Clerk path. The remaining backend work is to verify Clerk tokens and return app-specific user data and authorization decisions.

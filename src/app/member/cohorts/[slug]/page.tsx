@@ -1,731 +1,322 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-    MessageSquare,
-    Calendar,
-    Users,
-    Send,
-    MoreHorizontal,
-    MessageCircle,
-    ChevronDown,
-    ChevronUp,
-    Clock,
-    FolderOpen,
-    FileText,
-    Download,
-    Search,
-    Video,
-    Play,
-    Briefcase,
-    MapPin,
-    BadgeCheck,
-    X,
-    Linkedin,
-    Bookmark,
-    BookmarkCheck,
-    Eye,
-    ExternalLink,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@clerk/nextjs";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { EmptyState } from "@/components/ui/empty-state";
+import {
+    Calendar,
+    CheckCircle,
+    Clock,
+    ExternalLink,
+    FileText,
+    Loader2,
+    Users,
+} from "lucide-react";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useToast } from "@/components/ui/toast";
+import { useQueryInvalidation } from "@/hooks/useQueryInvalidation";
+import {
+    buildCohortMembersLabel,
+    fetchCohortDetail,
+    fetchCohortMembers,
+    fetchCohortResources,
+    fetchCohortSessions,
+    getCohortsErrorMessage,
+    resolveCohortIdFromSlug,
+    toggleCohortSessionRsvp,
+    type CohortMemberRecord,
+    type CohortRecord,
+    type CohortResourceRecord,
+    type CohortSessionRecord,
+} from "@/lib/cohorts";
+import { invalidateQuery } from "@/lib/queryInvalidation";
+
+type CohortTab = "sessions" | "resources" | "members";
+
+function formatTimeRange(value: string, durationMinutes: number) {
+    const start = new Date(value);
+    const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+
+    return `${start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - ${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+}
 
 export default function MemberCohortPage() {
-    const { slug } = useParams();
-    const [activeTab, setActiveTab] = useState("feed");
+    const { slug } = useParams<{ slug: string }>();
+    const { getToken } = useAuth();
+    const { toast } = useToast();
 
-    // Mock Data based on slug
-    const cohortName = slug === "alpha" ? "Cohort Alpha" : "Cohort Beta";
-    const description = slug === "alpha"
-        ? "The inaugural cohort focusing on Product Design & Strategy."
-        : "The second cohort focused on Engineering & Leadership.";
+    const [tab, setTab] = useState<CohortTab>("sessions");
+    const [cohort, setCohort] = useState<CohortRecord | null>(null);
+    const [members, setMembers] = useState<CohortMemberRecord[]>([]);
+    const [sessions, setSessions] = useState<CohortSessionRecord[]>([]);
+    const [resources, setResources] = useState<CohortResourceRecord[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [busySessionId, setBusySessionId] = useState<string | null>(null);
+    const [mutationError, setMutationError] = useState<string | null>(null);
+    const [retryMutation, setRetryMutation] = useState<(() => void) | null>(null);
+
+    const runWithRetry = (message: string, retry: () => void) => {
+        setMutationError(message);
+        setRetryMutation(() => retry);
+    };
+
+    const clearMutationError = () => {
+        setMutationError(null);
+        setRetryMutation(null);
+    };
+
+    const loadCohortPage = useMemo(() => {
+        let cancelled = false;
+
+        const run = async () => {
+            setIsLoading(true);
+            setError(null);
+
+            try {
+                const resolved = await resolveCohortIdFromSlug(slug);
+                const cohortId = resolved?.id ?? slug;
+
+                const [cohortDetail, cohortMembers, cohortSessions, cohortResources] = await Promise.all([
+                    fetchCohortDetail(cohortId),
+                    fetchCohortMembers(cohortId),
+                    fetchCohortSessions(cohortId, getToken),
+                    fetchCohortResources(cohortId),
+                ]);
+
+                if (cancelled) {
+                    return;
+                }
+
+                setCohort(cohortDetail);
+                setMembers(cohortMembers);
+                setSessions(cohortSessions);
+                setResources(cohortResources);
+            } catch (loadError) {
+                if (!cancelled) {
+                    setError(getCohortsErrorMessage(loadError));
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        return {
+            run,
+            cancel: () => {
+                cancelled = true;
+            },
+        };
+    }, [getToken, slug]);
+
+    useEffect(() => {
+        void loadCohortPage.run();
+
+        return () => {
+            loadCohortPage.cancel();
+        };
+    }, [loadCohortPage]);
+
+    const cohortInvalidationScopes = useMemo(() => ["cohorts"] as const, []);
+    useQueryInvalidation([...cohortInvalidationScopes], async () => {
+        await loadCohortPage.run();
+    });
+
+    const upcomingSessions = useMemo(
+        () => sessions.filter((session) => new Date(session.scheduledAt).getTime() >= Date.now()),
+        [sessions],
+    );
+
+    const recordedSessions = useMemo(
+        () => sessions.filter((session) => Boolean(session.recordingUrl)),
+        [sessions],
+    );
+
+    const handleSessionRsvp = async (sessionId: string) => {
+        if (!cohort || busySessionId === sessionId) {
+            return;
+        }
+
+        clearMutationError();
+        const previousSessions = sessions;
+        const currentSession = sessions.find((session) => session.id === sessionId);
+        const optimisticRsvp = !(currentSession?.hasRsvp ?? false);
+        setSessions((prev) => prev.map((session) => session.id === sessionId ? { ...session, hasRsvp: optimisticRsvp } : session));
+        setBusySessionId(sessionId);
+
+        try {
+            const rsvped = await toggleCohortSessionRsvp(cohort.id, sessionId, getToken);
+            setSessions((prev) => prev.map((session) => session.id === sessionId ? { ...session, hasRsvp: rsvped } : session));
+            invalidateQuery("cohorts");
+            toast(rsvped ? "RSVP saved" : "RSVP removed");
+        } catch (toggleError) {
+            setSessions(previousSessions);
+            const message = getCohortsErrorMessage(toggleError);
+            runWithRetry(message, () => {
+                void handleSessionRsvp(sessionId);
+            });
+            toast(message, "error");
+        } finally {
+            setBusySessionId(null);
+        }
+    };
 
     return (
         <ErrorBoundary>
-        <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">
-            {/* Cohort Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-stone-900 mb-2">{cohortName}</h1>
-                <p className="text-lg text-stone-500">{description}</p>
-            </div>
+            <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">
+                {isLoading ? (
+                    <div className="rounded-2xl border border-stone-200 bg-white p-12 flex items-center justify-center gap-2 text-stone-500">
+                        <Loader2 size={18} className="animate-spin" /> Loading cohort details...
+                    </div>
+                ) : error ? (
+                    <EmptyState icon={Users} heading="Cohort unavailable" description={error} variant="plain" />
+                ) : cohort ? (
+                    <>
+                        <div>
+                            <h1 className="text-3xl font-bold text-stone-900 mb-2">{cohort.name}</h1>
+                            <p className="text-lg text-stone-500">{cohort.description || "Your cohort workspace for sessions, resources, and members."}</p>
+                        </div>
 
-            {/* Tabs */}
-            <div className="flex items-center gap-6 border-b border-stone-200">
-                <TabButton
-                    active={activeTab === "feed"}
-                    onClick={() => setActiveTab("feed")}
-                    label="Feed"
-                    icon={MessageSquare}
-                />
-                <TabButton
-                    active={activeTab === "sessions"}
-                    onClick={() => setActiveTab("sessions")}
-                    label="Sessions"
-                    icon={Calendar}
-                />
-                <TabButton
-                    active={activeTab === "resources"}
-                    onClick={() => setActiveTab("resources")}
-                    label="Resources"
-                    icon={FolderOpen}
-                />
-                <TabButton
-                    active={activeTab === "members"}
-                    onClick={() => setActiveTab("members")}
-                    label="Members"
-                    icon={Users}
-                />
-            </div>
+                        <div className="flex items-center gap-3 border-b border-stone-200 pb-2">
+                            <button
+                                onClick={() => setTab("sessions")}
+                                className={`px-3 py-2 text-sm font-semibold rounded-lg transition-colors ${tab === "sessions" ? "bg-brand-50 text-brand-700" : "text-stone-500 hover:text-stone-800"}`}
+                            >
+                                Sessions
+                            </button>
+                            <button
+                                onClick={() => setTab("resources")}
+                                className={`px-3 py-2 text-sm font-semibold rounded-lg transition-colors ${tab === "resources" ? "bg-brand-50 text-brand-700" : "text-stone-500 hover:text-stone-800"}`}
+                            >
+                                Resources
+                            </button>
+                            <button
+                                onClick={() => setTab("members")}
+                                className={`px-3 py-2 text-sm font-semibold rounded-lg transition-colors ${tab === "members" ? "bg-brand-50 text-brand-700" : "text-stone-500 hover:text-stone-800"}`}
+                            >
+                                Members
+                            </button>
+                        </div>
 
-            {/* Tab Content */}
-            <div>
-                {activeTab === "feed" && <FeedTab />}
-                {activeTab === "sessions" && <SessionsTab />}
-                {activeTab === "resources" && <ResourcesTab />}
-                {activeTab === "members" && <MembersTab />}
+                        {mutationError ? (
+                            <div className="rounded-xl border border-red-200 bg-red-50 p-3 flex items-center justify-between gap-3">
+                                <p className="text-sm text-red-700">{mutationError}</p>
+                                {retryMutation ? (
+                                    <button
+                                        onClick={() => {
+                                            clearMutationError();
+                                            retryMutation();
+                                        }}
+                                        className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                                    >
+                                        Retry
+                                    </button>
+                                ) : null}
+                            </div>
+                        ) : null}
+
+                        {tab === "sessions" ? (
+                            <div className="space-y-6">
+                                <section className="space-y-4">
+                                    <h2 className="text-xl font-bold text-stone-900">Upcoming Sessions</h2>
+                                    {upcomingSessions.length === 0 ? (
+                                        <EmptyState icon={Calendar} heading="No upcoming sessions" description="New sessions will appear here once they are scheduled." variant="plain" />
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {upcomingSessions.map((session) => (
+                                                <article key={session.id} className="rounded-2xl border border-stone-200 bg-white p-5">
+                                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                                        <div>
+                                                            <h3 className="text-lg font-semibold text-stone-900">{session.title}</h3>
+                                                            <p className="text-sm text-stone-500 mt-1">{formatTimeRange(session.scheduledAt, session.durationMinutes)}</p>
+                                                            <p className="text-sm text-stone-500 mt-1">Host: {session.host}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {session.meetingLink && session.hasRsvp ? (
+                                                                <a href={session.meetingLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800">
+                                                                    Join <ExternalLink size={14} />
+                                                                </a>
+                                                            ) : null}
+                                                            <button
+                                                                onClick={() => void handleSessionRsvp(session.id)}
+                                                                disabled={busySessionId === session.id}
+                                                                className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 hover:border-brand-300 hover:text-brand-700 disabled:opacity-60"
+                                                            >
+                                                                {busySessionId === session.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                                                                {session.hasRsvp ? "Going" : "RSVP"}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </article>
+                                            ))}
+                                        </div>
+                                    )}
+                                </section>
+
+                                <section className="space-y-4">
+                                    <h2 className="text-xl font-bold text-stone-900">Recordings</h2>
+                                    {recordedSessions.length === 0 ? (
+                                        <EmptyState icon={Clock} heading="No recordings yet" description="Recorded sessions will appear here after they are uploaded." variant="plain" />
+                                    ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {recordedSessions.map((session) => (
+                                                <a key={session.id} href={session.recordingUrl ?? "#"} target="_blank" rel="noreferrer" className="rounded-2xl border border-stone-200 bg-white p-4 hover:border-brand-300 transition-colors">
+                                                    <p className="font-semibold text-stone-900">{session.title}</p>
+                                                    <p className="text-sm text-stone-500 mt-1">{new Date(session.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                                                    <p className="text-sm text-brand-700 mt-2 inline-flex items-center gap-1">Watch recording <ExternalLink size={14} /></p>
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
+                                </section>
+                            </div>
+                        ) : null}
+
+                        {tab === "resources" ? (
+                            <div className="space-y-3">
+                                {resources.length === 0 ? (
+                                    <EmptyState icon={FileText} heading="No resources yet" description="Resources shared with your cohort will appear here." variant="plain" />
+                                ) : (
+                                    resources.map((resource) => (
+                                        <a key={resource.id} href={resource.url} target="_blank" rel="noreferrer" className="flex items-start justify-between rounded-2xl border border-stone-200 bg-white p-4 hover:border-brand-300 transition-colors">
+                                            <div>
+                                                <p className="font-semibold text-stone-900">{resource.title}</p>
+                                                {resource.description ? <p className="text-sm text-stone-500 mt-1">{resource.description}</p> : null}
+                                            </div>
+                                            <ExternalLink size={16} className="text-stone-400" />
+                                        </a>
+                                    ))
+                                )}
+                            </div>
+                        ) : null}
+
+                        {tab === "members" ? (
+                            <div className="space-y-3">
+                                {members.length === 0 ? (
+                                    <EmptyState icon={Users} heading="No members found" description="Member data for this cohort is not available right now." variant="plain" />
+                                ) : (
+                                    members.map((member) => (
+                                        <article key={member.userId} className="rounded-2xl border border-stone-200 bg-white p-4 flex items-center justify-between">
+                                            <div>
+                                                <p className="font-semibold text-stone-900">{buildCohortMembersLabel(member)}</p>
+                                                <p className="text-sm text-stone-500">{member.email}</p>
+                                            </div>
+                                            {member.role ? (
+                                                <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-600">{member.role}</span>
+                                            ) : null}
+                                        </article>
+                                    ))
+                                )}
+                            </div>
+                        ) : null}
+                    </>
+                ) : (
+                    <EmptyState icon={Users} heading="Cohort not found" description="We could not find this cohort." variant="plain" />
+                )}
             </div>
-        </div>
         </ErrorBoundary>
     );
-}
-
-// --- Tabs ---
-
-function FeedTab() {
-    const [posts, setPosts] = useState([
-        {
-            id: 1,
-            author: "Sarah Jenkins",
-            avatar: "https://i.pravatar.cc/150?u=sarah",
-            role: "Mentor",
-            time: "2 hours ago",
-            title: "Workshop slides uploaded!",
-            content: "Just uploaded the slides from yesterday's workshop! Let me know if you have any questions about the user persona template.",
-            replies: [
-                { id: 101, author: "David Chen", avatar: "https://i.pravatar.cc/150?u=david", time: "1 hour ago", content: "Thanks Sarah! The template is super helpful." }
-            ]
-        },
-        {
-            id: 2,
-            author: "David Chen",
-            avatar: "https://i.pravatar.cc/150?u=david",
-            role: "Member",
-            time: "4 hours ago",
-            title: "Dealing with imposter syndrome",
-            content: "Is anyone dealing with imposter syndrome this week? Feeling a bit overwhelmed by the scope of the new project assignments.",
-            replies: [
-                { id: 201, author: "Maya Patel", avatar: "https://i.pravatar.cc/150?u=maya", time: "3 hours ago", content: "You're not alone! Let's do a study session together?" },
-                { id: 202, author: "Sarah Jenkins", avatar: "https://i.pravatar.cc/150?u=sarah", time: "2 hours ago", content: "David, this is totally normal. Remember, everyone here started somewhere. You belong here! 💪" }
-            ]
-        }
-    ]);
-
-    const [expandedPosts, setExpandedPosts] = useState<number[]>([1]);
-
-    const toggleExpanded = (postId: number) => {
-        setExpandedPosts(prev =>
-            prev.includes(postId)
-                ? prev.filter(id => id !== postId)
-                : [...prev, postId]
-        );
-    };
-
-    return (
-        <div className="space-y-6">
-            {/* Composer */}
-            <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-                <div className="flex gap-4">
-                    <img src="https://i.pravatar.cc/150?u=nia" className="h-10 w-10 rounded-full" />
-                    <div className="flex-1">
-                        <input
-                            type="text"
-                            placeholder="Start a discussion with your cohort..."
-                            className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none mb-3"
-                        />
-                        <div className="flex items-center justify-end">
-                            <button className="bg-brand-800 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-brand-700 flex items-center gap-2">
-                                <Send size={16} /> Post
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Posts */}
-            {posts.map(post => (
-                <div key={post.id} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-                    <div className="p-6">
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                                <img src={post.avatar} className="h-10 w-10 rounded-full" />
-                                <div>
-                                    <span className="font-bold text-stone-900">{post.author}</span>
-                                    <span className="ml-2 text-xs bg-stone-100 text-stone-600 px-2 py-0.5 rounded">{post.role}</span>
-                                    <span className="text-stone-400 text-sm flex items-center gap-1 mt-0.5">
-                                        <Clock size={12} /> {post.time}
-                                    </span>
-                                </div>
-                            </div>
-                            <button className="text-stone-400 hover:text-stone-600">
-                                <MoreHorizontal size={18} />
-                            </button>
-                        </div>
-
-                        <h3 className="text-lg font-bold text-stone-900 mb-2">{post.title}</h3>
-                        <p className="text-stone-600 leading-relaxed">{post.content}</p>
-
-                        <div className="flex items-center gap-4 mt-4 pt-4 border-t border-stone-100">
-                            <button
-                                onClick={() => toggleExpanded(post.id)}
-                                className="flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-brand-700"
-                            >
-                                <MessageCircle size={16} />
-                                {post.replies.length} {post.replies.length === 1 ? 'Reply' : 'Replies'}
-                                {expandedPosts.includes(post.id) ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </button>
-                            <button className="text-sm font-medium text-brand-700 hover:text-brand-800">
-                                Add Reply
-                            </button>
-                        </div>
-                    </div>
-
-                    {expandedPosts.includes(post.id) && post.replies.length > 0 && (
-                        <div className="bg-stone-50 border-t border-stone-100 px-6 py-4 space-y-4">
-                            {post.replies.map(reply => (
-                                <div key={reply.id} className="flex gap-3">
-                                    <div className="w-0.5 bg-brand-200 rounded-full flex-shrink-0 ml-4"></div>
-                                    <div className="flex-1 bg-white rounded-xl p-4 border border-stone-100">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <img src={reply.avatar} className="w-6 h-6 rounded-full" />
-                                            <span className="font-semibold text-stone-900 text-sm">{reply.author}</span>
-                                            <span className="text-stone-400 text-xs">{reply.time}</span>
-                                        </div>
-                                        <p className="text-stone-600 text-sm">{reply.content}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            ))}
-        </div>
-    )
-}
-
-function SessionsTab() {
-    const recordings = [
-        { id: 1, title: "Week 2: Kickoff", date: "Oct 10", duration: "1h 15m" },
-        { id: 2, title: "Week 1: Orientation", date: "Oct 3", duration: "1h 30m" },
-        { id: 3, title: "Pre-Program Welcome", date: "Sep 28", duration: "45m" },
-    ];
-
-    return (
-        <div className="space-y-8">
-            {/* Upcoming Schedule */}
-            <div className="space-y-6">
-                <h3 className="font-bold text-xl text-stone-900">Upcoming Schedule</h3>
-                <div className="space-y-4">
-                    <div className="bg-white p-6 rounded-2xl border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex gap-6">
-                            <div className="flex flex-col items-center justify-center w-16 h-16 bg-brand-100 text-brand-700 rounded-2xl">
-                                <span className="text-xs font-bold uppercase">OCT</span>
-                                <span className="text-2xl font-bold">24</span>
-                            </div>
-                            <div>
-                                <h4 className="text-lg font-bold text-stone-900">Deep Dive: Systems Thinking</h4>
-                                <p className="text-stone-500 flex items-center gap-2">
-                                    <Clock size={16} /> 2:00 PM - 3:30 PM EST
-                                </p>
-                                <div className="mt-2 flex items-center gap-2">
-                                    <span className="bg-stone-100 px-2 py-0.5 rounded text-xs font-semibold text-stone-600">Lecture</span>
-                                    <span className="bg-brand-100 px-2 py-0.5 rounded text-xs font-semibold text-brand-700">Mandatory</span>
-                                </div>
-                            </div>
-                        </div>
-                        <button className="px-6 py-2.5 bg-white border-2 border-brand-800 text-brand-800 font-bold rounded-xl hover:bg-brand-50 transition-colors">
-                            Add to Calendar
-                        </button>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex gap-6">
-                            <div className="flex flex-col items-center justify-center w-16 h-16 bg-stone-100 text-stone-600 rounded-2xl">
-                                <span className="text-xs font-bold uppercase">OCT</span>
-                                <span className="text-2xl font-bold">26</span>
-                            </div>
-                            <div>
-                                <h4 className="text-lg font-bold text-stone-900">Office Hours with Sarah</h4>
-                                <p className="text-stone-500 flex items-center gap-2">
-                                    <Clock size={16} /> 4:00 PM - 5:00 PM EST
-                                </p>
-                                <div className="mt-2 flex items-center gap-2">
-                                    <span className="bg-stone-100 px-2 py-0.5 rounded text-xs font-semibold text-stone-600">Q&A</span>
-                                    <span className="bg-stone-100 px-2 py-0.5 rounded text-xs font-semibold text-stone-600">Optional</span>
-                                </div>
-                            </div>
-                        </div>
-                        <button className="px-6 py-2.5 bg-white border-2 border-brand-800 text-brand-800 font-bold rounded-xl hover:bg-brand-50 transition-colors">
-                            Add to Calendar
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Recordings Section */}
-            <div className="space-y-6">
-                <h3 className="font-bold text-xl text-stone-900">Recordings</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {recordings.map(recording => (
-                        <div key={recording.id} className="group cursor-pointer">
-                            {/* Video Thumbnail */}
-                            <div className="aspect-video bg-stone-800 rounded-2xl flex items-center justify-center mb-3 group-hover:bg-stone-700 transition-colors overflow-hidden relative">
-                                <div className="w-14 h-14 bg-stone-700 group-hover:bg-stone-600 rounded-xl flex items-center justify-center transition-colors">
-                                    <Video size={28} className="text-stone-400" />
-                                </div>
-                                {/* Play overlay on hover */}
-                                <div className="absolute inset-0 bg-brand-800/0 group-hover:bg-brand-800/20 transition-colors flex items-center justify-center">
-                                    <div className="w-16 h-16 bg-white/0 group-hover:bg-white/90 rounded-full flex items-center justify-center transition-all scale-75 group-hover:scale-100 opacity-0 group-hover:opacity-100">
-                                        <Play size={28} className="text-brand-800 ml-1" />
-                                    </div>
-                                </div>
-                            </div>
-                            {/* Recording Info */}
-                            <h4 className="font-bold text-stone-900 group-hover:text-brand-800 transition-colors">{recording.title}</h4>
-                            <p className="text-sm text-stone-500">Recorded {recording.date} • {recording.duration}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function ResourcesTab() {
-    const [searchQuery, setSearchQuery] = useState("");
-    const [selectedCategory, setSelectedCategory] = useState("all");
-    const [saved, setSaved] = useState<Set<number>>(new Set());
-    const [previewResource, setPreviewResource] = useState<typeof resources[number] | null>(null);
-
-    const resources = [
-        { id: 1, name: "User Persona Template", type: "PDF", size: "2.4 MB", category: "templates", url: "#", description: "A ready-to-use template for creating detailed user personas during discovery research." },
-        { id: 2, name: "Design Systems Guide", type: "PDF", size: "5.1 MB", category: "guides", url: "#", description: "Comprehensive guide to building and maintaining a scalable design system." },
-        { id: 3, name: "Workshop Recording - Week 1", type: "VIDEO", size: "156 MB", category: "recordings", url: "#", description: "Full recording of the Week 1 kickoff workshop covering program overview and goals." },
-        { id: 4, name: "UX Research Methods Cheatsheet", type: "PDF", size: "1.2 MB", category: "templates", url: "#", description: "Quick-reference cheatsheet covering 12 common UX research methods and when to use them." },
-        { id: 5, name: "Figma Component Library", type: "ZIP", size: "8.7 MB", category: "assets", url: "#", description: "Pre-built Figma components matching our design system for rapid prototyping." },
-        { id: 6, name: "Career Strategy Playbook", type: "PDF", size: "3.0 MB", category: "guides", url: "#", description: "Step-by-step playbook for navigating your career transition into product and design." },
-    ];
-
-    const categories = [
-        { value: "all", label: "All" },
-        { value: "templates", label: "Templates" },
-        { value: "guides", label: "Guides" },
-        { value: "recordings", label: "Recordings" },
-        { value: "assets", label: "Assets" },
-    ];
-
-    const filteredResources = resources.filter(resource => {
-        const matchesSearch = resource.name.toLowerCase().includes(searchQuery.toLowerCase()) || resource.description.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = selectedCategory === "all" || resource.category === selectedCategory;
-        return matchesSearch && matchesCategory;
-    });
-
-    const toggleSave = (id: number) => {
-        setSaved(prev => {
-            const next = new Set(prev);
-            next.has(id) ? next.delete(id) : next.add(id);
-            return next;
-        });
-    };
-
-    const getTypeColor = (type: string) => {
-        switch (type) {
-            case "PDF": return "bg-red-100 text-red-600";
-            case "VIDEO": return "bg-blue-100 text-blue-600";
-            case "ZIP": return "bg-amber-100 text-amber-600";
-            default: return "bg-stone-100 text-stone-600";
-        }
-    };
-
-    const getTypeIcon = (type: string) => {
-        switch (type) {
-            case "VIDEO": return <Play size={20} />;
-            default: return <FileText size={20} />;
-        }
-    };
-
-    return (
-        <div className="space-y-6">
-            {/* Search */}
-            <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-                <input
-                    type="text"
-                    placeholder="Search resources..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-stone-900 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none"
-                />
-            </div>
-
-            {/* Category Tabs */}
-            <div className="flex flex-wrap gap-2">
-                {categories.map(cat => (
-                    <button
-                        key={cat.value}
-                        onClick={() => setSelectedCategory(cat.value)}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${selectedCategory === cat.value ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}
-                    >
-                        {cat.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* Count */}
-            <p className="text-sm text-stone-500 font-medium">{filteredResources.length} resource{filteredResources.length !== 1 ? "s" : ""}</p>
-
-            {/* Resources Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filteredResources.map(resource => (
-                    <div
-                        key={resource.id}
-                        onClick={() => setPreviewResource(resource)}
-                        className="bg-white p-5 rounded-2xl border border-stone-200 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-500/5 transition-all cursor-pointer group"
-                    >
-                        <div className="flex items-start gap-4">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${getTypeColor(resource.type)} group-hover:scale-105 transition-transform`}>
-                                {getTypeIcon(resource.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-stone-900 group-hover:text-brand-700 transition-colors truncate">{resource.name}</h4>
-                                <p className="text-xs text-stone-400 mt-0.5">{resource.type} &middot; {resource.size} &middot; <span className="capitalize">{resource.category}</span></p>
-                                <p className="text-sm text-stone-500 mt-2 line-clamp-2">{resource.description}</p>
-                            </div>
-                        </div>
-                        {/* Actions */}
-                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-stone-100">
-                            <a
-                                href={resource.url}
-                                onClick={e => e.stopPropagation()}
-                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-brand-800 text-white font-bold text-xs rounded-xl hover:bg-brand-700 transition-colors"
-                            >
-                                {resource.type === "VIDEO" ? <><Eye size={14} /> Watch</> : <><Download size={14} /> Download</>}
-                            </a>
-                            <button
-                                onClick={e => { e.stopPropagation(); toggleSave(resource.id); }}
-                                className={`p-2 rounded-xl border transition-colors ${saved.has(resource.id) ? "bg-brand-50 text-brand-700 border-brand-200" : "text-stone-400 border-stone-200 hover:bg-stone-50"}`}
-                            >
-                                {saved.has(resource.id) ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
-                            </button>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {filteredResources.length === 0 && (
-                <EmptyState
-                    icon={FolderOpen}
-                    heading="No resources found"
-                    description="Try a different search or category."
-                    variant="plain"
-                />
-            )}
-
-            {/* Resource Detail Modal */}
-            {previewResource && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPreviewResource(null)} />
-                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-                        {/* Header */}
-                        <div className="p-6 border-b border-stone-100 flex items-start gap-4">
-                            <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${getTypeColor(previewResource.type)}`}>
-                                {getTypeIcon(previewResource.type)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h2 className="text-xl font-bold text-stone-900">{previewResource.name}</h2>
-                                <p className="text-sm text-stone-400 mt-0.5">{previewResource.type} &middot; {previewResource.size} &middot; <span className="capitalize">{previewResource.category}</span></p>
-                            </div>
-                            <button onClick={() => setPreviewResource(null)} className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
-                                <X size={18} />
-                            </button>
-                        </div>
-                        {/* Body */}
-                        <div className="p-6 space-y-4">
-                            <p className="text-stone-600 leading-relaxed">{previewResource.description}</p>
-                        </div>
-                        {/* Footer */}
-                        <div className="p-6 border-t border-stone-100 flex gap-3">
-                            <a href={previewResource.url} className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm">
-                                {previewResource.type === "VIDEO" ? <><Eye size={16} /> Watch Recording</> : <><Download size={16} /> Download File</>}
-                            </a>
-                            <button
-                                onClick={() => toggleSave(previewResource.id)}
-                                className={`px-4 py-3 rounded-xl font-bold text-sm border transition-colors flex items-center gap-2 ${saved.has(previewResource.id) ? "bg-brand-50 text-brand-700 border-brand-200" : "text-stone-600 border-stone-200 hover:bg-stone-50"}`}
-                            >
-                                {saved.has(previewResource.id) ? <><BookmarkCheck size={16} /> Saved</> : <><Bookmark size={16} /> Save</>}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    )
-}
-
-// --- Members Tab with Detailed Cards & Modal ---
-
-function MembersTab() {
-    const [selectedMember, setSelectedMember] = useState<any>(null);
-
-    // Mock Data for Cohort Members (Enhanced)
-    const members = [
-        {
-            id: 1,
-            name: "Sarah Jenkins",
-            role: "Mentor",
-            avatar: "https://i.pravatar.cc/150?u=sarah",
-            occupation: "Product Manager",
-            industry: "Tech",
-            location: "San Francisco, CA",
-            bio: "Product leader with 10+ years of experience. Passionate about mentoring the next generation of PMs.",
-            isOpenToWork: false,
-            joined: "Aug 2023"
-        },
-        {
-            id: 2,
-            name: "David Chen",
-            role: "Member",
-            avatar: "https://i.pravatar.cc/150?u=david",
-            occupation: "UX Designer",
-            industry: "SaaS",
-            location: "Austin, TX",
-            bio: "Transitioning from graphic design to UX. Love solving complex user problems.",
-            isOpenToWork: true,
-            joined: "Oct 2023"
-        },
-        {
-            id: 3,
-            name: "Maya Patel",
-            role: "Member",
-            avatar: "https://i.pravatar.cc/150?u=maya",
-            occupation: "Frontend Dev",
-            industry: "FinTech",
-            location: "New York, NY",
-            bio: "React enthusiast building accessible and responsive web applications.",
-            isOpenToWork: true,
-            joined: "Oct 2023"
-        },
-        {
-            id: 4,
-            name: "Jordan Smith",
-            role: "Member",
-            avatar: "https://i.pravatar.cc/150?u=2",
-            occupation: "Product Designer",
-            industry: "EdTech",
-            location: "Chicago, IL",
-            bio: "Creating learning experiences that empower students.",
-            isOpenToWork: false,
-            joined: "Sep 2023"
-        },
-        {
-            id: 5,
-            name: "Keisha Williams",
-            role: "Member",
-            avatar: "https://i.pravatar.cc/150?u=4",
-            occupation: "UX Researcher",
-            industry: "Social Media",
-            location: "Atlanta, GA",
-            bio: "Understanding the 'why' behind user behaviors. Mixed-methods researcher.",
-            isOpenToWork: true,
-            joined: "Oct 2023"
-        },
-        {
-            id: 6,
-            name: "Theresa Edem",
-            role: "Member",
-            avatar: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop",
-            occupation: "Product Manager",
-            industry: "FinTech",
-            location: "Toronto, ON",
-            bio: "Passionate about building inclusive financial products.",
-            isOpenToWork: true,
-            joined: "Oct 2023"
-        }
-    ];
-
-    return (
-        <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {members.map(member => (
-                    <motion.div
-                        key={member.id}
-                        layoutId={`card-${member.id}`}
-                        onClick={() => setSelectedMember(member)}
-                        className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-lg hover:border-brand-100 transition-all cursor-pointer group flex flex-col items-center text-center relative"
-                    >
-                        {/* Avatar */}
-                        <div className="relative mb-4">
-                            <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-brand-100 to-orange-100 group-hover:from-brand-300 group-hover:to-orange-300 transition-colors">
-                                <img
-                                    src={member.avatar}
-                                    alt={member.name}
-                                    className="w-full h-full rounded-full object-cover border-2 border-white"
-                                />
-                            </div>
-                            {member.isOpenToWork && (
-                                <div className="absolute -bottom-1 -right-1 bg-green-500 text-white p-1.5 rounded-full border-2 border-white" title="Open to Opportunities">
-                                    <Briefcase size={12} strokeWidth={3} />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Info */}
-                        <h3 className="font-bold text-stone-900 text-lg mb-1 group-hover:text-brand-700 transition-colors">{member.name}</h3>
-
-                        <p className="text-sm font-medium text-stone-600 mb-0.5">{member.occupation}</p>
-
-                        <p className="text-xs text-stone-400 flex items-center justify-center gap-1 mb-3">
-                            <MapPin size={10} /> {member.location}
-                        </p>
-
-                        {/* Tag */}
-                        <div className="mt-auto pt-3 border-t border-stone-50 w-full flex flex-wrap justify-center gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full">{member.industry}</span>
-                            {member.role === 'Mentor' && (
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">Mentor</span>
-                            )}
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
-
-            <AnimatePresence>
-                {selectedMember && (
-                    <MemberDetailModal
-                        member={selectedMember}
-                        onClose={() => setSelectedMember(null)}
-                    />
-                )}
-            </AnimatePresence>
-        </>
-    )
-}
-
-function MemberDetailModal({ member, onClose }: { member: any, onClose: () => void }) {
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-                className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm"
-            />
-
-            <motion.div
-                layoutId={`card-${member.id}`}
-                className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md relative z-10 overflow-hidden"
-            >
-                {/* Header Background */}
-                <div className="h-32 bg-gradient-to-br from-brand-600 to-indigo-700 relative">
-                    <button
-                        onClick={onClose}
-                        className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full backdrop-blur-md transition-colors"
-                    >
-                        <X size={20} />
-                    </button>
-
-                    {/* Decorative Circles */}
-                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
-                    <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-black/10 rounded-full blur-2xl"></div>
-                </div>
-
-                {/* Content */}
-                <div className="px-8 pb-8 -mt-16 flex flex-col items-center text-center">
-                    {/* Avatar */}
-                    <div className="relative mb-6">
-                        <div className="w-32 h-32 rounded-full p-1.5 bg-white shadow-xl">
-                            <img
-                                src={member.avatar}
-                                alt={member.name}
-                                className="w-full h-full rounded-full object-cover bg-stone-100"
-                            />
-                        </div>
-                        {member.isOpenToWork && (
-                            <div className="absolute bottom-2 right-2 bg-green-500 text-white p-2 rounded-full border-4 border-white shadow-sm flex items-center justify-center" title="Open to Opportunities">
-                                <Briefcase size={16} strokeWidth={3} />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Name & Title */}
-                    <h2 className="text-2xl font-bold text-stone-900 mb-1 flex items-center gap-2 justify-center">
-                        {member.name}
-                        {/* Using explicit BadgeCheck if verification logic existed, for now static or omitted if not needed. Adding back simpler version */}
-                        <div className="text-blue-500"><BadgeCheck size={20} fill="currentColor" className="text-white fill-blue-500" /></div>
-                    </h2>
-                    <p className="text-lg font-medium text-brand-700 mb-1">{member.occupation}</p>
-                    <p className="text-stone-500 text-sm flex items-center gap-1.5 mb-6">
-                        <MapPin size={14} /> {member.location}
-                    </p>
-
-                    {/* Tags */}
-                    <div className="flex flex-wrap justify-center gap-2 mb-8">
-                        {member.role === 'Mentor' && (
-                            <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-100">
-                                Mentor
-                            </span>
-                        )}
-                        {member.isOpenToWork && (
-                            <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold border border-green-100">
-                                Open to Opportunities
-                            </span>
-                        )}
-                        <span className="px-3 py-1 bg-brand-50 text-brand-700 rounded-full text-xs font-bold border border-brand-100">
-                            {member.industry}
-                        </span>
-                        <span className="px-3 py-1 bg-stone-100 text-stone-600 rounded-full text-xs font-bold border border-stone-200">
-                            Since {member.joined}
-                        </span>
-                    </div>
-
-                    {/* Bio */}
-                    <div className="w-full bg-stone-50 rounded-2xl p-6 mb-8 text-left border border-stone-100">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-stone-400 mb-3">About</h4>
-                        <p className="text-stone-700 leading-relaxed font-medium">
-                            "{member.bio}"
-                        </p>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="w-full grid grid-cols-2 gap-4">
-                        <button className="flex items-center justify-center gap-2 px-6 py-3.5 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors">
-                            <MessageSquare size={18} /> Message
-                        </button>
-                        <a
-                            href="#"
-                            className="flex items-center justify-center gap-2 px-6 py-3.5 border-2 border-stone-200 text-stone-700 rounded-xl font-bold hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 transition-all"
-                        >
-                            <Linkedin size={18} /> LinkedIn
-                        </a>
-                    </div>
-                </div>
-            </motion.div>
-        </div>
-    );
-}
-
-// --- Helper Components ---
-
-function TabButton({ active, onClick, label, icon: Icon }: any) {
-    return (
-        <button
-            onClick={onClick}
-            className={`flex items-center gap-2 pb-4 border-b-2 transition-all px-2 ${active ? 'border-brand-800 text-brand-800' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
-        >
-            <Icon size={18} />
-            <span className="font-semibold">{label}</span>
-        </button>
-    )
 }
