@@ -1,10 +1,13 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
+import { useAuth } from "@/context/AuthContext";
+import { useApiMutation } from "@/hooks/use-api-mutation";
 import { useState } from "react";
 import { Check, Moon, Sun, Lock, Trash2, LogOut } from "lucide-react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useToast } from "@/components/ui/toast";
 
 export default function MemberSettingsPage() {
     const { user } = useUser();
@@ -49,6 +52,22 @@ export default function MemberSettingsPage() {
 
     /* ── Danger Zone ── */
     const [showDelete, setShowDelete] = useState(false);
+    const { logout } = useAuth();
+    const { toast } = useToast();
+    const deleteAccountMutation = useApiMutation<unknown, undefined>("/auth/account", {
+        method: "DELETE",
+        onSuccess: () => {
+            logout();
+        },
+        onError: () => {
+            toast("Failed to delete account. Please try again.", "error");
+        },
+    });
+
+    const handleDeleteAccount = async () => {
+        setShowDelete(false);
+        await deleteAccountMutation.trigger(undefined);
+    };
 
     return (
         <ErrorBoundary>
@@ -139,7 +158,7 @@ export default function MemberSettingsPage() {
                 <h3 className="font-bold text-lg text-red-700 mb-2">Danger Zone</h3>
                 <p className="text-sm text-stone-500 mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
                 <div className="flex gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-stone-600 border border-stone-200 hover:bg-stone-50 transition-colors">
+                    <button onClick={logout} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-stone-600 border border-stone-200 hover:bg-stone-50 transition-colors">
                         <LogOut size={16} /> Sign Out
                     </button>
                     <button onClick={() => setShowDelete(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-red-600 border border-red-200 hover:bg-red-50 transition-colors">
@@ -152,7 +171,7 @@ export default function MemberSettingsPage() {
             <ConfirmModal
                 open={showDelete}
                 onClose={() => setShowDelete(false)}
-                onConfirm={() => setShowDelete(false)}
+                onConfirm={handleDeleteAccount}
                 title="Delete Account?"
                 description="This will permanently remove your profile, posts, and all data. This cannot be undone."
                 icon={Trash2}

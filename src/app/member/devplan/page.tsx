@@ -158,6 +158,7 @@ export default function MemberDevPlanPage() {
 
     const doneCount = counts.completed;
     const progress = goals.length ? Math.round((doneCount / goals.length) * 100) : 0;
+    const allDone = goals.length > 0 && doneCount === goals.length;
 
     const filtered = useMemo(() =>
         filter === "all" ? goals : goals.filter(g => g.status === filter)
@@ -165,6 +166,13 @@ export default function MemberDevPlanPage() {
 
     /* Handlers */
     const flash = () => { toast("Changes saved"); };
+
+    const startNewPlan = () => {
+        setGoals([]);
+        setShowAdd(true);
+        setFilter("all");
+        toast("Previous plan cleared. Set your new goals!", "success");
+    };
 
     const addGoal = () => {
         if (!newGoal.text.trim()) return;
@@ -310,6 +318,25 @@ export default function MemberDevPlanPage() {
                     <div className="h-full bg-gradient-to-r from-accent-500 to-brand-600 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                 </div>
             </div>
+
+            {/* All Goals Complete Banner */}
+            {allDone && (
+                <div className="bg-gradient-to-r from-green-50 via-emerald-50 to-green-50 border border-green-200 rounded-3xl p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <CheckCircle size={28} className="text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="text-lg font-bold text-stone-900">All goals completed! 🎉</h3>
+                        <p className="text-sm text-stone-500 mt-1">Amazing work — you&apos;ve crushed every goal in your plan. Ready to level up with new ones?</p>
+                    </div>
+                    <button
+                        onClick={startNewPlan}
+                        className="px-6 py-3 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 flex-shrink-0"
+                    >
+                        <Target size={16} /> Set New Plan
+                    </button>
+                </div>
+            )}
 
             {/* Filter Tabs */}
             <div className="flex gap-2 flex-wrap">
