@@ -1,11 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { Flag, AlertTriangle, CheckCircle, XCircle, ShieldAlert, BadgeInfo, Search, Filter, Clock, RotateCcw } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle, XCircle, ShieldAlert, BadgeInfo, Search, Clock, RotateCcw, Loader2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useToast } from "@/components/ui/toast";
+import {
+    deleteCommunityComment,
+    deleteCommunityPost,
+    fetchModerationContent,
+    getCommunityErrorMessage,
+    type ModerationContentRecord,
+} from "@/lib/community";
 
 // Types
 type ReportSeverity = "High" | "Medium" | "Low";
@@ -19,7 +28,7 @@ interface Report {
     reporter: string;
     reportedUser: {
         name: string;
-        avatar: string;
+        avatar?: string;
         id: string;
     };
     content: string;
@@ -27,6 +36,8 @@ interface Report {
     severity: ReportSeverity;
     status: ReportStatus;
     timestamp: string;
+    createdAt: string;
+    sourceId?: string;
 }
 
 interface ResolvedReport extends Report {
@@ -34,109 +45,119 @@ interface ResolvedReport extends Report {
     resolvedAt: string;
 }
 
-const MOCK_REPORTS: Report[] = [
-    {
-        id: "R-1023",
-        type: "Comment",
-        reason: "Harassment",
-        reporter: "Amara O.",
-        reportedUser: { name: "New User 123", avatar: "https://i.pravatar.cc/150?u=99", id: "u-99" },
-        content: "You obviously don't know what you're talking about. Quit tech.",
-        context: "Thread: 'Struggling with React Hooks'",
-        severity: "High",
-        status: "Pending",
-        timestamp: "10 mins ago",
-    },
-    {
-        id: "R-1022",
-        type: "Post",
-        reason: "Spam",
-        reporter: "System Bot",
-        reportedUser: { name: "Crypto King", avatar: "https://i.pravatar.cc/150?u=88", id: "u-88" },
-        content: "Make $5000/day working from home!! Click link -> bit.ly/scam",
-        severity: "Medium",
-        status: "Pending",
-        timestamp: "1 hour ago",
-    },
-    {
-        id: "R-1021",
-        type: "Profile",
-        reason: "Inappropriate Content",
-        reporter: "Sarah J.",
-        reportedUser: { name: "Troll Account", avatar: "https://i.pravatar.cc/150?u=77", id: "u-77" },
-        content: "Bio contains offensive language.",
-        severity: "Low",
-        status: "Pending",
-        timestamp: "3 hours ago",
-    },
-    {
-        id: "R-1020",
-        type: "Comment",
-        reason: "Misinformation",
-        reporter: "Monica L.",
-        reportedUser: { name: "FakeFacts", avatar: "https://i.pravatar.cc/150?u=66", id: "u-66" },
-        content: "This career advice is completely fabricated and misleading.",
-        context: "Thread: 'Salary Negotiation Tips'",
-        severity: "Medium",
-        status: "Pending",
-        timestamp: "5 hours ago",
-    },
-    {
-        id: "R-1019",
-        type: "Post",
-        reason: "Hate Speech",
-        reporter: "Keisha W.",
-        reportedUser: { name: "Anon42", avatar: "https://i.pravatar.cc/150?u=55", id: "u-55" },
-        content: "Discriminatory language targeting a specific group.",
-        severity: "High",
-        status: "Pending",
-        timestamp: "8 hours ago",
-    },
-];
+function formatRelativeTime(value: string) {
+    const date = new Date(value);
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
-const MOCK_RESOLVED: ResolvedReport[] = [
-    {
-        id: "R-1018", type: "Comment", reason: "Spam", reporter: "System Bot",
-        reportedUser: { name: "LinkDropper", avatar: "https://i.pravatar.cc/150?u=44", id: "u-44" },
-        content: "Buy followers cheap at...", severity: "Low", status: "Resolved", timestamp: "1 day ago",
-        action: "Delete", resolvedAt: "23 hours ago",
-    },
-    {
-        id: "R-1017", type: "Profile", reason: "Impersonation", reporter: "Admin",
-        reportedUser: { name: "NotRealAdmin", avatar: "https://i.pravatar.cc/150?u=33", id: "u-33" },
-        content: "Profile claiming to be an official BBG admin.", severity: "High", status: "Resolved", timestamp: "2 days ago",
-        action: "Warn", resolvedAt: "1 day ago",
-    },
-    {
-        id: "R-1016", type: "Post", reason: "Off-Topic", reporter: "Davon L.",
-        reportedUser: { name: "RandomPoster", avatar: "https://i.pravatar.cc/150?u=22", id: "u-22" },
-        content: "Unrelated content in the wrong channel.", severity: "Low", status: "Dismissed", timestamp: "3 days ago",
-        action: "Dismiss", resolvedAt: "2 days ago",
-    },
-];
+    if (diffMinutes < 1) return "just now";
+    if (diffMinutes < 60) return `${diffMinutes} mins ago`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours} hours ago`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays} days ago`;
+
+    return date.toLocaleDateString();
+}
+
+function detectSeverity(content: string): ReportSeverity {
+    const normalized = content.toLowerCase();
+    const highSignals = ["hate", "kill", "threat", "harass", "slur"];
+    const mediumSignals = ["spam", "scam", "fake", "misleading", "offensive"];
+
+    if (highSignals.some((signal) => normalized.includes(signal))) return "High";
+    if (mediumSignals.some((signal) => normalized.includes(signal))) return "Medium";
+    return "Low";
+}
+
+function detectReason(content: string): string {
+    const normalized = content.toLowerCase();
+    if (normalized.includes("spam") || normalized.includes("http")) return "Possible Spam";
+    if (normalized.includes("hate") || normalized.includes("slur") || normalized.includes("harass")) return "Potential Harassment";
+    if (normalized.includes("fake") || normalized.includes("misleading")) return "Potential Misinformation";
+    return "Manual Review";
+}
+
+function mapModerationContent(item: ModerationContentRecord): Report {
+    return {
+        id: `R-${item.sourceType}-${item.id}`,
+        sourceId: item.id,
+        type: item.sourceType,
+        reason: detectReason(item.content),
+        reporter: "Automated moderation",
+        reportedUser: {
+            name: item.authorName,
+            id: item.authorName.toLowerCase().replace(/\s+/g, "-"),
+        },
+        content: item.content,
+        context: `${item.groupName} / ${item.channelName}${item.postTitle ? ` / ${item.postTitle}` : ""}`,
+        severity: detectSeverity(item.content),
+        status: "Pending",
+        timestamp: formatRelativeTime(item.createdAt),
+        createdAt: item.createdAt,
+    };
+}
 
 export default function AdminModerationPage() {
-    const [reports, setReports] = useState<Report[]>(MOCK_REPORTS);
-    const [resolvedReports, setResolvedReports] = useState<ResolvedReport[]>(MOCK_RESOLVED);
+    const { getToken } = useAuth();
+    const { toast } = useToast();
+    const [reports, setReports] = useState<Report[]>([]);
+    const [resolvedReports, setResolvedReports] = useState<ResolvedReport[]>([]);
     const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
     const [tab, setTab] = useState<"pending" | "history">("pending");
+    const [isLoading, setIsLoading] = useState(true);
+    const [isActingId, setIsActingId] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     // Filters
     const [severityFilter, setSeverityFilter] = useState<"All" | ReportSeverity>("All");
     const [typeFilter, setTypeFilter] = useState<"All" | "Post" | "Comment" | "Profile">("All");
     const [searchQuery, setSearchQuery] = useState("");
 
-    const filteredReports = reports.filter(r => {
-        const matchSeverity = severityFilter === "All" || r.severity === severityFilter;
-        const matchType = typeFilter === "All" || r.type === typeFilter;
-        const matchSearch = searchQuery === "" || r.reason.toLowerCase().includes(searchQuery.toLowerCase()) || r.reportedUser.name.toLowerCase().includes(searchQuery.toLowerCase()) || r.content.toLowerCase().includes(searchQuery.toLowerCase());
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadModerationData() {
+            setIsLoading(true);
+            setError(null);
+
+            try {
+                const items = await fetchModerationContent(getToken);
+                if (cancelled) return;
+                setReports(items.map(mapModerationContent));
+            } catch (loadError) {
+                if (!cancelled) {
+                    setError(getCommunityErrorMessage(loadError));
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoading(false);
+                }
+            }
+        }
+
+        void loadModerationData();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [getToken]);
+
+    const filteredReports = reports.filter((report) => {
+        const matchSeverity = severityFilter === "All" || report.severity === severityFilter;
+        const matchType = typeFilter === "All" || report.type === typeFilter;
+        const query = searchQuery.trim().toLowerCase();
+        const matchSearch = query === "" || report.reason.toLowerCase().includes(query) || report.reportedUser.name.toLowerCase().includes(query) || report.content.toLowerCase().includes(query);
         return matchSeverity && matchType && matchSearch;
     });
 
-    const filteredResolved = resolvedReports.filter(r => {
-        const matchSeverity = severityFilter === "All" || r.severity === severityFilter;
-        const matchType = typeFilter === "All" || r.type === typeFilter;
-        const matchSearch = searchQuery === "" || r.reason.toLowerCase().includes(searchQuery.toLowerCase()) || r.reportedUser.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const filteredResolved = resolvedReports.filter((report) => {
+        const matchSeverity = severityFilter === "All" || report.severity === severityFilter;
+        const matchType = typeFilter === "All" || report.type === typeFilter;
+        const query = searchQuery.trim().toLowerCase();
+        const matchSearch = query === "" || report.reason.toLowerCase().includes(query) || report.reportedUser.name.toLowerCase().includes(query);
         return matchSeverity && matchType && matchSearch;
     });
 
@@ -144,9 +165,31 @@ export default function AdminModerationPage() {
         ? (filteredReports.find(r => r.id === selectedReportId) || filteredReports[0])
         : (filteredResolved.find(r => r.id === selectedReportId) || filteredResolved[0]);
 
-    const handleAction = (action: ActionType, reportId: string) => {
+    const handleAction = async (action: ActionType, reportId: string) => {
         const report = reports.find(r => r.id === reportId);
         if (!report) return;
+
+        if (action === "Delete") {
+            if (!report.sourceId) {
+                toast("Unable to resolve source content for delete", "error");
+                return;
+            }
+
+            setIsActingId(reportId);
+            try {
+                if (report.type === "Post") {
+                    await deleteCommunityPost(report.sourceId, getToken);
+                } else if (report.type === "Comment") {
+                    await deleteCommunityComment(report.sourceId, getToken);
+                }
+            } catch (deleteError) {
+                toast(getCommunityErrorMessage(deleteError), "error");
+                setIsActingId(null);
+                return;
+            }
+            setIsActingId(null);
+        }
+
         const resolved: ResolvedReport = {
             ...report,
             // For "Delete" action, replace content with "[deleted]" placeholder
@@ -158,11 +201,16 @@ export default function AdminModerationPage() {
         setResolvedReports(prev => [resolved, ...prev]);
         setReports(prev => prev.filter(r => r.id !== reportId));
         if (selectedReportId === reportId) setSelectedReportId(null);
+        toast(action === "Delete" ? "Content removed" : action === "Warn" ? "Warning logged" : "Report dismissed");
     };
 
     const handleReopen = (reportId: string) => {
         const resolved = resolvedReports.find(r => r.id === reportId);
         if (!resolved) return;
+        if (resolved.action === "Delete") {
+            toast("Deleted content cannot be reopened from this view.", "error");
+            return;
+        }
         const { action: _a, resolvedAt: _r, ...report } = resolved;
         setReports(prev => [{ ...report, status: "Pending" as ReportStatus }, ...prev]);
         setResolvedReports(prev => prev.filter(r => r.id !== reportId));
@@ -212,13 +260,13 @@ export default function AdminModerationPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={16} />
                     <input type="text" placeholder="Search reports..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
                 </div>
-                <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value as any)} className="bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 outline-none">
+                <select title="Filter by severity" aria-label="Filter by severity" value={severityFilter} onChange={e => setSeverityFilter(e.target.value as any)} className="bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 outline-none">
                     <option value="All">All Severity</option>
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
                     <option value="Low">Low</option>
                 </select>
-                <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)} className="bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 outline-none">
+                <select title="Filter by content type" aria-label="Filter by content type" value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)} className="bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 outline-none">
                     <option value="All">All Types</option>
                     <option value="Post">Post</option>
                     <option value="Comment">Comment</option>
@@ -227,7 +275,13 @@ export default function AdminModerationPage() {
             </div>
 
             {/* Main Layout */}
-            {currentList.length > 0 ? (
+            {isLoading ? (
+                <div className="h-full flex items-center justify-center text-stone-500 gap-2">
+                    <Loader2 size={18} className="animate-spin" /> Loading moderation queue...
+                </div>
+            ) : error ? (
+                <EmptyState icon={AlertTriangle} heading="Moderation queue unavailable" description={error} variant="plain" />
+            ) : currentList.length > 0 ? (
                 <div className="flex flex-col lg:flex-row gap-6 h-full min-h-0">
                     {/* Report Sidebar List */}
                     <div className="w-full lg:w-1/3 bg-white rounded-2xl border border-stone-200 flex flex-col h-full shadow-lg shadow-stone-200/50">
@@ -327,16 +381,17 @@ export default function AdminModerationPage() {
                                         <div className="border-t border-stone-100 pt-6">
                                             <h3 className="font-bold text-stone-900 mb-4">Take Action</h3>
                                             <div className="flex flex-wrap gap-3">
-                                                <button onClick={() => handleAction("Dismiss", selectedReport.id)} className="flex-1 py-3 px-4 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                                                <button onClick={() => void handleAction("Dismiss", selectedReport.id)} disabled={isActingId === selectedReport.id} className="flex-1 py-3 px-4 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
                                                     <CheckCircle size={18} /> Dismiss Report
                                                 </button>
-                                                <button onClick={() => handleAction("Warn", selectedReport.id)} className="flex-1 py-3 px-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                                                <button onClick={() => void handleAction("Warn", selectedReport.id)} disabled={isActingId === selectedReport.id} className="flex-1 py-3 px-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 rounded-xl font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
                                                     <AlertTriangle size={18} /> Send Warning
                                                 </button>
-                                                <button onClick={() => handleAction("Delete", selectedReport.id)} className="flex-1 py-3 px-4 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
-                                                    <XCircle size={18} /> Delete Content
+                                                <button onClick={() => void handleAction("Delete", selectedReport.id)} disabled={isActingId === selectedReport.id || selectedReport.type === "Profile"} className="flex-1 py-3 px-4 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+                                                    {isActingId === selectedReport.id ? <Loader2 size={18} className="animate-spin" /> : <XCircle size={18} />} Delete Content
                                                 </button>
                                             </div>
+                                            {selectedReport.type === "Profile" ? <p className="text-xs text-stone-400 mt-2">Profile moderation delete endpoint is not currently exposed in API docs.</p> : null}
                                         </div>
                                     ) : (
                                         <div className="border-t border-stone-100 pt-6">

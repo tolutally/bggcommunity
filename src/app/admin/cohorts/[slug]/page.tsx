@@ -1,600 +1,573 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Users, Calendar, Clock, CheckCircle2,
-  MoreHorizontal, FileText, Video, Download, Search,
-  Plus, Mail, UserPlus, BarChart3, GraduationCap,
-  Settings, Pencil, X, Check, AlertTriangle, Upload,
+    ArrowLeft,
+    Users,
+    Calendar,
+    Clock,
+    CheckCircle2,
+    MoreHorizontal,
+    FileText,
+    Video,
+    Download,
+    Search,
+    Plus,
+    Mail,
+    UserPlus,
+    BarChart3,
+    GraduationCap,
+    Settings,
+    Pencil,
+    Loader2,
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
-import { Skeleton, SkeletonCard } from "@/components/ui/skeleton";
 import {
-  useCohort, useCohortMembers, useCohortSessions, useCohortResources,
-  fmtCohortDate, cohortStatusLabel, fmtSessionMonth, fmtSessionDay, fmtSessionTime, fmtDuration,
-} from "@/hooks/use-cohorts";
-import { useCohortStats } from "@/hooks/use-admin-cohorts";
+    buildCohortMembersLabel,
+    fetchAdminCohortStats,
+    fetchCohortDetail,
+    fetchCohortMembers,
+    fetchCohortResources,
+    fetchCohortSessions,
+    getCohortsErrorMessage,
+    resolveCohortIdFromSlug,
+    type AdminCohortStatsRecord,
+    type CohortMemberRecord,
+    type CohortRecord,
+    type CohortResourceRecord,
+    type CohortSessionRecord,
+} from "@/lib/cohorts";
 
 type Tab = "overview" | "members" | "sessions" | "resources";
 
+function progressClass(value: number) {
+    if (value >= 100) return "w-full";
+    if (value >= 90) return "w-11/12";
+    if (value >= 80) return "w-10/12";
+    if (value >= 75) return "w-9/12";
+    if (value >= 66) return "w-8/12";
+    if (value >= 58) return "w-7/12";
+    if (value >= 50) return "w-6/12";
+    if (value >= 42) return "w-5/12";
+    if (value >= 33) return "w-4/12";
+    if (value >= 25) return "w-3/12";
+    if (value >= 16) return "w-2/12";
+    if (value > 0) return "w-1/12";
+    return "w-0";
+}
+
 export default function AdminCohortDetailPage() {
-  const { slug } = useParams();
-  const slugStr = slug as string;
-  const { cohort, isLoading, error } = useCohort(slugStr);
-  const { members } = useCohortMembers(slugStr);
-  const { sessions } = useCohortSessions(slugStr);
-  const { resources } = useCohortResources(slugStr);
-  const { stats } = useCohortStats(slugStr);
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const [memberSearch, setMemberSearch] = useState("");
-  const [showBulkAdd, setShowBulkAdd] = useState(false);
+    const { slug } = useParams<{ slug: string }>();
+    const { getToken } = useAuth();
+    const [activeTab, setActiveTab] = useState<Tab>("overview");
+    const [memberSearch, setMemberSearch] = useState("");
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [cohort, setCohort] = useState<CohortRecord | null>(null);
+    const [members, setMembers] = useState<CohortMemberRecord[]>([]);
+    const [sessions, setSessions] = useState<CohortSessionRecord[]>([]);
+    const [resources, setResources] = useState<CohortResourceRecord[]>([]);
+    const [stats, setStats] = useState<AdminCohortStatsRecord | null>(null);
 
-  if (isLoading) {
-    return (
-      <div className="p-6 md:p-10 max-w-[1400px] mx-auto space-y-6">
-        <Skeleton className="h-8 w-48 rounded-lg" />
-        <Skeleton className="h-10 w-72 rounded-xl" />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <SkeletonCard />
-            <SkeletonCard />
-          </div>
-          <SkeletonCard />
-        </div>
-      </div>
-    );
-  }
+    useEffect(() => {
+        let cancelled = false;
 
-  if (error || !cohort) {
-    return (
-      <div className="p-10 text-center">
-        <h2 className="text-2xl font-bold text-stone-900">Cohort not found</h2>
-        <Link href="/admin/cohorts" className="text-brand-600 hover:underline mt-2 inline-block">
-          Back to Cohorts
-        </Link>
-      </div>
-    );
-  }
+        async function loadPage() {
+            setIsLoading(true);
+            setError(null);
 
-  const statusLabel = cohortStatusLabel(cohort.status);
-  const upcomingSessions = sessions.filter((s) => new Date(s.scheduledAt) >= new Date());
-  const completedSessions = sessions.filter((s) => new Date(s.scheduledAt) < new Date());
-  const filteredMembers = members.filter((m) => {
-    const name = m.profile ? `${m.profile.firstName} ${m.profile.lastName}` : m.email;
-    return name.toLowerCase().includes(memberSearch.toLowerCase());
-  });
+            try {
+                const resolved = await resolveCohortIdFromSlug(slug);
+                const cohortId = resolved?.id ?? slug;
 
-  const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "members", label: "Members", count: members.length },
-    { key: "sessions", label: "Sessions", count: sessions.length },
-    { key: "resources", label: "Resources", count: resources.length },
-  ];
+                const [cohortDetail, cohortMembers, cohortSessions, cohortResources] = await Promise.all([
+                    fetchCohortDetail(cohortId),
+                    fetchCohortMembers(cohortId),
+                    fetchCohortSessions(cohortId, getToken),
+                    fetchCohortResources(cohortId),
+                ]);
 
-  return (
-    <ErrorBoundary>
-      <div className="p-6 md:p-10 max-w-[1400px] mx-auto space-y-6">
-        {/* Back + Header */}
-        <Link
-          href="/admin/cohorts"
-          className="inline-flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-brand-700 transition-colors mb-2"
-        >
-          <ArrowLeft size={16} /> Back to Cohorts
-        </Link>
+                let cohortStats: AdminCohortStatsRecord | null = null;
+                try {
+                    cohortStats = await fetchAdminCohortStats(cohortId, getToken);
+                } catch {
+                    cohortStats = null;
+                }
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-4 bg-brand-50 text-brand-700 rounded-2xl">
-              <GraduationCap size={28} />
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl md:text-3xl font-bold text-stone-900">{cohort.name}</h1>
-                <StatusBadge label={statusLabel} preset={statusLabel as any} variant="pill" />
-              </div>
-              <p className="text-stone-500 text-sm mt-1">
-                {cohort.startDate ? fmtCohortDate(cohort.startDate) : "—"} – {cohort.endDate ? fmtCohortDate(cohort.endDate) : "—"}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2 self-start">
-            <button className="px-4 py-2.5 bg-white border border-stone-200 text-stone-600 rounded-xl font-semibold text-sm hover:bg-stone-50 transition-colors flex items-center gap-2">
-              <Settings size={16} /> Settings
-            </button>
-            <button onClick={() => setShowBulkAdd(true)} className="px-4 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
-              <UserPlus size={16} /> Add Members
-            </button>
-          </div>
-        </div>
+                if (cancelled) {
+                    return;
+                }
 
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-stone-200 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-5 py-3 text-sm font-semibold transition-colors whitespace-nowrap border-b-2 ${
-                activeTab === tab.key
-                  ? "border-brand-600 text-brand-700"
-                  : "border-transparent text-stone-500 hover:text-stone-700"
-              }`}
-            >
-              {tab.label}
-              {tab.count !== undefined && (
-                <span className="ml-2 text-xs bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* === Overview Tab === */}
-        {activeTab === "overview" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Description */}
-              <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
-                <h3 className="font-bold text-stone-900 mb-2">About this Cohort</h3>
-                <p className="text-stone-600 text-sm leading-relaxed">
-                  {cohort.description || "No description provided."}
-                </p>
-              </div>
-
-              {/* Upcoming Sessions Preview */}
-              <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-bold text-stone-900">Upcoming Sessions</h3>
-                  <button onClick={() => setActiveTab("sessions")} className="text-sm text-brand-600 font-semibold hover:text-brand-800">
-                    View all
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {upcomingSessions.length === 0 ? (
-                    <EmptyState
-                      icon={Video}
-                      heading="No upcoming sessions"
-                      description="Schedule a new session for this cohort."
-                      variant="plain"
-                      action={{ label: "Schedule Session", onClick: () => setActiveTab("sessions") }}
-                      className="py-4"
-                    />
-                  ) : (
-                    upcomingSessions.slice(0, 3).map((session) => (
-                      <div key={session.id} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-brand-100 text-brand-700 rounded-lg">
-                            <Video size={16} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-stone-800">{session.title}</p>
-                            <p className="text-xs text-stone-500">
-                              {fmtCohortDate(session.scheduledAt)} &bull; {fmtSessionTime(session.scheduledAt)}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs font-medium text-stone-500">{session._count.rsvps} RSVPs</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column — Stats */}
-            <div className="space-y-6">
-              <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm space-y-5">
-                <h3 className="font-bold text-stone-900">Cohort Stats</h3>
-                <div className="space-y-4">
-                  <StatRow icon={Users} label="Members" value={String(cohort._count.members)} />
-                  <StatRow icon={Calendar} label="Start" value={cohort.startDate ? fmtCohortDate(cohort.startDate) : "—"} />
-                  <StatRow icon={Calendar} label="End" value={cohort.endDate ? fmtCohortDate(cohort.endDate) : "—"} />
-                  <StatRow icon={BarChart3} label="Active Rate" value={stats ? `${stats.activeRate}%` : "—"} />
-                  <StatRow icon={CheckCircle2} label="Sessions Done" value={String(completedSessions.length)} />
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
-                <h3 className="font-bold text-stone-900 mb-4">Quick Actions</h3>
-                <div className="space-y-2">
-                  <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
-                    <Mail size={16} className="text-stone-400" /> Send Announcement
-                  </button>
-                  <button onClick={() => setActiveTab("sessions")} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
-                    <Plus size={16} className="text-stone-400" /> Schedule Session
-                  </button>
-                  <button onClick={() => setActiveTab("resources")} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
-                    <FileText size={16} className="text-stone-400" /> Upload Resource
-                  </button>
-                  <button onClick={() => setShowBulkAdd(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
-                    <UserPlus size={16} className="text-stone-400" /> Add Members
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* === Members Tab === */}
-        {activeTab === "members" && (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-                <input
-                  type="text"
-                  placeholder="Search members..."
-                  value={memberSearch}
-                  onChange={(e) => setMemberSearch(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none"
-                />
-              </div>
-              <button onClick={() => setShowBulkAdd(true)} className="px-5 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
-                <UserPlus size={16} /> Add Members
-              </button>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
-                  <thead>
-                    <tr className="border-b border-stone-100 bg-stone-50">
-                      <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Member</th>
-                      <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Job Title</th>
-                      <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Joined</th>
-                      <th className="text-right text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {filteredMembers.map((member) => {
-                      const name = member.profile
-                        ? `${member.profile.firstName} ${member.profile.lastName}`
-                        : member.email;
-                      return (
-                        <tr key={member.id} className="hover:bg-stone-50 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <AvatarInitials name={name} src={member.profile?.avatarUrl ?? undefined} size="sm" />
-                              <div>
-                                <span className="font-semibold text-stone-900 text-sm">{name}</span>
-                                <p className="text-xs text-stone-400">{member.email}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-stone-600">
-                            {member.profile?.jobTitle ?? "—"}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-stone-500">
-                            {fmtCohortDate(member.joinedAt)}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
-                              <MoreHorizontal size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {filteredMembers.length === 0 && (
-              <EmptyState icon={Users} heading="No members found" description="Try a different search." variant="plain" />
-            )}
-          </div>
-        )}
-
-        {/* === Sessions Tab === */}
-        {activeTab === "sessions" && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-stone-900">All Sessions</h3>
-              <button className="px-5 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
-                <Plus size={16} /> Schedule Session
-              </button>
-            </div>
-
-            {upcomingSessions.length > 0 && (
-              <div>
-                <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">Upcoming</p>
-                <div className="space-y-3">
-                  {upcomingSessions.map((session) => (
-                    <div key={session.id} className="bg-white rounded-2xl border border-stone-100 p-5 shadow-sm flex items-center justify-between hover:border-brand-200 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-xl bg-brand-50 text-brand-700">
-                          <Video size={20} />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-stone-900">{session.title}</h4>
-                          <p className="text-sm text-stone-500">
-                            {fmtCohortDate(session.scheduledAt)} &bull; {fmtSessionTime(session.scheduledAt)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-sm font-medium text-stone-500">{session._count.rsvps} RSVPs</span>
-                        <StatusBadge label="Upcoming" preset="Upcoming" variant="tag" />
-                        <button className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
-                          <Pencil size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {completedSessions.length > 0 && (
-              <div>
-                <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">Completed</p>
-                <div className="space-y-3">
-                  {completedSessions.map((session) => (
-                    <div key={session.id} className="bg-white rounded-2xl border border-stone-100 p-5 shadow-sm flex items-center justify-between hover:border-stone-200 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-xl bg-stone-100 text-stone-500">
-                          <Video size={20} />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-stone-900">{session.title}</h4>
-                          <p className="text-sm text-stone-500">
-                            {fmtCohortDate(session.scheduledAt)} &bull; {fmtSessionTime(session.scheduledAt)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-sm font-medium text-stone-500">{session._count.rsvps} attended</span>
-                        <StatusBadge label="Completed" preset="Completed" variant="tag" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {sessions.length === 0 && (
-              <EmptyState icon={Calendar} heading="No sessions yet" description="Schedule a session for this cohort." variant="plain" />
-            )}
-          </div>
-        )}
-
-        {/* === Resources Tab === */}
-        {activeTab === "resources" && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-stone-900">Resources</h3>
-              <button className="px-5 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
-                <Plus size={16} /> Upload Resource
-              </button>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[500px]">
-                  <thead>
-                    <tr className="border-b border-stone-100 bg-stone-50">
-                      <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Name</th>
-                      <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Date</th>
-                      <th className="text-right text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {resources.map((resource) => (
-                      <tr key={resource.id} className="hover:bg-stone-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <FileText size={18} className="text-stone-400" />
-                            <span className="font-semibold text-stone-900 text-sm">{resource.title}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-stone-500">
-                          {fmtCohortDate(resource.createdAt)}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <a
-                            href={resource.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 text-stone-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors inline-block"
-                          >
-                            <Download size={16} />
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {resources.length === 0 && (
-              <EmptyState icon={FileText} heading="No resources yet" description="Upload resources for this cohort." variant="plain" />
-            )}
-          </div>
-        )}
-      </div>
-
-      {showBulkAdd && <BulkAddMembersModal onClose={() => setShowBulkAdd(false)} />}
-    </ErrorBoundary>
-  );
-}
-
-function StatRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2 text-stone-500">
-        <Icon size={15} />
-        <span className="text-sm">{label}</span>
-      </div>
-      <span className="text-sm font-semibold text-stone-800">{value}</span>
-    </div>
-  );
-}
-
-/* ── Bulk Add Members Modal ── */
-
-interface ParsedMember {
-  email: string;
-  name?: string;
-  valid: boolean;
-  error?: string;
-}
-
-function BulkAddMembersModal({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<"csv" | "paste">("paste");
-  const [emailText, setEmailText] = useState("");
-  const [csvFileName, setCsvFileName] = useState("");
-  const [parsedMembers, setParsedMembers] = useState<ParsedMember[]>([]);
-  const [processing, setProcessing] = useState(false);
-  const [done, setDone] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  const parseEmails = useCallback(
-    (text: string): ParsedMember[] => {
-      const lines = text.split(/[\n,;]+/).map((l) => l.trim()).filter(Boolean);
-      return lines.map((line) => {
-        const angleMatch = line.match(/^(.+?)\s*<(.+?)>$/);
-        if (angleMatch) {
-          const n = angleMatch[1].trim();
-          const email = angleMatch[2].trim().toLowerCase();
-          return { email, name: n, valid: emailRegex.test(email), error: emailRegex.test(email) ? undefined : "Invalid email" };
+                setCohort(cohortDetail);
+                setMembers(cohortMembers);
+                setSessions(cohortSessions);
+                setResources(cohortResources);
+                setStats(cohortStats);
+            } catch (loadError) {
+                if (!cancelled) {
+                    setError(getCohortsErrorMessage(loadError));
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoading(false);
+                }
+            }
         }
-        const email = line.toLowerCase();
-        return { email, valid: emailRegex.test(email), error: emailRegex.test(email) ? undefined : "Invalid email" };
-      });
-    },
-    [],
-  );
 
-  const handleFileUpload = useCallback(
-    (file: File) => {
-      if (!file.name.endsWith(".csv")) { setCsvFileName(""); return; }
-      setCsvFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        if (text) setParsedMembers(parseEmails(text));
-      };
-      reader.readAsText(file);
-    },
-    [parseEmails],
-  );
+        void loadPage();
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFileUpload(file);
-    },
-    [handleFileUpload],
-  );
+        return () => {
+            cancelled = true;
+        };
+    }, [getToken, slug]);
 
-  const handlePasteProcess = () => { setParsedMembers(parseEmails(emailText)); };
+    const filteredMembers = useMemo(() => members.filter((member) => {
+        const query = memberSearch.trim().toLowerCase();
+        if (!query) {
+            return true;
+        }
 
-  const handleSubmit = () => {
-    setProcessing(true);
-    setTimeout(() => { setProcessing(false); setDone(true); }, 1500);
-  };
+        return buildCohortMembersLabel(member).toLowerCase().includes(query) || member.email.toLowerCase().includes(query);
+    }), [memberSearch, members]);
 
-  const validCount = parsedMembers.filter((m) => m.valid).length;
-  const invalidCount = parsedMembers.filter((m) => !m.valid).length;
+    const upcomingSessions = useMemo(
+        () => sessions.filter((session) => new Date(session.scheduledAt).getTime() >= Date.now()),
+        [sessions],
+    );
+    const completedSessions = useMemo(
+        () => sessions.filter((session) => new Date(session.scheduledAt).getTime() < Date.now() || Boolean(session.recordingUrl)),
+        [sessions],
+    );
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-6 border-b border-stone-100">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-brand-50 rounded-xl text-brand-700"><Users size={20} /></div>
-            <h2 className="text-lg font-bold text-stone-900">Add Members to Cohort</h2>
-          </div>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
-        </div>
-
-        {done ? (
-          <div className="p-8 text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Check size={32} className="text-green-600" />
-            </div>
-            <h3 className="text-xl font-bold text-stone-900 mb-2">Members Added!</h3>
-            <p className="text-stone-500 mb-1">{validCount} member{validCount !== 1 ? "s" : ""} added to this cohort.</p>
-            {invalidCount > 0 && <p className="text-sm text-amber-600">{invalidCount} invalid email{invalidCount !== 1 ? "s" : ""} skipped.</p>}
-            <button onClick={onClose} className="mt-6 px-6 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors">Done</button>
-          </div>
-        ) : (
-          <>
-            <div className="p-6 space-y-4 overflow-y-auto flex-1">
-              <div className="flex bg-stone-100 rounded-xl p-1">
-                <button onClick={() => { setTab("paste"); setParsedMembers([]); }} className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "paste" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}>
-                  <Mail size={16} /> Paste Emails
-                </button>
-                <button onClick={() => { setTab("csv"); setParsedMembers([]); }} className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "csv" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}>
-                  <Upload size={16} /> CSV Upload
-                </button>
-              </div>
-
-              {tab === "paste" && parsedMembers.length === 0 && (
-                <div>
-                  <label className="block text-sm font-semibold text-stone-700 mb-1">Email Addresses <span className="text-stone-400 font-normal ml-1">(one per line, or comma/semicolon separated)</span></label>
-                  <textarea value={emailText} onChange={(e) => setEmailText(e.target.value)} placeholder={"amara@example.com\nbrianna@example.com"} rows={6} className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 resize-none font-mono" />
-                  <button onClick={handlePasteProcess} disabled={!emailText.trim()} className="mt-3 w-full px-4 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed">Process Emails</button>
+    if (isLoading) {
+        return (
+            <ErrorBoundary>
+                <div className="p-10 max-w-[1400px] mx-auto">
+                    <div className="rounded-2xl border border-stone-200 bg-white p-8 text-stone-500 flex items-center gap-2">
+                        <Loader2 size={18} className="animate-spin" /> Loading cohort details...
+                    </div>
                 </div>
-              )}
+            </ErrorBoundary>
+        );
+    }
 
-              {tab === "csv" && parsedMembers.length === 0 && (
-                <div>
-                  <div onDrop={handleDrop} onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }} onDragLeave={() => setIsDragOver(false)} onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${isDragOver ? "border-brand-400 bg-brand-50/50" : "border-stone-200 hover:border-brand-300 hover:bg-stone-50"}`}>
-                    <div className="w-12 h-12 bg-stone-100 rounded-xl flex items-center justify-center mx-auto mb-3"><FileText size={24} className="text-stone-400" /></div>
-                    <p className="text-sm font-semibold text-stone-700 mb-1">{csvFileName || "Drop your CSV here or click to browse"}</p>
-                    <p className="text-xs text-stone-400">CSV with email column (name column optional)</p>
-                    <input ref={fileInputRef} type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} className="hidden" />
-                  </div>
+    if (error || !cohort) {
+        return (
+            <ErrorBoundary>
+                <div className="p-10 max-w-[1400px] mx-auto">
+                    <EmptyState icon={GraduationCap} heading="Cohort unavailable" description={error ?? "Cohort not found."} />
                 </div>
-              )}
+            </ErrorBoundary>
+        );
+    }
 
-              {parsedMembers.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-sm font-bold text-stone-700">Preview</span>
-                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg border border-green-200">{validCount} valid</span>
-                    {invalidCount > 0 && <span className="px-2 py-0.5 bg-red-50 text-red-700 text-xs font-bold rounded-lg border border-red-200">{invalidCount} invalid</span>}
-                    <button onClick={() => { setParsedMembers([]); setEmailText(""); setCsvFileName(""); }} className="ml-auto text-xs font-semibold text-stone-500 hover:text-stone-700">Clear</button>
-                  </div>
-                  <div className="max-h-48 overflow-y-auto space-y-1 border border-stone-200 rounded-xl p-3">
-                    {parsedMembers.map((m, i) => (
-                      <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${m.valid ? "bg-green-50/50" : "bg-red-50/50"}`}>
-                        {m.valid ? <Check size={14} className="text-green-600 flex-shrink-0" /> : <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />}
-                        <span className={`font-mono text-xs flex-1 truncate ${m.valid ? "text-stone-700" : "text-red-600"}`}>{m.name ? `${m.name} — ` : ""}{m.email}</span>
-                        {m.error && <span className="text-[10px] text-red-500 font-semibold">{m.error}</span>}
-                      </div>
-                    ))}
-                  </div>
+    const tabs: { key: Tab; label: string; count?: number }[] = [
+        { key: "overview", label: "Overview" },
+        { key: "members", label: "Members", count: members.length },
+        { key: "sessions", label: "Sessions", count: sessions.length },
+        { key: "resources", label: "Resources", count: resources.length },
+    ];
+
+    const startDateLabel = cohort.startDate ? new Date(cohort.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "TBD";
+    const endDateLabel = cohort.endDate ? new Date(cohort.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "TBD";
+    const activeRate = stats?.activeRate ?? cohort.activeRate ?? 0;
+    const sessionsDone = stats?.sessionsDone ?? completedSessions.length;
+    const memberCount = stats?.memberCount ?? cohort.memberCount ?? members.length;
+
+    return (
+        <ErrorBoundary>
+        <div className="p-6 md:p-10 max-w-[1400px] mx-auto space-y-6">
+            {/* Back + Header */}
+            <Link
+                href="/admin/cohorts"
+                className="inline-flex items-center gap-2 text-sm font-medium text-stone-500 hover:text-brand-700 transition-colors mb-2"
+            >
+                <ArrowLeft size={16} /> Back to Cohorts
+            </Link>
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <div className="p-4 bg-brand-50 text-brand-700 rounded-2xl">
+                        <GraduationCap size={28} />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-2xl md:text-3xl font-bold text-stone-900">{cohort.name}</h1>
+                            {cohort.status ? <StatusBadge label={cohort.status} preset={cohort.status as never} variant="pill" /> : null}
+                        </div>
+                        <p className="text-stone-500 text-sm mt-1">{cohort.track ?? "General"} Track &bull; {startDateLabel} - {endDateLabel}</p>
+                    </div>
                 </div>
-              )}
+                <div className="flex gap-2 self-start">
+                    <button className="px-4 py-2.5 bg-white border border-stone-200 text-stone-600 rounded-xl font-semibold text-sm hover:bg-stone-50 transition-colors flex items-center gap-2">
+                        <Settings size={16} /> Settings
+                    </button>
+                    <button className="px-4 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
+                        <UserPlus size={16} /> Add Members
+                    </button>
+                </div>
             </div>
 
-            {parsedMembers.length > 0 && (
-              <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
-                <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors">Cancel</button>
-                <button onClick={handleSubmit} disabled={validCount === 0 || processing} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                  {processing ? (<><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Processing...</>) : (<><Plus size={16} /> Add {validCount} Member{validCount !== 1 ? "s" : ""}</>)}
-                </button>
-              </div>
+            {/* Tabs */}
+            <div className="flex gap-1 border-b border-stone-200 overflow-x-auto">
+                {tabs.map((tab) => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key)}
+                        className={`px-5 py-3 text-sm font-semibold transition-colors whitespace-nowrap border-b-2 ${
+                            activeTab === tab.key
+                                ? "border-brand-600 text-brand-700"
+                                : "border-transparent text-stone-500 hover:text-stone-700"
+                        }`}
+                    >
+                        {tab.label}
+                        {tab.count !== undefined && (
+                            <span className="ml-2 text-xs bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">
+                                {tab.count}
+                            </span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {/* === Overview Tab === */}
+            {activeTab === "overview" && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Column */}
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* Description */}
+                        <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
+                            <h3 className="font-bold text-stone-900 mb-2">About this Cohort</h3>
+                            <p className="text-stone-600 text-sm leading-relaxed">{cohort.description ?? "No description available yet."}</p>
+                        </div>
+
+                        {/* Progress */}
+                        <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-bold text-stone-900">Current Phase</h3>
+                                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                                    cohort.health === "High" ? "bg-emerald-100 text-emerald-700" : cohort.health === "Low" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                                }`}>
+                                    {cohort.health ?? "Unknown"} Health
+                                </span>
+                            </div>
+                            <div className="bg-stone-50 rounded-xl p-4">
+                                <p className="text-sm font-bold text-stone-800 mb-3">{cohort.phase ?? "In progress"}</p>
+                                <div className="w-full bg-stone-200 rounded-full h-2 mb-2">
+                                    <div
+                                        className={`bg-brand-600 h-2 rounded-full transition-all ${progressClass(activeRate)}`}
+                                    ></div>
+                                </div>
+                                <p className="text-xs text-stone-500">{activeRate}% member activity rate</p>
+                            </div>
+                        </div>
+
+                        {/* Upcoming Sessions Preview */}
+                        <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-bold text-stone-900">Upcoming Sessions</h3>
+                                <button onClick={() => setActiveTab("sessions")} className="text-sm text-brand-600 font-semibold hover:text-brand-800">
+                                    View all
+                                </button>
+                            </div>
+                            <div className="space-y-3">
+                                {upcomingSessions.length === 0 ? (
+                                    <EmptyState
+                                        icon={Video}
+                                        heading="No upcoming sessions"
+                                        description="Schedule a new session for this cohort."
+                                        variant="plain"
+                                        action={{ label: "Schedule Session", onClick: () => setActiveTab("sessions") }}
+                                        className="py-4"
+                                    />
+                                ) : (
+                                    upcomingSessions.map((session) => (
+                                        <div key={session.id} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-brand-100 text-brand-700 rounded-lg">
+                                                    <Video size={16} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-stone-800">{session.title}</p>
+                                                    <p className="text-xs text-stone-500">{new Date(session.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} &bull; {new Date(session.scheduledAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
+                                                </div>
+                                            </div>
+                                            <span className="text-xs font-medium text-stone-500">{session.attendeeCount} RSVPs</span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column — Stats */}
+                    <div className="space-y-6">
+                        <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm space-y-5">
+                            <h3 className="font-bold text-stone-900">Cohort Stats</h3>
+                            <div className="space-y-4">
+                                <StatRow icon={Users} label="Members" value={`${cohort.members.length} / ${cohort.maxMembers}`} />
+                                <StatRow icon={Users} label="Members" value={`${memberCount} / ${cohort.maxMembers ?? "-"}`} />
+                                <StatRow icon={Calendar} label="Start" value={startDateLabel} />
+                                <StatRow icon={Calendar} label="End" value={endDateLabel} />
+                                <StatRow icon={Clock} label="Phase" value={cohort.phase ?? "In progress"} />
+                                <StatRow icon={BarChart3} label="Active Rate" value={`${activeRate}%`} />
+                                <StatRow icon={CheckCircle2} label="Sessions Done" value={`${sessionsDone}`} />
+                            </div>
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
+                            <h3 className="font-bold text-stone-900 mb-4">Quick Actions</h3>
+                            <div className="space-y-2">
+                                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
+                                    <Mail size={16} className="text-stone-400" /> Send Announcement
+                                </button>
+                                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
+                                    <Plus size={16} className="text-stone-400" /> Schedule Session
+                                </button>
+                                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
+                                    <FileText size={16} className="text-stone-400" /> Upload Resource
+                                </button>
+                                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors text-sm font-medium text-stone-700">
+                                    <UserPlus size={16} className="text-stone-400" /> Add Members
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
-          </>
-        )}
-      </div>
-    </div>
-  );
+
+            {/* === Members Tab === */}
+            {activeTab === "members" && (
+                <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+                            <input
+                                type="text"
+                                placeholder="Search members..."
+                                value={memberSearch}
+                                onChange={(e) => setMemberSearch(e.target.value)}
+                                className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none"
+                            />
+                        </div>
+                        <button className="px-5 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
+                            <UserPlus size={16} /> Add Members
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[640px]">
+                                <thead>
+                                    <tr className="border-b border-stone-100 bg-stone-50">
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Member</th>
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Role</th>
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Status</th>
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Progress</th>
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Joined</th>
+                                        <th className="text-right text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-stone-100">
+                                    {filteredMembers.map((member) => (
+                                        <tr key={member.userId} className="hover:bg-stone-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <AvatarInitials name={buildCohortMembersLabel(member)} src={member.avatarUrl ?? undefined} size="sm" />
+                                                    <span className="font-semibold text-stone-900 text-sm">{buildCohortMembersLabel(member)}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                                                    member.role === "FACILITATOR" ? "bg-brand-100 text-brand-700" : "bg-stone-100 text-stone-600"
+                                                }`}>
+                                                    {member.role ?? "Member"}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <StatusBadge label="Active" preset="Active" variant="pill" />
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-20 bg-stone-200 rounded-full h-1.5">
+                                                        <div className={`bg-brand-600 h-1.5 rounded-full ${progressClass(member.progress ?? 0)}`}></div>
+                                                    </div>
+                                                    <span className="text-xs font-medium text-stone-600">{member.progress ?? 0}%</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-stone-500">{member.joinedAt ? new Date(member.joinedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "-"}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button title="Open member actions" aria-label="Open member actions" className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
+                                                    <MoreHorizontal size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {filteredMembers.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-8 text-center text-sm text-stone-500">No members found for this search.</td>
+                                        </tr>
+                                    ) : null}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* === Sessions Tab === */}
+            {activeTab === "sessions" && (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-stone-900">All Sessions</h3>
+                        <button className="px-5 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
+                            <Plus size={16} /> Schedule Session
+                        </button>
+                    </div>
+
+                    {upcomingSessions.length > 0 && (
+                        <div>
+                            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">Upcoming</p>
+                            <div className="space-y-3">
+                                {upcomingSessions.map((session) => (
+                                    <div key={session.id} className="bg-white rounded-2xl border border-stone-100 p-5 shadow-sm flex items-center justify-between hover:border-brand-200 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 rounded-xl bg-brand-50 text-brand-700">
+                                                <Video size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-stone-900">{session.title}</h4>
+                                                <p className="text-sm text-stone-500">{new Date(session.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} &bull; {new Date(session.scheduledAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-sm font-medium text-stone-500">{session.attendeeCount} RSVPs</span>
+                                            <span className="text-xs font-bold px-2.5 py-1 rounded-full uppercase bg-blue-50 text-blue-700">
+                                                <StatusBadge label="Upcoming" preset="Upcoming" variant="tag" />
+                                            </span>
+                                            <button title="Edit session" aria-label="Edit session" className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
+                                                <Pencil size={15} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {completedSessions.length > 0 && (
+                        <div>
+                            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">Completed</p>
+                            <div className="space-y-3">
+                                {completedSessions.map((session) => (
+                                    <div key={session.id} className="bg-white rounded-2xl border border-stone-100 p-5 shadow-sm flex items-center justify-between hover:border-stone-200 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 rounded-xl bg-stone-100 text-stone-500">
+                                                <Video size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-stone-900">{session.title}</h4>
+                                                <p className="text-sm text-stone-500">{new Date(session.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} &bull; {new Date(session.scheduledAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-sm font-medium text-stone-500">{session.attendeeCount} attended</span>
+                                            <span className="text-xs font-bold px-2.5 py-1 rounded-full uppercase bg-stone-100 text-stone-500">
+                                                <StatusBadge label="Completed" preset="Completed" variant="tag" />
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* === Resources Tab === */}
+            {activeTab === "resources" && (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-stone-900">Resources</h3>
+                        <button className="px-5 py-2.5 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2">
+                            <Plus size={16} /> Upload Resource
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[500px]">
+                                <thead>
+                                    <tr className="border-b border-stone-100 bg-stone-50">
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Name</th>
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Type</th>
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Size</th>
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Date</th>
+                                        <th className="text-right text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-stone-100">
+                                    {resources.map((resource) => {
+                                        const typeColors: Record<string, string> = {
+                                            PDF: "bg-rose-100 text-rose-700",
+                                            VIDEO: "bg-blue-100 text-blue-700",
+                                            ZIP: "bg-amber-100 text-amber-700",
+                                        };
+                                        const fileType = resource.type ?? "LINK";
+                                        return (
+                                            <tr key={resource.id} className="hover:bg-stone-50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <FileText size={18} className="text-stone-400" />
+                                                        <span className="font-semibold text-stone-900 text-sm">{resource.title}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${typeColors[fileType] || "bg-stone-100 text-stone-600"}`}>
+                                                        {fileType}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-stone-500">{resource.size ?? "-"}</td>
+                                                <td className="px-6 py-4 text-sm text-stone-500">{resource.createdAt ? new Date(resource.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "-"}</td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <a href={resource.url} target="_blank" rel="noreferrer" title="Download resource" aria-label="Download resource" className="p-2 inline-block text-stone-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
+                                                        <Download size={16} />
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {resources.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-6 py-8 text-center text-sm text-stone-500">No resources have been added for this cohort yet.</td>
+                                        </tr>
+                                    ) : null}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+        </ErrorBoundary>
+    );
+}
+
+function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string }) {
+    return (
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-stone-500">
+                <Icon size={15} />
+                <span className="text-sm">{label}</span>
+            </div>
+            <span className="text-sm font-semibold text-stone-800">{value}</span>
+        </div>
+    );
 }

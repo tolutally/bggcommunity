@@ -1,807 +1,607 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import {
-    User, Globe, Linkedin, Twitter, Github, Lock, Target,
-    ChevronRight, ChevronLeft, Check, Upload, X, Loader2,
-    Eye, Camera,
+  ArrowLeft,
+  ArrowRight,
+  Briefcase,
+  Camera,
+  Check,
+  CirclePlus,
+  Globe,
+  Lock,
+  MapPin,
+  MinusCircle,
+  Sparkles,
+  Target,
+  Upload,
+  UserRound,
 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
-import { useApiMutation } from "@/hooks/use-api-mutation";
-import { useToast } from "@/components/ui/toast";
-
-/* ── Types ── */
-interface OnboardingData {
-    /* Step 1 — Basic Info */
-    displayName: string;
-    occupation: string;
-    industry: string;
-    location: string;
-    bio: string;
-    /* Step 2 — Photo */
-    photoUrl: string;
-    /* Step 3 — Social Links */
-    website: string;
-    linkedin: string;
-    twitter: string;
-    github: string;
-    /* Step 4 — Privacy */
-    profileVisible: boolean;
-    showEmail: boolean;
-    showSocials: boolean;
-    showLocation: boolean;
-    /* Step 5 — Dev Plan */
-    devGoalTitle: string;
-    milestones: { id: number; text: string; done: boolean }[];
-}
-
-const STORAGE_KEY = "bgg_onboarding";
-const COMPLETED_KEY = "bgg_onboarding_complete";
-
-const DEFAULT_DATA: OnboardingData = {
-    displayName: "",
-    occupation: "",
-    industry: "",
-    location: "",
-    bio: "",
-    photoUrl: "",
-    website: "",
-    linkedin: "",
-    twitter: "",
-    github: "",
-    profileVisible: true,
-    showEmail: false,
-    showSocials: true,
-    showLocation: true,
-    devGoalTitle: "",
-    milestones: [],
-};
+import {
+  completeOnboarding,
+  defaultOnboardingDraft,
+  isOnboardingComplete,
+  loadOnboardingDraft,
+  saveOnboardingDraft,
+  type OnboardingDraft,
+} from "@/lib/onboarding";
 
 const STEPS = [
-    { label: "Basic Info", icon: User },
-    { label: "Photo", icon: Camera },
-    { label: "Socials", icon: Globe },
-    { label: "Privacy", icon: Lock },
-    { label: "Dev Plan", icon: Target },
+  { title: "Basic info", description: "Tell us what you do and where you are headed.", icon: UserRound },
+  { title: "Profile photo", description: "Add a photo so people recognize you across the community.", icon: Camera },
+  { title: "Social links", description: "Make it easy for mentors and peers to connect with you.", icon: Globe },
+  { title: "Privacy", description: "Choose what the community can see and how visible you want to be.", icon: Lock },
+  { title: "Dev plan", description: "Set an initial goal so your dashboard has a clear next step.", icon: Target },
 ] as const;
 
-/* ── Persistence helpers ── */
-function loadOnboarding(): OnboardingData {
-    if (typeof window === "undefined") return DEFAULT_DATA;
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? { ...DEFAULT_DATA, ...JSON.parse(raw) } : DEFAULT_DATA;
-    } catch {
-        return DEFAULT_DATA;
-    }
+function inputClassName() {
+  return "w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10";
 }
 
-function saveOnboarding(data: OnboardingData) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function ToggleCard({
+  checked,
+  onChange,
+  title,
+  description,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-stone-300">
+      <div>
+        <p className="text-sm font-semibold text-stone-900">{title}</p>
+        <p className="mt-1 text-sm text-stone-500">{description}</p>
+      </div>
+      <span
+        className={`mt-1 inline-flex h-6 w-11 items-center rounded-full p-1 transition ${checked ? "bg-brand-700" : "bg-stone-200"}`}
+      >
+        <span
+          className={`h-4 w-4 rounded-full bg-white transition ${checked ? "translate-x-5" : "translate-x-0"}`}
+        />
+      </span>
+      <input
+        type="checkbox"
+        className="sr-only"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
+  );
 }
 
-/* ── Main Page ── */
 export default function OnboardingPage() {
-    const { user, isAuthenticated, isLoading } = useAuth();
-    const router = useRouter();
-    const { toast } = useToast();
+  const router = useRouter();
+  const { userId, isLoaded } = useAuth();
+  const { user } = useUser();
 
-    /* --- API mutations --- */
-    const profileMutation = useApiMutation<unknown, Record<string, unknown>>("/users/me/profile", { method: "PATCH" });
-    const avatarMutation = useApiMutation<unknown, FormData>("/users/me/avatar", { method: "POST" });
-    const onboardingCompleteMutation = useApiMutation<unknown, Record<string, never>>("/users/me/onboarding-complete", { method: "POST" });
+  const [draft, setDraft] = useState<OnboardingDraft>(defaultOnboardingDraft);
+  const [hydrated, setHydrated] = useState(false);
 
-    const [step, setStep] = useState(0);
-    const [data, setData] = useState<OnboardingData>(DEFAULT_DATA);
-    const [errors, setErrors] = useState<Record<string, string>>({});
-    const [hydrated, setHydrated] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-
-    /** Stores the raw File object selected in Step 2 for avatar upload */
-    const photoFileRef = useRef<File | null>(null);
-
-    // Hydrate from localStorage
-    useEffect(() => {
-        setData(loadOnboarding());
-        setHydrated(true);
-    }, []);
-
-    // Auto-save on data change
-    useEffect(() => {
-        if (hydrated) saveOnboarding(data);
-    }, [data, hydrated]);
-
-    // Redirect if not authenticated
-    useEffect(() => {
-        if (!isLoading && !isAuthenticated) {
-            router.replace("/sign-in");
-        }
-    }, [isLoading, isAuthenticated, router]);
-
-    // Pre-fill name from auth user
-    useEffect(() => {
-        if (user && !data.displayName && hydrated) {
-            setData(prev => ({ ...prev, displayName: prev.displayName || user.name }));
-        }
-    }, [user, hydrated]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    const update = (patch: Partial<OnboardingData>) => {
-        setData(prev => ({ ...prev, ...patch }));
-        // Clear errors for changed fields
-        const errPatch: Record<string, string> = {};
-        Object.keys(patch).forEach(k => { errPatch[k] = ""; });
-        setErrors(prev => ({ ...prev, ...errPatch }));
-    };
-
-    /* ── Validation per step ── */
-    const validateStep = (): boolean => {
-        const errs: Record<string, string> = {};
-        if (step === 0) {
-            if (!data.displayName.trim()) errs.displayName = "Name is required";
-            if (!data.occupation.trim()) errs.occupation = "Occupation is required";
-        }
-        // Steps 1-4 are optional — no hard validation
-        setErrors(errs);
-        return Object.keys(errs).length === 0;
-    };
-
-    const next = () => {
-        if (!validateStep()) return;
-        if (step < STEPS.length - 1) setStep(step + 1);
-    };
-
-    const back = () => {
-        if (step > 0) setStep(step - 1);
-    };
-
-    const finish = async () => {
-        setSubmitting(true);
-        try {
-            // Split displayName into firstName / lastName for the BE
-            const nameParts = data.displayName.trim().split(/\s+/);
-            const firstName = nameParts[0] ?? "";
-            const lastName = nameParts.slice(1).join(" ") || "";
-
-            // Try API calls but don't block onboarding if backend isn't ready
-            try {
-                await profileMutation.trigger({
-                    firstName,
-                    lastName,
-                    displayName: data.displayName.trim(),
-                    jobTitle: data.occupation,
-                    industry: data.industry,
-                    location: data.location,
-                    bio: data.bio,
-                    websiteUrl: data.website,
-                    linkedinUrl: data.linkedin,
-                    twitterUrl: data.twitter,
-                    isPublic: data.profileVisible,
-                });
-
-                if (photoFileRef.current) {
-                    const fd = new FormData();
-                    fd.append("avatar", photoFileRef.current);
-                    await avatarMutation.trigger(fd);
-                }
-
-                await onboardingCompleteMutation.trigger({});
-            } catch {
-                // Backend may not have the user yet — save locally and proceed
-                localStorage.setItem("bgg_onboarding_pending_sync", JSON.stringify(data));
-            }
-
-            // Save dev plan goals locally
-            if (data.devGoalTitle || data.milestones.length > 0) {
-                const goals = data.milestones.map((m, i) => ({
-                    id: m.id || i + 1,
-                    text: m.text,
-                    done: m.done,
-                    details: "",
-                    status: m.done ? "completed" as const : "not-started" as const,
-                    evidence: [],
-                    createdAt: new Date().toISOString().split("T")[0],
-                }));
-                localStorage.setItem("bgg-goals", JSON.stringify(goals));
-                localStorage.setItem("bgg-plan-title", JSON.stringify(data.devGoalTitle));
-            }
-
-            localStorage.setItem(COMPLETED_KEY, "true");
-            localStorage.removeItem(STORAGE_KEY);
-
-            toast("Welcome to BGG! Your profile is set up.", "success");
-            router.push("/member");
-        } catch {
-            toast("Something went wrong. Please try again.", "error");
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const skipDevPlan = async () => {
-        setSubmitting(true);
-        try {
-            const nameParts = data.displayName.trim().split(/\s+/);
-            const firstName = nameParts[0] ?? "";
-            const lastName = nameParts.slice(1).join(" ") || "";
-
-            try {
-                await profileMutation.trigger({
-                    firstName,
-                    lastName,
-                    displayName: data.displayName.trim(),
-                    jobTitle: data.occupation,
-                    industry: data.industry,
-                    location: data.location,
-                    bio: data.bio,
-                    websiteUrl: data.website,
-                    linkedinUrl: data.linkedin,
-                    twitterUrl: data.twitter,
-                    isPublic: data.profileVisible,
-                });
-
-                if (photoFileRef.current) {
-                    const fd = new FormData();
-                    fd.append("avatar", photoFileRef.current);
-                    await avatarMutation.trigger(fd);
-                }
-
-                await onboardingCompleteMutation.trigger({});
-            } catch {
-                localStorage.setItem("bgg_onboarding_pending_sync", JSON.stringify(data));
-            }
-
-            localStorage.setItem("bgg_devplan_skipped", "true");
-            localStorage.setItem(COMPLETED_KEY, "true");
-            localStorage.removeItem(STORAGE_KEY);
-
-            toast("Welcome to BGG! You can set up your Dev Plan later.", "success");
-            router.push("/member");
-        } catch {
-            toast("Something went wrong. Please try again.", "error");
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    if (isLoading || !hydrated) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-stone-50">
-                <div className="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin" />
-            </div>
-        );
+  useEffect(() => {
+    if (!isLoaded || !userId) {
+      return;
     }
 
-    if (!isAuthenticated) return null;
+    if (isOnboardingComplete(userId)) {
+      router.replace("/member");
+      return;
+    }
 
-    return (
-        <div className="min-h-screen bg-stone-50 flex flex-col">
-            {/* Header */}
-            <header className="border-b border-stone-200 bg-white">
-                <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 bg-brand-800 rounded-xl flex items-center justify-center">
-                            <span className="text-lg font-black text-white">B</span>
-                        </div>
-                        <span className="text-lg font-bold text-stone-900">Set up your profile</span>
-                    </div>
-                    <span className="text-sm font-semibold text-stone-400">
-                        Step {step + 1} of {STEPS.length}
-                    </span>
-                </div>
-            </header>
-
-            {/* Progress bar */}
-            <div className="bg-white border-b border-stone-100">
-                <div className="max-w-3xl mx-auto px-6">
-                    <div className="flex gap-2 py-3">
-                        {STEPS.map((s, i) => (
-                            <button
-                                key={i}
-                                onClick={() => { if (i < step || (i <= step)) setStep(i); }}
-                                className={`flex-1 group relative`}
-                                aria-label={`Step ${i + 1}: ${s.label}`}
-                            >
-                                <div className={`h-2 rounded-full transition-colors ${
-                                    i < step ? "bg-brand-600" : i === step ? "bg-brand-400" : "bg-stone-200"
-                                }`} />
-                                <span className={`block text-[11px] font-semibold mt-1 transition-colors ${
-                                    i <= step ? "text-brand-700" : "text-stone-400"
-                                }`}>
-                                    {s.label}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 flex items-start justify-center pt-8 pb-16 px-6">
-                <div className="w-full max-w-2xl">
-                    {step === 0 && <Step1BasicInfo data={data} errors={errors} update={update} />}
-                    {step === 1 && <Step2Photo data={data} update={update} onFileSelect={(f) => { photoFileRef.current = f; }} />}
-                    {step === 2 && <Step3Socials data={data} errors={errors} update={update} />}
-                    {step === 3 && <Step4Privacy data={data} update={update} />}
-                    {step === 4 && <Step5DevPlan data={data} update={update} />}
-                </div>
-            </div>
-
-            {/* Footer Nav */}
-            <footer className="sticky bottom-0 bg-white border-t border-stone-200 py-4">
-                <div className="max-w-3xl mx-auto px-6 flex items-center justify-between">
-                    <button
-                        onClick={back}
-                        disabled={step === 0}
-                        className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-stone-600 hover:text-stone-900 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                        <ChevronLeft size={16} /> Back
-                    </button>
-
-                    <div className="flex items-center gap-3">
-                        {step === STEPS.length - 1 && (
-                            <button
-                                onClick={skipDevPlan}
-                                className="px-5 py-2.5 text-sm font-semibold text-stone-500 hover:text-stone-700 transition-colors"
-                            >
-                                Skip for now
-                            </button>
-                        )}
-                        {step < STEPS.length - 1 ? (
-                            <button
-                                onClick={next}
-                                className="flex items-center gap-1.5 px-6 py-2.5 bg-brand-800 text-white text-sm font-bold rounded-xl hover:bg-brand-700 transition-colors shadow-lg shadow-brand-800/20"
-                            >
-                                Continue <ChevronRight size={16} />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={finish}
-                                disabled={submitting}
-                                className="flex items-center gap-2 px-6 py-2.5 bg-brand-800 text-white text-sm font-bold rounded-xl hover:bg-brand-700 transition-colors shadow-lg shadow-brand-800/20 disabled:opacity-60"
-                            >
-                                {submitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                                {submitting ? "Saving..." : "Complete Setup"}
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </footer>
-        </div>
-    );
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   Step 1 — Basic Info
-   ════════════════════════════════════════════════════════════════════ */
-function Step1BasicInfo({ data, errors, update }: {
-    data: OnboardingData; errors: Record<string, string>;
-    update: (p: Partial<OnboardingData>) => void;
-}) {
-    const industries = [
-        "Software Engineering", "Product Design", "Data Science", "Product Management",
-        "DevOps / SRE", "Cybersecurity", "EdTech", "FinTech", "HealthTech", "Other",
-    ];
-
-    return (
-        <div className="space-y-8">
-            <div>
-                <h2 className="text-2xl font-bold text-stone-900 mb-1">Tell us about yourself</h2>
-                <p className="text-stone-500">This helps us personalise your experience and connect you with the right people.</p>
-            </div>
-
-            <div className="space-y-5">
-                {/* Display Name */}
-                <Field label="Display Name" required error={errors.displayName}>
-                    <div className="relative">
-                        <User size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-                        <input
-                            type="text"
-                            value={data.displayName}
-                            onChange={e => update({ displayName: e.target.value })}
-                            placeholder="Nia Johnson"
-                            className={`w-full pl-11 pr-4 py-3 border rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.displayName ? "border-red-300 bg-red-50" : "border-stone-200"}`}
-                        />
-                    </div>
-                </Field>
-
-                {/* Occupation */}
-                <Field label="Occupation / Role" required error={errors.occupation}>
-                    <input
-                        type="text"
-                        value={data.occupation}
-                        onChange={e => update({ occupation: e.target.value })}
-                        placeholder="e.g. Product Designer, Software Engineer"
-                        className={`w-full px-4 py-3 border rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.occupation ? "border-red-300 bg-red-50" : "border-stone-200"}`}
-                    />
-                </Field>
-
-                {/* Industry */}
-                <Field label="Industry">
-                    <select
-                        value={data.industry}
-                        onChange={e => update({ industry: e.target.value })}
-                        className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 bg-white"
-                    >
-                        <option value="">Select an industry</option>
-                        {industries.map(ind => (
-                            <option key={ind} value={ind}>{ind}</option>
-                        ))}
-                    </select>
-                </Field>
-
-                {/* Location */}
-                <Field label="Location">
-                    <input
-                        type="text"
-                        value={data.location}
-                        onChange={e => update({ location: e.target.value })}
-                        placeholder="e.g. Lagos, Nigeria"
-                        className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300"
-                    />
-                </Field>
-
-                {/* Bio */}
-                <Field label="Short Bio" hint="Max 200 characters">
-                    <textarea
-                        value={data.bio}
-                        onChange={e => update({ bio: e.target.value.slice(0, 200) })}
-                        placeholder="Tell the community a bit about yourself..."
-                        rows={3}
-                        className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 resize-none"
-                    />
-                    <p className="text-xs text-stone-400 mt-1 text-right">{data.bio.length}/200</p>
-                </Field>
-            </div>
-        </div>
-    );
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   Step 2 — Profile Photo
-   ════════════════════════════════════════════════════════════════════ */
-function Step2Photo({ data, update, onFileSelect }: {
-    data: OnboardingData;
-    update: (p: Partial<OnboardingData>) => void;
-    onFileSelect: (file: File) => void;
-}) {
-    const fileRef = useRef<HTMLInputElement>(null);
-    const [dragOver, setDragOver] = useState(false);
-
-    const handleFile = (file: File) => {
-        if (!file.type.startsWith("image/")) return;
-        if (file.size > 2 * 1024 * 1024) return; // 2MB max (BE limit)
-        onFileSelect(file);
-        const reader = new FileReader();
-        reader.onload = () => {
-            update({ photoUrl: reader.result as string });
-        };
-        reader.readAsDataURL(file);
+    const savedDraft = loadOnboardingDraft(userId);
+    const seededDraft: OnboardingDraft = {
+      ...savedDraft,
+      profile: {
+        ...savedDraft.profile,
+        website: savedDraft.profile.website,
+        occupation: savedDraft.profile.occupation,
+      },
     };
 
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        setDragOver(false);
-        const file = e.dataTransfer.files[0];
-        if (file) handleFile(file);
+    setDraft(seededDraft);
+    setHydrated(true);
+  }, [isLoaded, router, userId]);
+
+  useEffect(() => {
+    if (!hydrated || !userId) {
+      return;
+    }
+
+    saveOnboardingDraft(userId, draft);
+  }, [draft, hydrated, userId]);
+
+  const currentStep = STEPS[draft.currentStep];
+
+  if (!isLoaded || !hydrated || !userId || !currentStep) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-stone-50">
+        <div className="flex items-center gap-3 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm text-stone-500 shadow-sm">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-300 border-t-brand-700" />
+          Preparing your onboarding flow...
+        </div>
+      </div>
+    );
+  }
+
+  const StepIcon = currentStep.icon;
+  const updateProfile = (field: keyof OnboardingDraft["profile"], value: string) => {
+    setDraft((current) => ({
+      ...current,
+      profile: {
+        ...current.profile,
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateMilestone = (index: number, value: string) => {
+    setDraft((current) => ({
+      ...current,
+      devPlan: {
+        ...current.devPlan,
+        milestones: current.devPlan.milestones.map((milestone, milestoneIndex) =>
+          milestoneIndex === index ? value : milestone,
+        ),
+      },
+    }));
+  };
+
+  const addMilestone = () => {
+    setDraft((current) => ({
+      ...current,
+      devPlan: {
+        ...current.devPlan,
+        milestones: [...current.devPlan.milestones, ""],
+      },
+    }));
+  };
+
+  const removeMilestone = (index: number) => {
+    setDraft((current) => {
+      if (current.devPlan.milestones.length <= 1) {
+        return current;
+      }
+
+      return {
+        ...current,
+        devPlan: {
+          ...current.devPlan,
+          milestones: current.devPlan.milestones.filter((_, milestoneIndex) => milestoneIndex !== index),
+        },
+      };
+    });
+  };
+
+  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        return;
+      }
+
+      const imageSrc = reader.result;
+
+      setDraft((current) => ({
+        ...current,
+        avatarSrc: imageSrc,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const canContinue =
+    draft.currentStep !== 0 ||
+    Boolean(
+      draft.profile.employmentStatus.trim() &&
+      draft.profile.occupation.trim() &&
+        draft.profile.location.trim() &&
+        draft.profile.bio.trim(),
+    );
+
+  const goBack = () => {
+    setDraft((current) => ({
+      ...current,
+      currentStep: Math.max(0, current.currentStep - 1),
+    }));
+  };
+
+  const goNext = () => {
+    if (!canContinue) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      currentStep: Math.min(STEPS.length - 1, current.currentStep + 1),
+    }));
+  };
+
+  const finishOnboarding = () => {
+    completeOnboarding(userId, draft);
+    router.replace("/member");
+  };
+
+  const skipDevPlanAndFinish = () => {
+    const draftWithoutPlan: OnboardingDraft = {
+      ...draft,
+      devPlan: {
+        goal: "",
+        milestones: [],
+      },
     };
 
-    return (
-        <div className="space-y-8">
-            <div>
-                <h2 className="text-2xl font-bold text-stone-900 mb-1">Add a profile photo</h2>
-                <p className="text-stone-500">Help your cohort members and mentors recognise you. You can always change this later.</p>
-            </div>
+    completeOnboarding(userId, draftWithoutPlan);
+    router.replace("/member");
+  };
 
-            <div className="flex flex-col items-center gap-6">
-                {/* Preview */}
-                <div className="relative group">
-                    <div className="w-36 h-36 rounded-3xl overflow-hidden bg-stone-100 border-4 border-white shadow-lg">
-                        {data.photoUrl ? (
-                            <img src={data.photoUrl} alt="Profile" className="w-full h-full object-cover" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                                <User size={48} className="text-stone-300" />
-                            </div>
-                        )}
-                    </div>
-                    {data.photoUrl && (
-                        <button
-                            onClick={() => update({ photoUrl: "" })}
-                            className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-colors"
-                        >
-                            <X size={14} />
-                        </button>
-                    )}
-                </div>
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(155,80,45,0.15),transparent_32%),linear-gradient(180deg,#f8f5f0_0%,#f4efe7_100%)] px-4 py-8 md:px-8">
+      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <aside className="overflow-hidden rounded-[32px] bg-brand-950 p-8 text-white shadow-xl">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
+            <Sparkles className="h-4 w-4" />
+            Member onboarding
+          </div>
+          <h1 className="mt-6 text-3xl font-semibold leading-tight md:text-4xl">
+            Build the profile your community will meet first.
+          </h1>
+          <p className="mt-4 max-w-md text-sm leading-6 text-white/70">
+            Finish a few quick steps now so your dashboard, profile, and dev plan start in the right state.
+          </p>
 
-                {/* Dropzone */}
+          <div className="mt-8 grid grid-cols-5 gap-2">
+            {STEPS.map((step, index) => (
+              <div
+                key={step.title}
+                className={`h-2 rounded-full transition ${index <= draft.currentStep ? "bg-accent-500" : "bg-white/10"}`}
+              />
+            ))}
+          </div>
+
+          <div className="mt-8 space-y-4">
+            {STEPS.map((step, index) => {
+              const StepListIcon = step.icon;
+              const active = index === draft.currentStep;
+              const complete = index < draft.currentStep;
+
+              return (
                 <div
-                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                    onDragLeave={() => setDragOver(false)}
-                    onDrop={handleDrop}
-                    onClick={() => fileRef.current?.click()}
-                    className={`w-full max-w-sm p-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all text-center ${
-                        dragOver ? "border-brand-400 bg-brand-50" : "border-stone-200 hover:border-stone-300 hover:bg-stone-50"
-                    }`}
+                  key={step.title}
+                  className={`rounded-2xl border px-4 py-4 transition ${
+                    active
+                      ? "border-white/30 bg-white/10"
+                      : complete
+                        ? "border-emerald-400/40 bg-emerald-400/10"
+                        : "border-white/10 bg-white/5"
+                  }`}
                 >
-                    <Upload size={28} className="mx-auto text-stone-400 mb-3" />
-                    <p className="text-sm font-semibold text-stone-700">
-                        Drop an image here or <span className="text-brand-600">browse</span>
-                    </p>
-                    <p className="text-xs text-stone-400 mt-1">PNG, JPG up to 5 MB</p>
-                </div>
-
-                <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFile(file);
-                        e.target.value = "";
-                    }}
-                />
-
-                <p className="text-xs text-stone-400">This step is optional — you can skip and add a photo later.</p>
-            </div>
-        </div>
-    );
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   Step 3 — Social Links
-   ════════════════════════════════════════════════════════════════════ */
-function Step3Socials({ data, errors, update }: {
-    data: OnboardingData; errors: Record<string, string>;
-    update: (p: Partial<OnboardingData>) => void;
-}) {
-    const socialFields = [
-        { key: "website" as const, label: "Personal Website", icon: Globe, placeholder: "https://yoursite.com" },
-        { key: "linkedin" as const, label: "LinkedIn", icon: Linkedin, placeholder: "linkedin.com/in/yourname" },
-        { key: "twitter" as const, label: "Twitter / X", icon: Twitter, placeholder: "@yourhandle" },
-        { key: "github" as const, label: "GitHub", icon: Github, placeholder: "github.com/yourname" },
-    ];
-
-    return (
-        <div className="space-y-8">
-            <div>
-                <h2 className="text-2xl font-bold text-stone-900 mb-1">Connect your socials</h2>
-                <p className="text-stone-500">Let members find and connect with you across platforms. All fields are optional.</p>
-            </div>
-
-            <div className="space-y-4">
-                {socialFields.map(({ key, label, icon: Icon, placeholder }) => (
-                    <Field key={key} label={label}>
-                        <div className="relative">
-                            <Icon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-                            <input
-                                type="text"
-                                value={data[key]}
-                                onChange={e => update({ [key]: e.target.value })}
-                                placeholder={placeholder}
-                                className="w-full pl-11 pr-4 py-3 border border-stone-200 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300"
-                            />
-                        </div>
-                    </Field>
-                ))}
-            </div>
-
-            <div className="p-4 bg-stone-100 rounded-xl">
-                <p className="text-xs text-stone-500">
-                    <span className="font-semibold text-stone-600">Tip:</span> Adding your LinkedIn makes it easier for cohort members and mentors to connect with you professionally.
-                </p>
-            </div>
-        </div>
-    );
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   Step 4 — Privacy Toggles
-   ════════════════════════════════════════════════════════════════════ */
-function Step4Privacy({ data, update }: {
-    data: OnboardingData;
-    update: (p: Partial<OnboardingData>) => void;
-}) {
-    const toggles = [
-        { key: "profileVisible" as const, label: "Public profile", desc: "Other members can find and view your profile in the directory", icon: Eye },
-        { key: "showEmail" as const, label: "Show email address", desc: "Display your email on your profile card", icon: Lock },
-        { key: "showSocials" as const, label: "Show social links", desc: "Display your website and social media links on your profile", icon: Globe },
-        { key: "showLocation" as const, label: "Show location", desc: "Display your city / country on your profile card", icon: User },
-    ];
-
-    return (
-        <div className="space-y-8">
-            <div>
-                <h2 className="text-2xl font-bold text-stone-900 mb-1">Privacy settings</h2>
-                <p className="text-stone-500">Control what other members can see on your profile. You can change these anytime in Settings.</p>
-            </div>
-
-            <div className="space-y-3">
-                {toggles.map(({ key, label, desc, icon: Icon }) => (
-                    <label
-                        key={key}
-                        className="flex items-start gap-4 p-4 bg-white border border-stone-200 rounded-xl hover:border-stone-300 transition-colors cursor-pointer"
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl ${
+                        complete ? "bg-emerald-400 text-emerald-950" : "bg-white/10 text-white"
+                      }`}
                     >
-                        <div className="pt-0.5">
-                            <Icon size={20} className="text-stone-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-stone-800">{label}</p>
-                            <p className="text-xs text-stone-500 mt-0.5">{desc}</p>
-                        </div>
-                        <div className="flex-shrink-0">
-                            <ToggleSwitch
-                                checked={data[key]}
-                                onChange={v => update({ [key]: v })}
-                            />
-                        </div>
-                    </label>
-                ))}
-            </div>
-
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-xs text-amber-700">
-                    <span className="font-semibold">Note:</span> Your name and avatar are always visible to members in your cohort, regardless of these settings.
-                </p>
-            </div>
-        </div>
-    );
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   Step 5 — Optional Dev Plan
-   ════════════════════════════════════════════════════════════════════ */
-function Step5DevPlan({ data, update }: {
-    data: OnboardingData;
-    update: (p: Partial<OnboardingData>) => void;
-}) {
-    const [newMilestone, setNewMilestone] = useState("");
-
-    const addMilestone = () => {
-        const text = newMilestone.trim();
-        if (!text) return;
-        update({
-            milestones: [
-                ...data.milestones,
-                { id: Date.now(), text, done: false },
-            ],
-        });
-        setNewMilestone("");
-    };
-
-    const removeMilestone = (id: number) => {
-        update({ milestones: data.milestones.filter(m => m.id !== id) });
-    };
-
-    return (
-        <div className="space-y-8">
-            <div>
-                <h2 className="text-2xl font-bold text-stone-900 mb-1">Set your development goal</h2>
-                <p className="text-stone-500">
-                    Create a personal development plan to track your growth. This is <span className="font-semibold">optional</span> — you can skip and set it up later from your dashboard.
-                </p>
-            </div>
-
-            {/* Goal Title */}
-            <Field label="Goal Title" hint="What do you want to achieve in this cohort?">
-                <div className="relative">
-                    <Target size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-                    <input
-                        type="text"
-                        value={data.devGoalTitle}
-                        onChange={e => update({ devGoalTitle: e.target.value })}
-                        placeholder="e.g. Land a Product Design role by Q2 2026"
-                        className="w-full pl-11 pr-4 py-3 border border-stone-200 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300"
-                    />
+                      {complete ? <Check className="h-5 w-5" /> : <StepListIcon className="h-5 w-5" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{step.title}</p>
+                      <p className="mt-1 text-sm text-white/60">{step.description}</p>
+                    </div>
+                  </div>
                 </div>
-            </Field>
+              );
+            })}
+          </div>
+        </aside>
 
-            {/* Milestones */}
+        <main className="rounded-[32px] border border-stone-200 bg-white p-6 shadow-sm md:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-100 pb-6">
             <div>
-                <label className="block text-sm font-semibold text-stone-700 mb-2">Milestones</label>
+              <div className="inline-flex items-center gap-2 rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-500">
+                Step {draft.currentStep + 1} of {STEPS.length}
+              </div>
+              <h2 className="mt-3 flex items-center gap-3 text-2xl font-semibold text-stone-900">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-100 text-brand-800">
+                  <StepIcon className="h-5 w-5" />
+                </span>
+                {currentStep.title}
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">{currentStep.description}</p>
+            </div>
+            <div className="rounded-2xl bg-stone-50 px-4 py-3 text-sm text-stone-500">
+              <p className="font-semibold text-stone-800">{user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "New member"}</p>
+              <p className="mt-1 text-xs uppercase tracking-[0.16em] text-stone-400">Setting up your space</p>
+            </div>
+          </div>
 
-                {data.milestones.length > 0 && (
-                    <ul className="space-y-2 mb-4">
-                        {data.milestones.map((m, i) => (
-                            <li key={m.id} className="flex items-center gap-3 px-4 py-3 bg-white border border-stone-200 rounded-xl group">
-                                <span className="w-6 h-6 bg-brand-100 text-brand-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                    {i + 1}
-                                </span>
-                                <span className="flex-1 text-sm text-stone-700">{m.text}</span>
-                                <button
-                                    onClick={() => removeMilestone(m.id)}
-                                    className="text-stone-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                                >
-                                    <X size={16} />
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+          <div className="mt-8 min-h-[420px]">
+            {draft.currentStep === 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Employment status</label>
+                  <select
+                    className={inputClassName()}
+                    value={draft.profile.employmentStatus}
+                    onChange={(event) => updateProfile("employmentStatus", event.target.value)}
+                    title="Employment status"
+                  >
+                    <option value="">Select your status</option>
+                    <option value="employed_full_time">Employed full-time</option>
+                    <option value="employed_part_time">Employed part-time</option>
+                    <option value="self_employed">Self-employed / Founder</option>
+                    <option value="student">Student</option>
+                    <option value="seeking_opportunities">Seeking opportunities</option>
+                    <option value="career_transition">Career transition</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Occupation or future role vision</label>
+                  <input
+                    className={inputClassName()}
+                    value={draft.profile.occupation}
+                    onChange={(event) => updateProfile("occupation", event.target.value)}
+                    placeholder="For example: Product designer now, future PM"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Industry</label>
+                  <input
+                    className={inputClassName()}
+                    value={draft.profile.industry}
+                    onChange={(event) => updateProfile("industry", event.target.value)}
+                    placeholder="Tech, health, education..."
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Location</label>
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                    <input
+                      className={`${inputClassName()} pl-11`}
+                      value={draft.profile.location}
+                      onChange={(event) => updateProfile("location", event.target.value)}
+                      placeholder="Lagos, Nigeria"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Company (optional)</label>
+                  <div className="relative">
+                    <Briefcase className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                    <input
+                      className={`${inputClassName()} pl-11`}
+                      value={draft.profile.company}
+                      onChange={(event) => updateProfile("company", event.target.value)}
+                      placeholder="Where you work or build"
+                    />
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Bio</label>
+                  <textarea
+                    className={`${inputClassName()} min-h-36 resize-none`}
+                    value={draft.profile.bio}
+                    onChange={(event) => updateProfile("bio", event.target.value)}
+                    placeholder="Share what you're building, learning, or looking for in this community."
+                  />
+                </div>
+              </div>
+            ) : null}
 
-                {data.milestones.length < 8 && (
-                    <div className="flex gap-2">
+            {draft.currentStep === 1 ? (
+              <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
+                <div className="flex flex-col items-center rounded-[28px] bg-stone-50 p-6 text-center">
+                  <div className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-brand-100 shadow-sm">
+                    {draft.avatarSrc ? (
+                      <img src={draft.avatarSrc} alt="Profile preview" className="h-full w-full object-cover" />
+                    ) : (
+                      <UserRound className="h-12 w-12 text-brand-700" />
+                    )}
+                  </div>
+                  <p className="mt-4 text-sm font-semibold text-stone-800">Photo preview</p>
+                  <p className="mt-1 text-sm text-stone-500">A clear headshot helps members trust the space faster.</p>
+                </div>
+
+                <div className="rounded-[28px] border border-dashed border-stone-300 bg-stone-50 p-6">
+                  <div className="flex h-full flex-col items-center justify-center text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-brand-800 shadow-sm">
+                      <Upload className="h-6 w-6" />
+                    </div>
+                    <h3 className="mt-4 text-lg font-semibold text-stone-900">Upload your profile photo</h3>
+                    <p className="mt-2 max-w-md text-sm leading-6 text-stone-500">
+                      JPG or PNG works best. You can skip this and add it later from your profile settings.
+                    </p>
+                    <label className="mt-6 inline-flex cursor-pointer items-center gap-2 rounded-full bg-brand-800 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-900">
+                      <Camera className="h-4 w-4" />
+                      Choose image
+                      <input type="file" accept="image/*" className="sr-only" onChange={handleAvatarUpload} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {draft.currentStep === 2 ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Website</label>
+                  <input
+                    className={inputClassName()}
+                    value={draft.profile.website}
+                    onChange={(event) => updateProfile("website", event.target.value)}
+                    placeholder="https://your-site.com"
+                  />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-stone-700">LinkedIn</label>
+                    <input
+                      className={inputClassName()}
+                      value={draft.profile.linkedin}
+                      onChange={(event) => updateProfile("linkedin", event.target.value)}
+                      placeholder="linkedin username or URL"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-stone-700">Twitter / X</label>
+                    <input
+                      className={inputClassName()}
+                      value={draft.profile.twitter}
+                      onChange={(event) => updateProfile("twitter", event.target.value)}
+                      placeholder="handle or full URL"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {draft.currentStep === 3 ? (
+              <div className="space-y-4">
+                <ToggleCard
+                  checked={draft.privacy.profileVisible}
+                  onChange={(checked) =>
+                    setDraft((current) => ({
+                      ...current,
+                      privacy: { ...current.privacy, profileVisible: checked },
+                    }))
+                  }
+                  title="Public community profile"
+                  description="Allow members to discover your profile in the directory."
+                />
+                <ToggleCard
+                  checked={draft.privacy.socialsVisible}
+                  onChange={(checked) =>
+                    setDraft((current) => ({
+                      ...current,
+                      privacy: { ...current.privacy, socialsVisible: checked },
+                    }))
+                  }
+                  title="Show social links"
+                  description="Display your website and socials on your profile card."
+                />
+                <ToggleCard
+                  checked={draft.privacy.openToWork}
+                  onChange={(checked) =>
+                    setDraft((current) => ({
+                      ...current,
+                      privacy: { ...current.privacy, openToWork: checked },
+                    }))
+                  }
+                  title="Open to work"
+                  description="Show recruiters and mentors that you are currently open to roles or opportunities."
+                />
+              </div>
+            ) : null}
+
+            {draft.currentStep === 4 ? (
+              <div className="space-y-5">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Primary goal</label>
+                  <input
+                    className={inputClassName()}
+                    value={draft.devPlan.goal}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        devPlan: { ...current.devPlan, goal: event.target.value },
+                      }))
+                    }
+                    placeholder="Land a stronger role, launch something, or grow a skill"
+                  />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {draft.devPlan.milestones.map((milestone, index) => (
+                    <div key={index}>
+                      <label className="mb-2 block text-sm font-medium text-stone-700">Milestone {index + 1}</label>
+                      <div className="flex items-center gap-2">
                         <input
-                            type="text"
-                            value={newMilestone}
-                            onChange={e => setNewMilestone(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addMilestone(); } }}
-                            placeholder="Add a milestone..."
-                            className="flex-1 px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300"
+                          className={inputClassName()}
+                          value={milestone}
+                          onChange={(event) => updateMilestone(index, event.target.value)}
+                          placeholder={index === 0 ? "Update portfolio" : "Book two mock interviews"}
                         />
                         <button
-                            onClick={addMilestone}
-                            disabled={!newMilestone.trim()}
-                            className="px-4 py-3 bg-brand-800 text-white rounded-xl text-sm font-bold hover:bg-brand-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          type="button"
+                          onClick={() => removeMilestone(index)}
+                          disabled={draft.devPlan.milestones.length <= 1}
+                          className="inline-flex items-center justify-center rounded-xl border border-stone-200 p-2 text-stone-500 transition hover:border-rose-300 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Remove milestone ${index + 1}`}
                         >
-                            Add
+                          <MinusCircle className="h-4 w-4" />
                         </button>
+                      </div>
                     </div>
-                )}
-
-                {data.milestones.length === 0 && (
-                    <p className="text-xs text-stone-400 mt-2">
-                        Add up to 8 milestones to break your goal into actionable steps.
-                    </p>
-                )}
-            </div>
-
-            {/* Example */}
-            {data.milestones.length === 0 && !data.devGoalTitle && (
-                <div className="p-4 bg-brand-50 border border-brand-100 rounded-xl">
-                    <p className="text-xs font-semibold text-brand-700 mb-2">Example dev plan:</p>
-                    <p className="text-xs text-brand-600 font-medium">&quot;Land a Product Design role by Q2 2026&quot;</p>
-                    <ul className="mt-2 space-y-1">
-                        {["Build Portfolio", "10 Coffee Chats", "Update Resume", "Apply to 5 Jobs", "Mock Interview"].map(ex => (
-                            <li key={ex} className="text-xs text-brand-500 flex items-center gap-1.5">
-                                <Check size={10} /> {ex}
-                            </li>
-                        ))}
-                    </ul>
+                  ))}
                 </div>
-            )}
-        </div>
-    );
-}
+                <button
+                  type="button"
+                  onClick={addMilestone}
+                  className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-700 transition hover:border-brand-300 hover:text-brand-700"
+                >
+                  <CirclePlus className="h-4 w-4" />
+                  Add milestone
+                </button>
+                <div className="rounded-2xl bg-brand-50 px-4 py-4 text-sm leading-6 text-brand-900">
+                  This step is optional. If you skip it, you can create your dev plan later from the member dashboard.
+                </div>
+              </div>
+            ) : null}
+          </div>
 
-/* ════════════════════════════════════════════════════════════════════
-   Reusable Field + Toggle
-   ════════════════════════════════════════════════════════════════════ */
-function Field({ label, required, hint, error, children }: {
-    label: string; required?: boolean; hint?: string; error?: string;
-    children: React.ReactNode;
-}) {
-    return (
-        <div>
-            <div className="flex items-baseline justify-between mb-1.5">
-                <label className="text-sm font-semibold text-stone-700">
-                    {label}
-                    {required && <span className="text-red-400 ml-0.5">*</span>}
-                </label>
-                {hint && <span className="text-xs text-stone-400">{hint}</span>}
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-6">
+            <button
+              type="button"
+              onClick={goBack}
+              disabled={draft.currentStep === 0}
+              className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-4 py-2.5 text-sm font-medium text-stone-600 transition hover:border-stone-300 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </button>
+
+            <div className="flex items-center gap-3">
+              {draft.currentStep === STEPS.length - 1 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={skipDevPlanAndFinish}
+                    className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-300 hover:text-stone-900"
+                  >
+                    Skip for now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={finishOnboarding}
+                    className="inline-flex items-center gap-2 rounded-full bg-brand-800 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-900"
+                  >
+                    Finish onboarding
+                    <Check className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={!canContinue}
+                  className="inline-flex items-center gap-2 rounded-full bg-brand-800 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Continue
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            {children}
-            {error && <p className="text-red-500 text-xs mt-1 font-medium">{error}</p>}
-        </div>
-    );
-}
-
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-    return (
-        <button
-            type="button"
-            role="switch"
-            aria-checked={checked}
-            onClick={() => onChange(!checked)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                checked ? "bg-brand-600" : "bg-stone-300"
-            }`}
-        >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                checked ? "translate-x-6" : "translate-x-1"
-            }`} />
-        </button>
-    );
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 }

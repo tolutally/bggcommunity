@@ -96,6 +96,11 @@ function loadJSON<T>(key: string, fallback: T): T {
     }
 }
 
+function devPlanStorageKey(email?: string) {
+    const normalized = email?.trim().toLowerCase();
+    return normalized ? `bgg-goals:${normalized}` : "bgg-goals";
+}
+
 const STATUS_CONFIG = {
     "not-started": { label: "To Do", color: "stone", icon: Circle, bg: "bg-stone-100", text: "text-stone-600", badge: "bg-stone-100 text-stone-600 border-stone-200" },
     "in-progress": { label: "In Progress", color: "amber", icon: Clock, bg: "bg-amber-100", text: "text-amber-700", badge: "bg-amber-50 text-amber-700 border-amber-200" },
@@ -114,9 +119,10 @@ function fileIcon(type: string) {
 
 export default function MemberDevPlanPage() {
     const { user } = useUser();
+    const storageKey = devPlanStorageKey(user.email);
 
     /* State */
-    const [goals, setGoals] = useState<DevGoal[]>(() => loadJSON("bgg-goals", DEFAULT_GOALS));
+    const [goals, setGoals] = useState<DevGoal[]>(() => loadJSON(storageKey, loadJSON("bgg-goals", DEFAULT_GOALS)));
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editForm, setEditForm] = useState({ text: "", details: "", status: "not-started" as DevGoal["status"] });
@@ -132,8 +138,15 @@ export default function MemberDevPlanPage() {
 
     /* Persist */
     useEffect(() => {
-        localStorage.setItem("bgg-goals", JSON.stringify(goals));
-    }, [goals]);
+        setGoals(loadJSON(storageKey, loadJSON("bgg-goals", DEFAULT_GOALS)));
+    }, [storageKey]);
+
+    useEffect(() => {
+        localStorage.setItem(storageKey, JSON.stringify(goals));
+        if (storageKey !== "bgg-goals") {
+            localStorage.removeItem("bgg-goals");
+        }
+    }, [goals, storageKey]);
 
     /* Derived */
     const counts = useMemo(() => ({

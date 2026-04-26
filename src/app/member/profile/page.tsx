@@ -1,24 +1,31 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { useCurrentUser } from "@/hooks/use-current-user";
-import { useApiMutation } from "@/hooks/use-api-mutation";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import {
     MapPin, Building2, Linkedin, Twitter, Globe, Mail, Edit2, Save,
     Camera, User, Lock, CheckCircle,
-    Trash2, LogOut, AlertTriangle, Target, Eye, EyeOff, ArrowRight, Check,
+    Trash2, LogOut, AlertTriangle, Target, Eye, EyeOff, ArrowRight, Check, Loader2,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import {
+    deleteOwnAccount,
+    fetchCurrentUserProfile,
+    getUsersErrorMessage,
+    updateCurrentUserProfile,
+    updateProfileVisibility,
+    uploadCurrentUserAvatar,
+} from "@/lib/users";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-interface ProfileFormData {
+interface FormData {
     occupation: string;
     industry: string;
     location: string;
@@ -48,7 +55,7 @@ interface FieldErrors {
 /*  Defaults                                                           */
 /* ------------------------------------------------------------------ */
 
-const DEFAULT_FORM: ProfileFormData = {
+const DEFAULT_FORM: FormData = {
     occupation: "Product Designer",
     industry: "EdTech",
     location: "Lagos, Nigeria",
@@ -91,76 +98,26 @@ function isValidURL(s: string): boolean {
 /* ------------------------------------------------------------------ */
 
 export default function MemberProfilePage() {
-    const { user, apiUser, refetchUser } = useUser();
-    const { mutate: mutateCurrentUser } = useCurrentUser();
-
-    /* --- API mutations --- */
-    const profileMutation = useApiMutation<unknown, Record<string, unknown>>("/users/me/profile", {
-        method: "PATCH",
-        onSuccess: () => {
-            refetchUser();
-            mutateCurrentUser();
-        },
-    });
-    const avatarMutation = useApiMutation<unknown, FormData>("/users/me/avatar", {
-        method: "POST",
-        onSuccess: () => {
-            refetchUser();
-            mutateCurrentUser();
-        },
-    });
-    const privacyMutation = useApiMutation<unknown, { isPublic: boolean }>("/users/me/privacy", {
-        method: "PATCH",
-        onSuccess: () => {
-            refetchUser();
-            mutateCurrentUser();
-        },
-    });
-
-    /* --- Derive form state from API user --- */
-    const profile = apiUser?.profile;
-
-    const buildFormFromApi = useCallback((): ProfileFormData => ({
-        occupation: profile?.jobTitle ?? "",
-        industry: profile?.industry ?? "",
-        location: profile?.location ?? "",
-        bio: profile?.bio ?? "",
-        website: profile?.websiteUrl ?? "",
-        linkedin: profile?.linkedinUrl ?? "",
-        twitter: profile?.twitterUrl ?? "",
-        company: profile?.company ?? "",
-    }), [profile]);
+    const { user } = useUser();
+    const { getToken } = useAuth();
 
     /* --- Profile form --- */
-    const [formData, setFormData] = useState<ProfileFormData>(buildFormFromApi);
-    const [savedData, setSavedData] = useState<ProfileFormData>(formData);
+    const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
+    const [savedData, setSavedData] = useState<FormData>(DEFAULT_FORM);
     const [isEditing, setIsEditing] = useState(false);
     const [errors, setErrors] = useState<FieldErrors>({});
     const { toast } = useToast();
-    const [isOpenToWork, setIsOpenToWork] = useState(profile?.isOpenToWork ?? false);
-
-    /* Sync form when API data loads */
-    const [hydrated, setHydrated] = useState(false);
-    useEffect(() => {
-        if (profile && !hydrated) {
-            const apiForm = buildFormFromApi();
-            setFormData(apiForm);
-            setSavedData(apiForm);
-            setIsOpenToWork(profile.isOpenToWork ?? false);
-            setHydrated(true);
-        }
-    }, [profile, hydrated, buildFormFromApi]);
+    const [isOpenToWork, setIsOpenToWork] = useState(false);
+    const [isProfileVisible, setIsProfileVisible] = useState(true);
+    const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+    const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
     /* --- Avatar --- */
     const [avatarSrc, setAvatarSrc] = useState(user.avatar);
     const fileRef = useRef<HTMLInputElement>(null);
-
-    /* Sync avatar when API data loads */
-    useEffect(() => {
-        if (profile?.avatarUrl) {
-            setAvatarSrc(profile.avatarUrl);
-        }
-    }, [profile?.avatarUrl]);
 
     /* --- Dev Plan (read-only preview) --- */
     const [goals] = useState<DevGoal[]>(() => loadJSON("bgg-goals", DEFAULT_GOALS));
@@ -176,6 +133,52 @@ export default function MemberProfilePage() {
     const [deleteModal, setDeleteModal] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState("");
 
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadProfile() {
+            setIsLoadingProfile(true);
+            try {
+                const profile = await fetchCurrentUserProfile(getToken);
+                if (cancelled) {
+                    return;
+                }
+
+                const nextForm: FormData = {
+                    occupation: profile.occupation || DEFAULT_FORM.occupation,
+                    industry: profile.industry || DEFAULT_FORM.industry,
+                    location: profile.location || DEFAULT_FORM.location,
+                    bio: profile.bio || DEFAULT_FORM.bio,
+                    website: profile.website || DEFAULT_FORM.website,
+                    linkedin: profile.linkedin || DEFAULT_FORM.linkedin,
+                    twitter: profile.twitter || DEFAULT_FORM.twitter,
+                    company: profile.company || DEFAULT_FORM.company,
+                };
+
+                setFormData(nextForm);
+                setSavedData(nextForm);
+                setIsOpenToWork(profile.isOpenToWork);
+                setIsProfileVisible(profile.profileVisible);
+                if (profile.avatarUrl) {
+                    setAvatarSrc(profile.avatarUrl);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    toast(getUsersErrorMessage(error), "error");
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingProfile(false);
+                }
+            }
+        }
+
+        void loadProfile();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [getToken, toast]);
     /* --- Handlers --- */
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -199,23 +202,34 @@ export default function MemberProfilePage() {
 
     const handleSave = async () => {
         if (!validate()) return;
+
+        setIsSavingProfile(true);
         try {
-            await profileMutation.trigger({
-                jobTitle: formData.occupation,
-                industry: formData.industry,
-                location: formData.location,
-                bio: formData.bio,
-                company: formData.company,
-                websiteUrl: formData.website,
-                linkedinUrl: formData.linkedin,
-                twitterUrl: formData.twitter,
-                isOpenToWork: isOpenToWork,
-            });
-            setSavedData(formData);
+            const profile = await updateCurrentUserProfile({
+                ...formData,
+                isOpenToWork,
+            }, getToken);
+
+            const nextForm: FormData = {
+                occupation: profile.occupation || formData.occupation,
+                industry: profile.industry || formData.industry,
+                location: profile.location || formData.location,
+                bio: profile.bio || formData.bio,
+                website: profile.website || formData.website,
+                linkedin: profile.linkedin || formData.linkedin,
+                twitter: profile.twitter || formData.twitter,
+                company: profile.company || formData.company,
+            };
+
+            setFormData(nextForm);
+            setSavedData(nextForm);
+            setIsOpenToWork(profile.isOpenToWork);
             setIsEditing(false);
             toast("Profile saved");
-        } catch {
-            toast("Failed to save profile", "error");
+        } catch (error) {
+            toast(getUsersErrorMessage(error), "error");
+        } finally {
+            setIsSavingProfile(false);
         }
     };
 
@@ -228,28 +242,65 @@ export default function MemberProfilePage() {
     const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        // Validate size (2MB max)
-        if (file.size > 2 * 1024 * 1024) {
-            toast("Image must be under 2 MB", "error");
-            return;
-        }
-        // Validate type
-        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-            toast("Only JPEG, PNG, or WebP images are allowed", "error");
-            return;
-        }
-        // Optimistic preview
-        const reader = new FileReader();
-        reader.onload = () => { if (typeof reader.result === "string") setAvatarSrc(reader.result); };
-        reader.readAsDataURL(file);
-        // Upload
-        const fd = new FormData();
-        fd.append("avatar", file);
+
+        setIsUploadingAvatar(true);
         try {
-            await avatarMutation.trigger(fd);
+            const uploaded = await uploadCurrentUserAvatar(file, getToken);
+            if (uploaded) {
+                setAvatarSrc(uploaded);
+            }
             toast("Avatar updated");
-        } catch {
-            toast("Failed to upload avatar", "error");
+        } catch (error) {
+            toast(getUsersErrorMessage(error), "error");
+        } finally {
+            setIsUploadingAvatar(false);
+            e.target.value = "";
+        }
+    };
+
+    const handleToggleOpenToWork = async () => {
+        const next = !isOpenToWork;
+        setIsOpenToWork(next);
+
+        try {
+            await updateCurrentUserProfile({ ...formData, isOpenToWork: next }, getToken);
+        } catch (error) {
+            setIsOpenToWork(!next);
+            toast(getUsersErrorMessage(error), "error");
+        }
+    };
+
+    const handleToggleProfileVisibility = async () => {
+        if (isUpdatingPrivacy) {
+            return;
+        }
+
+        const next = !isProfileVisible;
+        setIsProfileVisible(next);
+        setIsUpdatingPrivacy(true);
+
+        try {
+            await updateProfileVisibility(next, getToken);
+            toast(next ? "Profile is now visible" : "Profile is now private");
+        } catch (error) {
+            setIsProfileVisible(!next);
+            toast(getUsersErrorMessage(error), "error");
+        } finally {
+            setIsUpdatingPrivacy(false);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        setIsDeletingAccount(true);
+        try {
+            await deleteOwnAccount(getToken);
+            setDeleteModal(false);
+            setDeleteConfirm("");
+            toast("Account deletion requested");
+        } catch (error) {
+            toast(getUsersErrorMessage(error), "error");
+        } finally {
+            setIsDeletingAccount(false);
         }
     };
 
@@ -266,6 +317,15 @@ export default function MemberProfilePage() {
 
     const doneCount = goals.filter(g => g.done).length;
     const progress = goals.length ? Math.round((doneCount / goals.length) * 100) : 0;
+    const progressWidthClass =
+        progress >= 100 ? "w-full" :
+        progress >= 90 ? "w-11/12" :
+        progress >= 75 ? "w-3/4" :
+        progress >= 66 ? "w-2/3" :
+        progress >= 50 ? "w-1/2" :
+        progress >= 33 ? "w-1/3" :
+        progress >= 25 ? "w-1/4" :
+        progress > 0 ? "w-1/12" : "w-0";
 
     /* Input helper */
     const inputCls = (field: keyof FieldErrors) =>
@@ -274,8 +334,14 @@ export default function MemberProfilePage() {
     return (
         <ErrorBoundary>
         <div className="max-w-4xl mx-auto p-6 md:p-10 space-y-8">
+            {isLoadingProfile ? (
+                <div className="rounded-2xl border border-stone-200 bg-white p-8 text-stone-500 flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" /> Loading profile...
+                </div>
+            ) : null}
+
             {/* Hidden file input for avatar */}
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            <input ref={fileRef} type="file" title="Upload profile avatar" aria-label="Upload profile avatar" accept="image/*" className="hidden" onChange={(event) => { void handleAvatarChange(event); }} />
 
             {/* ========== HEADER / BANNER ========== */}
             <div className="relative">
@@ -290,8 +356,8 @@ export default function MemberProfilePage() {
                             <div className="w-32 h-32 md:w-40 md:h-40 rounded-full p-1.5 bg-white shadow-lg">
                                 <img src={avatarSrc} alt={user.name} className="w-full h-full rounded-full object-cover bg-stone-100" />
                             </div>
-                            <button onClick={() => fileRef.current?.click()} className="absolute bottom-2 right-2 bg-brand-800 text-white p-2 rounded-full border-4 border-white shadow-sm hover:bg-brand-700 transition-colors">
-                                <Camera size={16} />
+                            <button onClick={() => fileRef.current?.click()} disabled={isUploadingAvatar} className="absolute bottom-2 right-2 bg-brand-800 text-white p-2 rounded-full border-4 border-white shadow-sm hover:bg-brand-700 transition-colors disabled:opacity-70">
+                                {isUploadingAvatar ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
                             </button>
                             {!isEditing && isOpenToWork && (
                                 <div className="absolute -bottom-2 md:-bottom-3 inset-x-0 flex justify-center">
@@ -306,19 +372,15 @@ export default function MemberProfilePage() {
                                 <div>
                                     <div className="flex items-center gap-3">
                                         <h1 className="text-3xl font-bold text-stone-900">{user.name}</h1>
-                                        <div onClick={async () => {
-                                            const next = !isOpenToWork;
-                                            setIsOpenToWork(next);
-                                            try {
-                                                await profileMutation.trigger({ isOpenToWork: next });
-                                            } catch {
-                                                setIsOpenToWork(!next); // revert
-                                                toast("Failed to update status", "error");
-                                            }
-                                        }} className={`cursor-pointer flex items-center gap-2 px-3 py-1 rounded-full border transition-all select-none ${isOpenToWork ? "bg-green-50 border-green-200 text-green-700" : "bg-stone-50 border-stone-200 text-stone-400 hover:border-stone-300"}`}>
+                                        <button onClick={() => { void handleToggleOpenToWork(); }} className={`cursor-pointer flex items-center gap-2 px-3 py-1 rounded-full border transition-all select-none ${isOpenToWork ? "bg-green-50 border-green-200 text-green-700" : "bg-stone-50 border-stone-200 text-stone-400 hover:border-stone-300"}`}>
                                             <div className={`w-3 h-3 rounded-full transition-colors ${isOpenToWork ? "bg-green-500" : "bg-stone-300"}`} />
                                             <span className="text-xs font-bold whitespace-nowrap">{isOpenToWork ? "Open to Work" : "Not Open"}</span>
-                                        </div>
+                                        </button>
+
+                                        <button onClick={() => { void handleToggleProfileVisibility(); }} disabled={isUpdatingPrivacy} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-all select-none disabled:opacity-70 ${isProfileVisible ? "bg-brand-50 border-brand-200 text-brand-700" : "bg-stone-50 border-stone-200 text-stone-500"}`}>
+                                            {isProfileVisible ? <Eye size={12} /> : <EyeOff size={12} />}
+                                            <span className="text-xs font-bold whitespace-nowrap">{isProfileVisible ? "Profile Visible" : "Profile Hidden"}</span>
+                                        </button>
                                     </div>
 
                                     <div className="flex items-center gap-2 mt-2 text-stone-500 font-medium flex-wrap">
@@ -343,7 +405,7 @@ export default function MemberProfilePage() {
                                             <MapPin size={16} className="text-stone-400" />
                                             {isEditing ? (
                                                 <div className="flex-1">
-                                                    <input type="text" name="location" value={formData.location} onChange={handleChange} className={`${inputCls("location")} !py-1 !text-xs`} />
+                                                    <input type="text" title="Location" aria-label="Location" name="location" value={formData.location} onChange={handleChange} className={`${inputCls("location")} !py-1 !text-xs`} />
                                                     {errors.location && <p className="text-xs text-rose-500 mt-0.5">{errors.location}</p>}
                                                 </div>
                                             ) : formData.location}
@@ -351,7 +413,7 @@ export default function MemberProfilePage() {
                                         <div className="flex items-center gap-1.5 min-w-[120px]">
                                             <Building2 size={16} className="text-stone-400" />
                                             {isEditing ? (
-                                                <input type="text" name="industry" value={formData.industry} onChange={handleChange} className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500/20 focus:bg-white outline-none w-full" />
+                                                <input type="text" title="Industry" aria-label="Industry" name="industry" value={formData.industry} onChange={handleChange} className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500/20 focus:bg-white outline-none w-full" />
                                             ) : formData.industry}
                                         </div>
                                     </div>
@@ -361,7 +423,7 @@ export default function MemberProfilePage() {
                                     {isEditing ? (
                                         <>
                                             <button onClick={handleCancel} className="px-5 py-2.5 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors">Cancel</button>
-                                            <button onClick={handleSave} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-stone-900 text-white hover:bg-stone-800 transition-colors flex items-center gap-2"><Save size={16} /> Save</button>
+                                            <button onClick={() => { void handleSave(); }} disabled={isSavingProfile} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-stone-900 text-white hover:bg-stone-800 transition-colors flex items-center gap-2 disabled:opacity-70">{isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save</button>
                                         </>
                                     ) : (
                                         <button onClick={() => setIsEditing(true)} className="px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 bg-white border text-stone-700 hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50 transition-all shadow-sm"><Edit2 size={18} /> Edit Profile</button>
@@ -409,7 +471,7 @@ export default function MemberProfilePage() {
 
                         {/* Progress bar */}
                         <div className="w-full h-3 bg-stone-100 rounded-full mb-5 overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-accent-500 to-brand-600 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                            <div className={`h-full bg-gradient-to-r from-accent-500 to-brand-600 rounded-full transition-all duration-500 ${progressWidthClass}`} />
                         </div>
 
                         {/* Goals preview (read-only, max 5) */}
@@ -562,11 +624,12 @@ export default function MemberProfilePage() {
             <ConfirmModal
                 open={deleteModal}
                 onClose={() => { setDeleteModal(false); setDeleteConfirm(""); }}
-                onConfirm={() => { setDeleteModal(false); setDeleteConfirm(""); }}
+                onConfirm={() => { void handleDeleteAccount(); }}
                 title="Delete Account"
                 description="This will permanently delete your account and all associated data. This action cannot be undone."
                 confirmLabel="Delete Account"
                 icon={AlertTriangle}
+                isLoading={isDeletingAccount}
             />
         </div>
         </ErrorBoundary>

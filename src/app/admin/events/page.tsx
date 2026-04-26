@@ -1,426 +1,817 @@
 "use client";
 
-import { Calendar, Clock, Users, Plus, X, Pencil, Trash2, CalendarDays, List, Check, UserCheck, Video, Copy, ExternalLink, Link2, Eye, Loader2 } from "lucide-react";
-import { useState, useMemo, useCallback } from "react";
-import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
+import { Calendar, CalendarDays, Check, Clock, Copy, ExternalLink, Link2, List, Loader2, Pencil, Plus, RefreshCw, Trash2, UserCheck, Users, Video, X, type LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
-import { useEvents, eventTypeLabel, fmtEventDate, fmtEventTime, fmtDuration, fmtEventDay, fmtEventMonth, isEventPast, detectPlatform } from "@/hooks/use-events";
-import { useCreateEvent, useUpdateEvent, useDeleteEvent } from "@/hooks/use-admin-events";
+import { SkeletonCard } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/toast";
-import type { Event as ApiEvent } from "@/lib/types";
+import { useCursorPagination } from "@/hooks/useCursorPagination";
+import {
+    createEvent,
+    deleteEvent,
+    fetchEventDetail,
+    fetchEventRsvps,
+    fetchEvents,
+    getEventPlatformLabel,
+    getEventsErrorMessage,
+    getEventTypeLabel,
+    toggleEventRsvp,
+    updateEvent,
+    updateEventRecording,
+    type EventDetailRecord,
+    type EventPlatform,
+    type EventRecord,
+    type EventRsvpRecord,
+    type EventType,
+    type EventUpsertInput,
+} from "@/lib/events";
 
-const EVENT_TYPES = ["Workshop", "Q&A", "Speaker Series", "Social", "Hackathon"];
-const EVENT_TYPE_TO_ENUM: Record<string, string> = {
-    "Workshop": "WORKSHOP",
-    "Q&A": "QA",
-    "Speaker Series": "SPEAKER_SERIES",
-    "Social": "SOCIAL",
-    "Hackathon": "HACKATHON",
-};
-const DURATIONS_MINUTES = [30, 45, 60, 90, 120, 180];
-const DURATION_LABELS: Record<number, string> = { 30: "30 min", 45: "45 min", 60: "1 hr", 90: "1.5 hrs", 120: "2 hrs", 180: "3 hrs" };
-
-const PLATFORMS: { key: "zoom" | "google-meet" | "other"; label: string; color: string }[] = [
-    { key: "zoom", label: "Zoom", color: "bg-blue-50 text-blue-700 border-blue-200" },
-    { key: "google-meet", label: "Google Meet", color: "bg-green-50 text-green-700 border-green-200" },
-    { key: "other", label: "Other", color: "bg-stone-50 text-stone-600 border-stone-200" },
+const EVENT_TYPES: Array<{ label: string; value: EventType }> = [
+    { label: "Workshop", value: "WORKSHOP" },
+    { label: "Q&A", value: "QA" },
+    { label: "Speaker Series", value: "SPEAKER_SERIES" },
+    { label: "Social", value: "SOCIAL" },
+    { label: "Hackathon", value: "HACKATHON" },
 ];
 
-function platformLabel(p: string) {
-    return PLATFORMS.find(x => x.key === p)?.label ?? "Other";
+const DURATION_OPTIONS = [30, 45, 60, 90, 120, 180];
+
+const PLATFORM_OPTIONS: Array<{ key: EventPlatform; label: string; color: string }> = [
+    { key: "ZOOM", label: "Zoom", color: "bg-blue-50 text-blue-700 border-blue-200" },
+    { key: "GOOGLE_MEET", label: "Google Meet", color: "bg-green-50 text-green-700 border-green-200" },
+    { key: "OTHER", label: "Other", color: "bg-stone-50 text-stone-600 border-stone-200" },
+];
+
+function formatDateLabel(value: string) {
+    return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-function platformBadge(p: string) {
-    return PLATFORMS.find(x => x.key === p)?.color ?? "bg-stone-50 text-stone-600 border-stone-200";
+
+function formatMonthLabel(value: string) {
+    return formatDateLabel(value).split(" ")[0] ?? "";
+}
+
+function formatDayLabel(value: string) {
+    return formatDateLabel(value).split(" ")[1] ?? "";
+}
+
+function formatFullDate(value: string) {
+    return new Date(value).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function formatTime(value: string) {
+    return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+}
+
+function formatDuration(minutes: number) {
+    if (minutes % 60 === 0) {
+        const hours = minutes / 60;
+        return `${hours} hr${hours === 1 ? "" : "s"}`;
+    }
+
+    if (minutes > 60) {
+        return `${minutes / 60} hrs`;
+    }
+
+    return `${minutes} min`;
+}
+
+function getStatus(event: EventRecord | EventDetailRecord) {
+    return new Date(event.scheduledAt).getTime() < Date.now() ? "past" : "upcoming";
+}
+
+function platformBadge(platform: EventPlatform) {
+    return PLATFORM_OPTIONS.find((option) => option.key === platform)?.color ?? "bg-stone-50 text-stone-600 border-stone-200";
+}
+
+function toDateInputValue(value: string) {
+    const date = new Date(value);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function toTimeInputValue(value: string) {
+    const date = new Date(value);
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+}
+
+function buildScheduledAt(date: string, time: string) {
+    return new Date(`${date}T${time}:00`).toISOString();
+}
+
+function toFormValues(event: EventRecord | EventDetailRecord): EventUpsertInput {
+    return {
+        title: event.title,
+        description: event.description,
+        scheduledAt: event.scheduledAt,
+        durationMinutes: event.durationMinutes,
+        host: event.host,
+        type: event.type,
+        platform: event.platform,
+        meetingLink: "meetingLink" in event ? event.meetingLink : null,
+    };
 }
 
 export default function AdminEventsPage() {
-    const { events, isLoading, mutate: revalidateEvents } = useEvents();
-    const [view, setView] = useState<"list" | "calendar">("list");
-    const [modal, setModal] = useState<null | "create" | ApiEvent>(null);
-    const [detailEvent, setDetailEvent] = useState<ApiEvent | null>(null);
-    const [deleteTarget, setDeleteTarget] = useState<ApiEvent | null>(null);
-    const [filterType, setFilterType] = useState("All");
-    const [filterStatus, setFilterStatus] = useState<"all" | "upcoming" | "past">("all");
-    const [copied, setCopied] = useState<string | null>(null);
+    const { getToken } = useAuth();
     const { toast } = useToast();
+    const [view, setView] = useState<"list" | "calendar">("list");
+    const [filterType, setFilterType] = useState<"All" | EventType>("All");
+    const [filterStatus, setFilterStatus] = useState<"all" | "upcoming" | "past">("all");
+    const [modal, setModal] = useState<null | "create" | (EventUpsertInput & { id: string })>(null);
+    const [detailEventId, setDetailEventId] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<EventRecord | null>(null);
+    const [eventDetails, setEventDetails] = useState<Record<string, EventDetailRecord>>({});
+    const [eventRsvps, setEventRsvps] = useState<Record<string, EventRsvpRecord[]>>({});
+    const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
+    const [loadingRsvpsId, setLoadingRsvpsId] = useState<string | null>(null);
+    const [busyRsvpId, setBusyRsvpId] = useState<string | null>(null);
+    const [copied, setCopied] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [recordingUrlDraft, setRecordingUrlDraft] = useState("");
+    const [recordingError, setRecordingError] = useState<string | null>(null);
+    const [isSavingRecording, setIsSavingRecording] = useState(false);
 
-    const filtered = useMemo(() => {
-        return events.filter(e => {
-            if (filterType !== "All" && eventTypeLabel(e.type) !== filterType) return false;
-            if (filterStatus === "upcoming" && isEventPast(e.scheduledAt, e.durationMinutes)) return false;
-            if (filterStatus === "past" && !isEventPast(e.scheduledAt, e.durationMinutes)) return false;
-            return true;
-        }).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
-    }, [events, filterType, filterStatus]);
+    const paginationQuery = useMemo(() => ({
+        type: filterType === "All" ? undefined : filterType,
+        status: filterStatus === "all" ? undefined : filterStatus,
+        limit: 50,
+    }), [filterStatus, filterType]);
 
-    const handleSave = async (data: { title: string; description: string; scheduledAt: string; durationMinutes: number; host: string; type: string; platform: string; meetingLink: string }) => {
-        // Handled inside the modal via hooks
-        setModal(null);
-        revalidateEvents();
-    };
+    const { items, isLoading, error, hasMore, isLoadingMore, loadMore, reload, setItems } = useCursorPagination({
+        query: paginationQuery,
+        loadPage: (query) => fetchEvents(query, getToken),
+        getErrorMessage: getEventsErrorMessage,
+    });
 
-    const handleDelete = async () => {
-        // Handled via the hook inside ConfirmModal onConfirm
-        setDeleteTarget(null);
-        revalidateEvents();
-    };
+    const loadEventDetail = useCallback(async (eventId: string) => {
+        const detail = await fetchEventDetail(eventId, getToken);
+        setEventDetails((prev) => ({ ...prev, [eventId]: detail }));
+        return detail;
+    }, [getToken]);
+
+    const loadEventRsvps = useCallback(async (eventId: string) => {
+        const rsvps = await fetchEventRsvps(eventId, getToken);
+        setEventRsvps((prev) => ({ ...prev, [eventId]: rsvps }));
+        return rsvps;
+    }, [getToken]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function hydrateLoadedEvents() {
+            const idsToHydrate = items
+                .map((event) => event.id)
+                .filter((eventId) => !eventDetails[eventId]);
+
+            if (idsToHydrate.length === 0) {
+                return;
+            }
+
+            const results = await Promise.all(idsToHydrate.map(async (eventId) => {
+                try {
+                    return await fetchEventDetail(eventId, getToken);
+                } catch {
+                    return null;
+                }
+            }));
+
+            if (cancelled) {
+                return;
+            }
+
+            const nextDetails: Record<string, EventDetailRecord> = {};
+            results.forEach((detail) => {
+                if (detail) {
+                    nextDetails[detail.id] = detail;
+                }
+            });
+
+            if (Object.keys(nextDetails).length > 0) {
+                setEventDetails((prev) => ({ ...prev, ...nextDetails }));
+            }
+        }
+
+        void hydrateLoadedEvents();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [eventDetails, getToken, items]);
+
+    const openEventDetail = useCallback(async (eventId: string) => {
+        setDetailEventId(eventId);
+        setLoadingDetailId(eventId);
+        setLoadingRsvpsId(eventId);
+
+        try {
+            await Promise.all([loadEventDetail(eventId), loadEventRsvps(eventId)]);
+        } catch (loadError) {
+            toast(getEventsErrorMessage(loadError), "error");
+        } finally {
+            setLoadingDetailId((current) => current === eventId ? null : current);
+            setLoadingRsvpsId((current) => current === eventId ? null : current);
+        }
+    }, [loadEventDetail, loadEventRsvps, toast]);
+
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+
+        try {
+            await reload();
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [reload]);
+
+    const handleSave = useCallback(async (data: EventUpsertInput) => {
+        setIsSaving(true);
+
+        try {
+            if (modal && typeof modal === "object") {
+                await updateEvent(modal.id, data, getToken);
+                toast("Event updated");
+                setEventDetails((prev) => modal.id in prev ? { ...prev, [modal.id]: { ...prev[modal.id], ...data } } : prev);
+            } else {
+                await createEvent(data, getToken);
+                toast("Event created");
+            }
+
+            setModal(null);
+            await reload();
+        } catch (saveError) {
+            toast(getEventsErrorMessage(saveError), "error");
+        } finally {
+            setIsSaving(false);
+        }
+    }, [getToken, modal, reload, toast]);
+
+    const handleDelete = useCallback(async () => {
+        if (!deleteTarget) {
+            return;
+        }
+
+        setIsDeleting(true);
+
+        try {
+            await deleteEvent(deleteTarget.id, getToken);
+            setItems((prev) => prev.filter((event) => event.id !== deleteTarget.id));
+            setEventDetails((prev) => {
+                const next = { ...prev };
+                delete next[deleteTarget.id];
+                return next;
+            });
+            setEventRsvps((prev) => {
+                const next = { ...prev };
+                delete next[deleteTarget.id];
+                return next;
+            });
+            if (detailEventId === deleteTarget.id) {
+                setDetailEventId(null);
+            }
+            setDeleteTarget(null);
+            toast("Event removed");
+        } catch (deleteError) {
+            toast(getEventsErrorMessage(deleteError), "error");
+        } finally {
+            setIsDeleting(false);
+        }
+    }, [deleteTarget, detailEventId, getToken, setItems, toast]);
+
+    const handleToggleRsvp = useCallback(async (eventId: string) => {
+        if (busyRsvpId === eventId) {
+            return;
+        }
+
+        setBusyRsvpId(eventId);
+
+        try {
+            const rsvped = await toggleEventRsvp(eventId, getToken);
+            setEventDetails((prev) => prev[eventId] ? { ...prev, [eventId]: { ...prev[eventId], hasRsvp: rsvped } } : prev);
+            await Promise.allSettled([
+                reload(),
+                loadEventDetail(eventId),
+                detailEventId === eventId ? loadEventRsvps(eventId) : Promise.resolve([]),
+            ]);
+            toast(rsvped ? "RSVP confirmed" : "RSVP removed");
+        } catch (toggleError) {
+            toast(getEventsErrorMessage(toggleError), "error");
+        } finally {
+            setBusyRsvpId(null);
+        }
+    }, [busyRsvpId, detailEventId, getToken, loadEventDetail, loadEventRsvps, reload, toast]);
 
     const copyLink = useCallback((id: string, link: string) => {
-        navigator.clipboard.writeText(link);
+        void navigator.clipboard.writeText(link);
         setCopied(id);
         setTimeout(() => setCopied(null), 2000);
     }, []);
 
-    // Calendar helpers
+    useEffect(() => {
+        setRecordingUrlDraft(detailEvent?.recordingUrl ?? "");
+        setRecordingError(null);
+    }, [detailEvent?.id, detailEvent?.recordingUrl]);
+
+    const handleSaveRecording = useCallback(async () => {
+        if (!detailEvent) {
+            return;
+        }
+
+        const nextUrl = recordingUrlDraft.trim();
+
+        if (!nextUrl) {
+            setRecordingError("Recording URL is required.");
+            return;
+        }
+
+        if (!/^https?:\/\/.+/i.test(nextUrl)) {
+            setRecordingError("Enter a valid recording URL.");
+            return;
+        }
+
+        setIsSavingRecording(true);
+        setRecordingError(null);
+
+        try {
+            const updatedEvent = await updateEventRecording(detailEvent.id, nextUrl, getToken);
+            setItems((prev) => prev.map((event) => event.id === detailEvent.id ? { ...event, recordingUrl: updatedEvent.recordingUrl } : event));
+            setEventDetails((prev) => prev[detailEvent.id] ? { ...prev, [detailEvent.id]: { ...prev[detailEvent.id], recordingUrl: updatedEvent.recordingUrl } } : prev);
+            setRecordingUrlDraft(updatedEvent.recordingUrl ?? nextUrl);
+            toast("Recording updated");
+        } catch (saveError) {
+            const message = getEventsErrorMessage(saveError);
+            setRecordingError(message);
+            toast(message, "error");
+        } finally {
+            setIsSavingRecording(false);
+        }
+    }, [detailEvent, getToken, recordingUrlDraft, setItems, toast]);
+
+    const detailEvent = detailEventId ? eventDetails[detailEventId] ?? items.find((event) => event.id === detailEventId) ?? null : null;
+    const sortedItems = useMemo(() => [...items].sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime()), [items]);
+    const myRsvpCount = useMemo(() => Object.values(eventDetails).filter((event) => event.hasRsvp).length, [eventDetails]);
+    const upcomingCount = useMemo(() => items.filter((event) => getStatus(event) === "upcoming").length, [items]);
+    const pastCount = useMemo(() => items.filter((event) => getStatus(event) === "past").length, [items]);
+
     const calendarMonth = new Date();
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDay = new Date(year, month, 1).getDay();
-    const calDays: (number | null)[] = [
-        ...Array.from({ length: firstDay }, () => null as null),
-        ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+    const calDays: Array<number | null> = [
+        ...Array.from({ length: firstDay }, () => null),
+        ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
     ];
 
     return (
         <ErrorBoundary>
-        <div className="p-6 md:p-10 max-w-[1600px] mx-auto space-y-8">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-stone-900">Events</h1>
-                    <p className="text-stone-500 mt-1">Schedule and manage community events.</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex bg-stone-100 rounded-xl p-1">
-                        <button onClick={() => setView("list")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${view === "list" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}><List size={16} /> List</button>
-                        <button onClick={() => setView("calendar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${view === "calendar" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}><CalendarDays size={16} /> Calendar</button>
+            <div className="p-6 md:p-10 max-w-[1600px] mx-auto space-y-8">
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-stone-900">Events</h1>
+                        <p className="text-stone-500 mt-1">Schedule and manage community events with live backend data.</p>
                     </div>
-                    <button onClick={() => setModal("create")} className="bg-brand-800 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-brand-700 flex items-center gap-2 shadow-lg shadow-brand-800/10">
-                        <Plus size={18} /> Create Event
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                        <button onClick={() => void handleRefresh()} disabled={isRefreshing} className="bg-white border border-stone-200 text-stone-700 px-4 py-2.5 rounded-xl font-bold hover:border-brand-300 hover:text-brand-700 flex items-center gap-2 w-fit disabled:opacity-70 disabled:cursor-not-allowed">
+                            {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                            Refresh
+                        </button>
+                        <div className="flex bg-stone-100 rounded-xl p-1">
+                            <button onClick={() => setView("list")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${view === "list" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}><List size={16} /> List</button>
+                            <button onClick={() => setView("calendar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${view === "calendar" ? "bg-white shadow text-stone-900" : "text-stone-500"}`}><CalendarDays size={16} /> Calendar</button>
+                        </div>
+                        <button onClick={() => setModal("create")} className="bg-brand-800 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-brand-700 flex items-center gap-2 shadow-lg shadow-brand-800/10">
+                            <Plus size={18} /> Create Event
+                        </button>
+                    </div>
                 </div>
-            </div>
 
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3">
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Type:</span>
-                    {["All", ...EVENT_TYPES].map(t => (
-                        <button key={t} onClick={() => setFilterType(t)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${filterType === t ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{t}</button>
-                    ))}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <StatCard label="Loaded events" value={items.length} />
+                    <StatCard label="Upcoming" value={upcomingCount} accent="text-brand-700" />
+                    <StatCard label="Past" value={pastCount} accent="text-stone-500" />
+                    <StatCard label="Your RSVPs" value={myRsvpCount} accent="text-accent-700" />
                 </div>
-                <div className="flex items-center gap-2 ml-auto">
-                    <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Status:</span>
-                    {(["all", "upcoming", "past"] as const).map(s => (
-                        <button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-colors ${filterStatus === s ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{s}</button>
-                    ))}
-                </div>
-            </div>
 
-            {/* Loading */}
-            {isLoading && events.length === 0 && (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="animate-spin text-brand-500" size={32} />
-                </div>
-            )}
-
-            {/* Calendar View */}
-            {view === "calendar" && !isLoading && (
-                <div className="bg-white rounded-3xl border border-stone-100 shadow-sm p-6">
-                    <h3 className="font-bold text-stone-900 mb-4">{new Date(year, month).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h3>
-                    <div className="grid grid-cols-7 gap-1 text-center">
-                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => <div key={d} className="text-[10px] font-bold text-stone-400 uppercase tracking-wider py-2">{d}</div>)}
-                        {calDays.map((day, i) => {
-                            const dayEvents = events.filter(e => {
-                                const d = new Date(e.scheduledAt);
-                                return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
-                            });
+                <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Type:</span>
+                        {["All", ...EVENT_TYPES.map((type) => type.value)].map((type) => {
+                            const active = filterType === type;
+                            const label = type === "All" ? type : getEventTypeLabel(type);
                             return (
-                                <div key={i} className={`min-h-[80px] border border-stone-50 rounded-xl p-1 ${day ? "bg-stone-50/50" : ""} ${day === new Date().getDate() && month === new Date().getMonth() ? "ring-2 ring-brand-300 bg-brand-50/30" : ""}`}>
-                                    {day && <span className="text-xs font-bold text-stone-500">{day}</span>}
-                                    {dayEvents.map(ev => (
-                                        <button key={ev.id} onClick={() => setDetailEvent(ev)} className="block w-full text-left text-[10px] font-bold text-brand-700 bg-brand-50 rounded px-1 py-0.5 mt-0.5 truncate hover:bg-brand-100 transition-colors">{ev.title}</button>
-                                    ))}
-                                </div>
+                                <button key={type} onClick={() => setFilterType(type as "All" | EventType)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${active ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{label}</button>
                             );
                         })}
                     </div>
+                    <div className="flex items-center gap-2 ml-auto">
+                        <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Status:</span>
+                        {(["all", "upcoming", "past"] as const).map((status) => (
+                            <button key={status} onClick={() => setFilterStatus(status)} className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-colors ${filterStatus === status ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{status}</button>
+                        ))}
+                    </div>
                 </div>
-            )}
 
-            {/* List View */}
-            {view === "list" && !isLoading && (
-                <div className="space-y-4">
-                    {filtered.length === 0 && (
-                        <EmptyState
-                            icon={Calendar}
-                            heading="No events match your filters"
-                            description="Try adjusting your type or status filters."
-                            variant="dashed"
-                        />
-                    )}
-                    {filtered.map(event => {
-                        const typeLabel = eventTypeLabel(event.type);
-                        const platform = detectPlatform(event.meetingLink);
-                        const past = isEventPast(event.scheduledAt, event.durationMinutes);
-                        const fDate = fmtEventDate(event.scheduledAt);
-                        return (
-                            <div key={event.id} className={`bg-white rounded-2xl border p-6 transition-all group ${past ? "border-stone-100 opacity-70" : "border-stone-200 hover:border-brand-300"}`}>
-                                <div className="flex flex-col md:flex-row gap-6">
-                                    <div className="flex-shrink-0 flex flex-col items-center justify-center w-20 h-20 bg-brand-50 rounded-2xl border border-brand-100 group-hover:bg-brand-100 transition-colors">
-                                        <span className="text-xs font-bold uppercase tracking-wider text-brand-600">{fmtEventMonth(event.scheduledAt)}</span>
-                                        <span className="text-3xl font-bold text-brand-800">{fmtEventDay(event.scheduledAt)}</span>
+                {isLoading ? (
+                    <div className="space-y-4">
+                        <SkeletonCard lines={4} />
+                        <SkeletonCard lines={4} />
+                        <SkeletonCard lines={4} />
+                    </div>
+                ) : error ? (
+                    <EmptyState icon={Calendar} heading="Events unavailable" description={error} variant="plain" />
+                ) : view === "calendar" ? (
+                    <div className="bg-white rounded-3xl border border-stone-100 shadow-sm p-6">
+                        <h3 className="font-bold text-stone-900 mb-4">{new Date(year, month).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h3>
+                        <div className="grid grid-cols-7 gap-1 text-center">
+                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <div key={day} className="text-[10px] font-bold text-stone-400 uppercase tracking-wider py-2">{day}</div>)}
+                            {calDays.map((day, index) => {
+                                const dateStr = day ? `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}` : "";
+                                const dayEvents = sortedItems.filter((event) => toDateInputValue(event.scheduledAt) === dateStr);
+
+                                return (
+                                    <div key={`${dateStr}-${index}`} className={`min-h-[80px] border border-stone-50 rounded-xl p-1 ${day ? "bg-stone-50/50" : ""} ${day === new Date().getDate() && month === new Date().getMonth() ? "ring-2 ring-brand-300 bg-brand-50/30" : ""}`}>
+                                        {day ? <span className="text-xs font-bold text-stone-500">{day}</span> : null}
+                                        {dayEvents.map((event) => (
+                                            <button key={event.id} onClick={() => void openEventDetail(event.id)} className="block w-full text-left text-[10px] font-bold text-brand-700 bg-brand-50 rounded px-1 py-0.5 mt-0.5 truncate hover:bg-brand-100 transition-colors">{event.title}</button>
+                                        ))}
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                                    <StatusBadge label={typeLabel} preset={typeLabel as any} variant="tag" />
-                                                    <StatusBadge label={platformLabel(platform)} preset={platformLabel(platform) as any} variant="tag" />
-                                                    {past && <StatusBadge label="Past" preset="Inactive" variant="tag" />}
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {sortedItems.length === 0 ? (
+                            <EmptyState icon={Calendar} heading="No events match your filters" description="Try adjusting your type or status filters." variant="dashed" />
+                        ) : null}
+
+                        {sortedItems.map((event) => {
+                            const detail = eventDetails[event.id];
+                            const hasRsvp = detail?.hasRsvp ?? false;
+                            const eventMeetingLink = detail?.meetingLink ?? null;
+                            const status = getStatus(event);
+
+                            return (
+                                <div key={event.id} className={`bg-white rounded-2xl border p-6 transition-all group ${status === "past" ? "border-stone-100 opacity-70" : "border-stone-200 hover:border-brand-300"}`}>
+                                    <div className="flex flex-col md:flex-row gap-6">
+                                        <div className="flex-shrink-0 flex flex-col items-center justify-center w-20 h-20 bg-brand-50 rounded-2xl border border-brand-100 group-hover:bg-brand-100 transition-colors">
+                                            <span className="text-xs font-bold uppercase tracking-wider text-brand-600">{formatMonthLabel(event.scheduledAt)}</span>
+                                            <span className="text-3xl font-bold text-brand-800">{formatDayLabel(event.scheduledAt)}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-start gap-4">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                                        <StatusBadge label={getEventTypeLabel(event.type)} preset={event.type as never} variant="tag" />
+                                                        <StatusBadge label={getEventPlatformLabel(event.platform)} preset={getEventPlatformLabel(event.platform) as never} variant="tag" />
+                                                        {status === "past" ? <StatusBadge label="Past" preset="Inactive" variant="tag" /> : null}
+                                                        {hasRsvp ? <StatusBadge label="RSVP'd" preset="Success" variant="tag" /> : null}
+                                                    </div>
+                                                    <h3 className="text-xl font-bold text-stone-900 mb-1 group-hover:text-brand-700 transition-colors cursor-pointer" onClick={() => void openEventDetail(event.id)}>{event.title}</h3>
+                                                    {event.description ? <p className="text-sm text-stone-500 mb-2 line-clamp-2">{event.description}</p> : null}
+                                                    <div className="flex flex-wrap gap-4 text-sm text-stone-500">
+                                                        <span className="flex items-center gap-1.5"><Clock size={16} /> {formatTime(event.scheduledAt)}</span>
+                                                        <span className="flex items-center gap-1.5"><Video size={16} /> {formatDuration(event.durationMinutes)}</span>
+                                                        <span className="flex items-center gap-1.5"><Users size={16} /> {event.attendeeCount} Attending</span>
+                                                        <span className="flex items-center gap-1.5">Host: {event.host}</span>
+                                                    </div>
                                                 </div>
-                                                <h3 className="text-xl font-bold text-stone-900 mb-1 group-hover:text-brand-700 transition-colors cursor-pointer" onClick={() => setDetailEvent(event)}>{event.title}</h3>
-                                                {event.description && <p className="text-sm text-stone-500 mb-2 line-clamp-2">{event.description}</p>}
-                                                <div className="flex flex-wrap gap-4 text-sm text-stone-500">
-                                                    <span className="flex items-center gap-1.5"><Clock size={16} /> {fmtEventTime(event.scheduledAt)}</span>
-                                                    <span className="flex items-center gap-1.5"><Video size={16} /> {fmtDuration(event.durationMinutes)}</span>
-                                                    <span className="flex items-center gap-1.5"><Users size={16} /> {event._count.rsvps} Attending</span>
-                                                    <span className="flex items-center gap-1.5">Host: {event.host}</span>
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                    {status === "upcoming" ? (
+                                                        <button onClick={() => void handleToggleRsvp(event.id)} disabled={busyRsvpId === event.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed ${hasRsvp ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-brand-50 text-brand-700 hover:bg-brand-100"}`}>
+                                                            {busyRsvpId === event.id ? <Loader2 size={14} className="animate-spin" /> : hasRsvp ? <><Check size={14} /> RSVP&apos;d</> : <><UserCheck size={14} /> RSVP</>}
+                                                        </button>
+                                                    ) : null}
+                                                    <button onClick={() => setModal({ id: event.id, ...toFormValues(detail ?? event) })} className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors" aria-label="Edit event" title="Edit event"><Pencil size={16} /></button>
+                                                    <button onClick={() => setDeleteTarget(event)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" aria-label="Delete event" title="Delete event"><Trash2 size={16} /></button>
                                                 </div>
-                                            </div>
-                                            <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                                                <Link href={`/admin/events/${event.id}`} className="p-2 text-stone-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors" title="View Details"><Eye size={16} /></Link>
-                                                <button onClick={() => setModal(event)} className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors"><Pencil size={16} /></button>
-                                                <button onClick={() => setDeleteTarget(event)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
                                             </div>
                                         </div>
                                     </div>
+                                    {eventMeetingLink ? (
+                                        <div className="mt-4 flex items-center gap-3 bg-stone-50 rounded-xl px-4 py-3 border border-stone-100">
+                                            <Link2 size={16} className="text-stone-400 flex-shrink-0" />
+                                            <span className="text-sm text-stone-600 truncate flex-1 font-mono">{eventMeetingLink}</span>
+                                            <button onClick={() => copyLink(event.id, eventMeetingLink)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied === event.id ? "bg-green-100 text-green-700" : "bg-white text-stone-600 hover:bg-stone-100 border border-stone-200"}`}>
+                                                {copied === event.id ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+                                            </button>
+                                            <a href={eventMeetingLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-800 text-white hover:bg-brand-700 transition-colors">
+                                                <ExternalLink size={14} /> Join
+                                            </a>
+                                        </div>
+                                    ) : null}
                                 </div>
-                                {/* Meeting Link Bar */}
-                                {event.meetingLink && (
-                                    <div className="mt-4 flex items-center gap-3 bg-stone-50 rounded-xl px-4 py-3 border border-stone-100">
-                                        <Link2 size={16} className="text-stone-400 flex-shrink-0" />
-                                        <span className="text-sm text-stone-600 truncate flex-1 font-mono">{event.meetingLink}</span>
-                                        <button onClick={() => copyLink(event.id, event.meetingLink!)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied === event.id ? "bg-green-100 text-green-700" : "bg-white text-stone-600 hover:bg-stone-100 border border-stone-200"}`}>
-                                            {copied === event.id ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
-                                        </button>
-                                        <a href={event.meetingLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-800 text-white hover:bg-brand-700 transition-colors">
-                                            <ExternalLink size={14} /> Join
+                            );
+                        })}
+
+                        {hasMore ? (
+                            <div className="flex justify-center pt-2">
+                                <button onClick={() => void loadMore()} disabled={isLoadingMore} className="inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-bold text-stone-700 hover:border-brand-300 hover:text-brand-700 disabled:opacity-70 disabled:cursor-not-allowed">
+                                    {isLoadingMore ? <Loader2 size={16} className="animate-spin" /> : null}
+                                    {isLoadingMore ? "Loading more" : "Load more events"}
+                                </button>
+                            </div>
+                        ) : null}
+                    </div>
+                )}
+
+                {modal !== null ? (
+                    <EventFormModal
+                        initial={typeof modal === "object" ? modal : undefined}
+                        onClose={() => !isSaving && setModal(null)}
+                        onSave={handleSave}
+                        saving={isSaving}
+                    />
+                ) : null}
+
+                {detailEvent ? (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDetailEventId(null)}>
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden max-h-[90vh] flex flex-col" onClick={(event) => event.stopPropagation()}>
+                            <div className="flex items-center justify-between p-6 border-b border-stone-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-brand-50 rounded-xl text-brand-700"><Calendar size={20} /></div>
+                                    <h2 className="text-lg font-bold text-stone-900">Event Details</h2>
+                                </div>
+                                <button onClick={() => setDetailEventId(null)} className="text-stone-400 hover:text-stone-600" aria-label="Close dialog" title="Close dialog"><X size={20} /></button>
+                            </div>
+                            <div className="p-6 space-y-5 overflow-y-auto">
+                                {loadingDetailId === detailEvent.id || loadingRsvpsId === detailEvent.id ? (
+                                    <div className="flex items-center gap-2 text-sm text-stone-500"><Loader2 size={16} className="animate-spin" /> Refreshing backend event detail...</div>
+                                ) : null}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <StatusBadge label={getEventTypeLabel(detailEvent.type)} preset={detailEvent.type as never} variant="tag" />
+                                    <StatusBadge label={getEventPlatformLabel(detailEvent.platform)} preset={getEventPlatformLabel(detailEvent.platform) as never} variant="tag" />
+                                    {getStatus(detailEvent) === "past" ? <StatusBadge label="Past" preset="Inactive" variant="tag" /> : null}
+                                    {"hasRsvp" in detailEvent && detailEvent.hasRsvp ? <StatusBadge label="RSVP'd" preset="Success" variant="tag" /> : null}
+                                </div>
+                                <h3 className="text-2xl font-bold text-stone-900">{detailEvent.title}</h3>
+                                {detailEvent.description ? <p className="text-sm text-stone-600 leading-relaxed">{detailEvent.description}</p> : <p className="text-sm text-stone-500">No description has been added for this event yet.</p>}
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <InfoRow icon={Calendar} label={formatFullDate(detailEvent.scheduledAt)} />
+                                    <InfoRow icon={Clock} label={formatTime(detailEvent.scheduledAt)} />
+                                    <InfoRow icon={Video} label={formatDuration(detailEvent.durationMinutes)} />
+                                    <InfoRow icon={Users} label={`${detailEvent.attendeeCount} attending`} />
+                                </div>
+                                <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+                                    <p className="text-xs font-bold uppercase tracking-wide text-stone-400 mb-1">Host</p>
+                                    <p className="font-semibold text-stone-800">{detailEvent.host}</p>
+                                </div>
+                                <div className={`rounded-xl p-4 border ${platformBadge(detailEvent.platform)}`}>
+                                    <p className="text-xs font-bold uppercase tracking-wide opacity-70 mb-1">Platform</p>
+                                    <p className="font-bold">{getEventPlatformLabel(detailEvent.platform)}</p>
+                                    {detailEvent.meetingLink ? (
+                                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                                            <button onClick={() => copyLink(detailEvent.id, detailEvent.meetingLink!)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied === detailEvent.id ? "bg-green-100 text-green-700" : "bg-white/80 text-stone-700 hover:bg-white border border-white/70"}`}>
+                                                {copied === detailEvent.id ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy link</>}
+                                            </button>
+                                            <a href={detailEvent.meetingLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors">
+                                                <ExternalLink size={16} /> Join meeting
+                                            </a>
+                                        </div>
+                                    ) : null}
+                                    {detailEvent.recordingUrl ? (
+                                        <a href={detailEvent.recordingUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-white/80 text-stone-700 rounded-xl font-bold text-sm hover:bg-white transition-colors border border-white/70">
+                                            <ExternalLink size={16} /> Open recording
                                         </a>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Create / Edit Modal */}
-            {modal !== null && <EventFormModal initial={typeof modal === "object" ? modal : undefined} onClose={() => setModal(null)} onSaved={() => { setModal(null); revalidateEvents(); }} />}
-
-            {/* Event Detail Modal */}
-            {detailEvent && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDetailEvent(null)}>
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between p-6 border-b border-stone-100">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-brand-50 rounded-xl text-brand-700"><Calendar size={20} /></div>
-                                <h2 className="text-lg font-bold text-stone-900">Event Details</h2>
-                            </div>
-                            <button onClick={() => setDetailEvent(null)} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <StatusBadge label={eventTypeLabel(detailEvent.type)} preset={eventTypeLabel(detailEvent.type) as any} variant="tag" />
-                                {isEventPast(detailEvent.scheduledAt, detailEvent.durationMinutes) && <StatusBadge label="Past" preset="Inactive" variant="tag" />}
-                            </div>
-                            <h3 className="text-2xl font-bold text-stone-900">{detailEvent.title}</h3>
-                            {detailEvent.description && <p className="text-sm text-stone-600 leading-relaxed">{detailEvent.description}</p>}
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                                <div className="flex items-center gap-2 text-stone-500"><Calendar size={16} className="text-stone-400" /> {fmtEventDate(detailEvent.scheduledAt)}</div>
-                                <div className="flex items-center gap-2 text-stone-500"><Clock size={16} className="text-stone-400" /> {fmtEventTime(detailEvent.scheduledAt)}</div>
-                                <div className="flex items-center gap-2 text-stone-500"><Video size={16} className="text-stone-400" /> {fmtDuration(detailEvent.durationMinutes)}</div>
-                                <div className="flex items-center gap-2 text-stone-500"><Users size={16} className="text-stone-400" /> {detailEvent._count.rsvps} Attending</div>
-                            </div>
-                            <div className="text-sm text-stone-500">Host: <span className="font-semibold text-stone-700">{detailEvent.host}</span></div>
-                            {detailEvent.meetingLink && (
-                                <div className="flex items-center gap-3 bg-stone-50 rounded-xl px-4 py-3 border border-stone-100">
-                                    <Link2 size={16} className="text-stone-400 flex-shrink-0" />
-                                    <span className="text-sm text-stone-600 truncate flex-1 font-mono">{detailEvent.meetingLink}</span>
-                                    <button onClick={() => copyLink(detailEvent.id, detailEvent.meetingLink!)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied === detailEvent.id ? "bg-green-100 text-green-700" : "bg-white text-stone-600 hover:bg-stone-100 border border-stone-200"}`}>
-                                        {copied === detailEvent.id ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
-                                    </button>
-                                    <a href={detailEvent.meetingLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-800 text-white hover:bg-brand-700 transition-colors">
-                                        <ExternalLink size={14} /> Join
-                                    </a>
+                                    ) : null}
                                 </div>
-                            )}
-                        </div>
-                        <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
-                            <button onClick={() => { setDetailEvent(null); setModal(detailEvent); }} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 transition-colors flex items-center justify-center gap-2"><Pencil size={16} /> Edit Event</button>
-                            <button onClick={() => setDetailEvent(null)} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors">Close</button>
+                                <div className="bg-white rounded-2xl border border-stone-100 p-4">
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                        <div>
+                                            <p className="text-sm font-bold text-stone-900">Recording</p>
+                                            <p className="text-xs text-stone-500">Attach or update the event recording without leaving this modal.</p>
+                                        </div>
+                                        {isSavingRecording ? <Loader2 size={16} className="animate-spin text-stone-400" /> : null}
+                                    </div>
+                                    <div className="flex flex-col md:flex-row gap-3">
+                                        <div className="relative flex-1">
+                                            <Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                                            <input
+                                                type="url"
+                                                value={recordingUrlDraft}
+                                                onChange={(event) => setRecordingUrlDraft(event.target.value)}
+                                                placeholder="https://youtube.com/watch?v=..."
+                                                aria-label="Recording URL"
+                                                title="Recording URL"
+                                                className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 font-mono ${recordingError ? "border-red-300 bg-red-50" : "border-stone-200"}`}
+                                            />
+                                        </div>
+                                        <button onClick={() => void handleSaveRecording()} disabled={isSavingRecording} className="px-4 py-3 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                                            {isSavingRecording ? <Loader2 size={16} className="animate-spin" /> : <Video size={16} />}
+                                            {detailEvent.recordingUrl ? "Update Recording" : "Attach Recording"}
+                                        </button>
+                                    </div>
+                                    {recordingError ? <p className="text-red-500 text-xs mt-2">{recordingError}</p> : null}
+                                </div>
+                                <div className="bg-white rounded-2xl border border-stone-100 p-4">
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                        <div>
+                                            <p className="text-sm font-bold text-stone-900">RSVP Report</p>
+                                            <p className="text-xs text-stone-500">Live attendee list from the backend.</p>
+                                        </div>
+                                        {loadingRsvpsId === detailEvent.id ? <Loader2 size={16} className="animate-spin text-stone-400" /> : null}
+                                    </div>
+                                    {eventRsvps[detailEvent.id]?.length ? (
+                                        <div className="space-y-2">
+                                            {eventRsvps[detailEvent.id].map((rsvp) => (
+                                                <div key={`${rsvp.userId}-${rsvp.createdAt}`} className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 px-3 py-2">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-stone-800">{[rsvp.firstName, rsvp.lastName].filter(Boolean).join(" ") || rsvp.email}</p>
+                                                        <p className="text-xs text-stone-500">{rsvp.email}</p>
+                                                    </div>
+                                                    <p className="text-xs text-stone-400">{formatFullDate(rsvp.createdAt)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-stone-500">No RSVP records available for this event yet.</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
+                                <button onClick={() => void handleToggleRsvp(detailEvent.id)} disabled={busyRsvpId === detailEvent.id || getStatus(detailEvent) === "past"} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                                    {busyRsvpId === detailEvent.id ? <Loader2 size={16} className="animate-spin" /> : <UserCheck size={16} />}
+                                    {"hasRsvp" in detailEvent && detailEvent.hasRsvp ? "Remove RSVP" : "RSVP as Admin"}
+                                </button>
+                                <button onClick={() => {
+                                    setModal({ id: detailEvent.id, ...toFormValues(detailEvent) });
+                                    setDetailEventId(null);
+                                }} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 transition-colors flex items-center justify-center gap-2"><Pencil size={16} /> Edit Event</button>
+                                <button onClick={() => setDetailEventId(null)} className="px-6 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors">Close</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                ) : null}
 
-            {/* Delete Confirm */}
-            <ConfirmModal
-                open={deleteTarget !== null}
-                onClose={() => setDeleteTarget(null)}
-                onConfirm={handleDelete}
-                title="Delete Event?"
-                description="This event will be permanently removed."
-                icon={Trash2}
-            />
-        </div>
+                <ConfirmModal
+                    open={deleteTarget !== null}
+                    onClose={() => !isDeleting && setDeleteTarget(null)}
+                    onConfirm={() => void handleDelete()}
+                    loading={isDeleting}
+                    title="Delete Event?"
+                    description="This event will be soft-deleted from the backend."
+                    icon={Trash2}
+                />
+            </div>
         </ErrorBoundary>
     );
 }
 
-/* ── Event Form Modal ── */
-function EventFormModal({ initial, onClose, onSaved }: { initial?: ApiEvent; onClose: () => void; onSaved: () => void }) {
-    const isEdit = !!initial;
-    const { trigger: createTrigger, isLoading: createLoading } = useCreateEvent();
-    const { trigger: updateTrigger, isLoading: updateLoading } = useUpdateEvent(initial?.id ?? "");
-    const { toast } = useToast();
+function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+    return (
+        <div className="bg-white rounded-2xl border border-stone-100 p-5">
+            <p className="text-sm text-stone-500 font-medium">{label}</p>
+            <p className={`text-3xl font-bold mt-1 ${accent ?? "text-stone-900"}`}>{value}</p>
+        </div>
+    );
+}
 
-    // Parse initial values from API event
-    const initDate = initial ? new Date(initial.scheduledAt).toISOString().slice(0, 10) : "";
-    const initTime = initial ? new Date(initial.scheduledAt).toTimeString().slice(0, 5) : "";
-    const initTypeLabel = initial ? eventTypeLabel(initial.type) : "Workshop";
+function InfoRow({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+    return <div className="flex items-center gap-2 text-stone-500"><Icon size={16} className="text-stone-400" /> {label}</div>;
+}
 
+function EventFormModal({
+    initial,
+    onClose,
+    onSave,
+    saving,
+}: {
+    initial?: EventUpsertInput & { id: string };
+    onClose: () => void;
+    onSave: (data: EventUpsertInput) => Promise<void>;
+    saving: boolean;
+}) {
     const [title, setTitle] = useState(initial?.title ?? "");
     const [description, setDescription] = useState(initial?.description ?? "");
-    const [date, setDate] = useState(initDate);
-    const [time, setTime] = useState(initTime);
+    const [date, setDate] = useState(initial ? toDateInputValue(initial.scheduledAt) : "");
+    const [time, setTime] = useState(initial ? toTimeInputValue(initial.scheduledAt) : "");
     const [durationMinutes, setDurationMinutes] = useState(initial?.durationMinutes ?? 60);
-    const [type, setType] = useState(initTypeLabel);
+    const [type, setType] = useState<EventType>(initial?.type ?? "WORKSHOP");
     const [host, setHost] = useState(initial?.host ?? "");
-    const [platform, setPlatform] = useState(initial ? detectPlatform(initial.meetingLink) : "zoom");
+    const [platform, setPlatform] = useState<EventPlatform>(initial?.platform ?? "ZOOM");
     const [meetingLink, setMeetingLink] = useState(initial?.meetingLink ?? "");
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    const saving = createLoading || updateLoading;
-
     const handleSubmit = async () => {
-        const e: Record<string, string> = {};
-        if (!title.trim()) e.title = "Required";
-        if (!date) e.date = "Required";
-        if (!time) e.time = "Required";
-        if (!host.trim()) e.host = "Required";
-        if (meetingLink && !/^https?:\/\/.+/i.test(meetingLink)) e.meetingLink = "Enter a valid URL (https://...)";
-        setErrors(e);
-        if (Object.keys(e).length > 0) return;
+        const nextErrors: Record<string, string> = {};
 
-        const scheduledAt = new Date(`${date}T${time}:00`).toISOString();
-        const typeEnum = EVENT_TYPE_TO_ENUM[type] ?? type;
+        if (!title.trim()) nextErrors.title = "Required";
+        if (!date) nextErrors.date = "Required";
+        if (!time) nextErrors.time = "Required";
+        if (!host.trim()) nextErrors.host = "Required";
+        if (meetingLink && !/^https?:\/\/.+/i.test(meetingLink)) nextErrors.meetingLink = "Enter a valid URL (https://...)";
 
-        const payload = {
+        setErrors(nextErrors);
+
+        if (Object.keys(nextErrors).length > 0) {
+            return;
+        }
+
+        await onSave({
             title: title.trim(),
-            description: description.trim() || undefined,
-            scheduledAt,
+            description: description.trim() || null,
+            scheduledAt: buildScheduledAt(date, time),
             durationMinutes,
             host: host.trim(),
-            type: typeEnum,
+            type,
             platform,
-            meetingLink: meetingLink.trim() || undefined,
-        };
-
-        try {
-            if (isEdit) {
-                await updateTrigger(payload as any);
-            } else {
-                await createTrigger(payload);
-            }
-            onSaved();
-        } catch (err: any) {
-            toast(err?.message ?? "Failed to save event", "error");
-        }
+            meetingLink: meetingLink.trim() || null,
+        });
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !saving && onClose()}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] flex flex-col" onClick={(event) => event.stopPropagation()}>
                 <div className="flex items-center justify-between p-6 border-b border-stone-100">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-brand-50 rounded-xl text-brand-700"><Calendar size={20} /></div>
-                        <h2 className="text-lg font-bold text-stone-900">{isEdit ? "Edit Event" : "Create Event"}</h2>
+                        <h2 className="text-lg font-bold text-stone-900">{initial ? "Edit Event" : "Create Event"}</h2>
                     </div>
-                    <button onClick={onClose} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
+                    <button onClick={onClose} disabled={saving} className="text-stone-400 hover:text-stone-600 disabled:opacity-50" aria-label="Close dialog" title="Close dialog"><X size={20} /></button>
                 </div>
                 <div className="p-6 space-y-4 overflow-y-auto">
-                    <div>
-                        <label className="block text-sm font-semibold text-stone-700 mb-1">Event Title</label>
-                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Portfolio Review Session" className={`w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.title ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                        {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-stone-700 mb-1">Description <span className="text-stone-400 font-normal">(optional)</span></label>
-                        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="What will this event cover? Any prep needed?" rows={3} className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 resize-none" />
-                    </div>
+                    <Field label="Event Title" error={errors.title}>
+                        <input type="text" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Portfolio Review Session" className={inputClass(errors.title)} />
+                    </Field>
+                    <Field label="Description" optional>
+                        <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will this event cover? Any prep needed?" rows={3} className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 resize-none" />
+                    </Field>
                     <div className="grid grid-cols-3 gap-3">
-                        <div>
-                            <label className="block text-sm font-semibold text-stone-700 mb-1">Date</label>
-                            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={`w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.date ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                            {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold text-stone-700 mb-1">Time</label>
-                            <input type="time" value={time} onChange={e => setTime(e.target.value)} className={`w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.time ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                            {errors.time && <p className="text-red-500 text-xs mt-1">{errors.time}</p>}
-                        </div>
+                        <Field label="Date" error={errors.date}>
+                            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} aria-label="Event date" title="Event date" className={inputClass(errors.date)} />
+                        </Field>
+                        <Field label="Time" error={errors.time}>
+                            <input type="time" value={time} onChange={(event) => setTime(event.target.value)} aria-label="Event time" title="Event time" className={inputClass(errors.time)} />
+                        </Field>
                         <div>
                             <label className="block text-sm font-semibold text-stone-700 mb-1">Duration</label>
-                            <select value={durationMinutes} onChange={e => setDurationMinutes(Number(e.target.value))} className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 bg-white">
-                                {DURATIONS_MINUTES.map(d => <option key={d} value={d}>{DURATION_LABELS[d]}</option>)}
+                            <select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} aria-label="Event duration" title="Event duration" className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 bg-white">
+                                {DURATION_OPTIONS.map((option) => <option key={option} value={option}>{formatDuration(option)}</option>)}
                             </select>
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-stone-700 mb-1">Host</label>
-                        <input type="text" value={host} onChange={e => setHost(e.target.value)} placeholder="e.g. Sarah Jenkins" className={`w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.host ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                        {errors.host && <p className="text-red-500 text-xs mt-1">{errors.host}</p>}
-                    </div>
+                    <Field label="Host" error={errors.host}>
+                        <input type="text" value={host} onChange={(event) => setHost(event.target.value)} placeholder="e.g. Sarah Jenkins" className={inputClass(errors.host)} />
+                    </Field>
                     <div>
                         <label className="block text-sm font-semibold text-stone-700 mb-1">Type</label>
                         <div className="flex gap-2 flex-wrap">
-                            {EVENT_TYPES.map(t => (
-                                <button key={t} type="button" onClick={() => setType(t)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${type === t ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{t}</button>
+                            {EVENT_TYPES.map((eventType) => (
+                                <button key={eventType.value} type="button" onClick={() => setType(eventType.value)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${type === eventType.value ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{eventType.label}</button>
                             ))}
                         </div>
                     </div>
-
-                    {/* Platform & Meeting Link */}
                     <div className="border-t border-stone-100 pt-4 mt-4">
                         <label className="block text-sm font-semibold text-stone-700 mb-2">Meeting Platform</label>
-                        <div className="flex gap-2 mb-3">
-                            {PLATFORMS.map(p => (
-                                <button key={p.key} type="button" onClick={() => setPlatform(p.key)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${platform === p.key ? `${p.color} ring-2 ring-offset-1 ring-brand-300` : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}>
-                                    {p.label}
+                        <div className="flex gap-2 mb-3 flex-wrap">
+                            {PLATFORM_OPTIONS.map((option) => (
+                                <button key={option.key} type="button" onClick={() => setPlatform(option.key)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${platform === option.key ? `${option.color} ring-2 ring-offset-1 ring-brand-300` : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}>
+                                    {option.label}
                                 </button>
                             ))}
                         </div>
-                        <label className="block text-sm font-semibold text-stone-700 mb-1">Meeting Link <span className="text-stone-400 font-normal">(paste your Zoom or Google Meet link)</span></label>
-                        <div className="relative">
-                            <Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                            <input type="url" value={meetingLink} onChange={e => setMeetingLink(e.target.value)} placeholder="https://zoom.us/j/123456789" className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 font-mono ${errors.meetingLink ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                        </div>
-                        {errors.meetingLink && <p className="text-red-500 text-xs mt-1">{errors.meetingLink}</p>}
+                        <Field label="Meeting Link" optional error={errors.meetingLink}>
+                            <div className="relative">
+                                <Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                                <input type="url" value={meetingLink} onChange={(event) => setMeetingLink(event.target.value)} placeholder="https://zoom.us/j/123456789" className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 font-mono ${errors.meetingLink ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
+                            </div>
+                        </Field>
                     </div>
                 </div>
                 <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
-                    <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors">Cancel</button>
-                    <button onClick={handleSubmit} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                        {saving && <Loader2 className="animate-spin" size={16} />}
-                        {isEdit ? "Save Changes" : "Create Event"}
+                    <button onClick={onClose} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors disabled:opacity-50">Cancel</button>
+                    <button onClick={() => void handleSubmit()} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                        {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+                        {initial ? "Save Changes" : "Create Event"}
                     </button>
                 </div>
             </div>
         </div>
     );
+}
+
+function Field({ label, optional, error, children }: { label: string; optional?: boolean; error?: string; children: ReactNode }) {
+    return (
+        <div>
+            <label className="block text-sm font-semibold text-stone-700 mb-1">
+                {label} {optional ? <span className="text-stone-400 font-normal">(optional)</span> : null}
+            </label>
+            {children}
+            {error ? <p className="text-red-500 text-xs mt-1">{error}</p> : null}
+        </div>
+    );
+}
+
+function inputClass(error?: string) {
+    return `w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${error ? "border-red-300 bg-red-50" : "border-stone-200"}`;
 }

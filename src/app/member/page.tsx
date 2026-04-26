@@ -1,33 +1,38 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useUser } from "@/context/UserContext";
-import { Calendar, Clock, ArrowRight, AlertTriangle, Activity, CheckCircle, Video, MapPin, Users, BookOpen, Briefcase, MessageSquare, Target, X, Loader2 } from "lucide-react";
+import {
+    Activity,
+    AlertTriangle,
+    ArrowRight,
+    BookOpen,
+    Briefcase,
+    Calendar,
+    CheckCircle,
+    Clock,
+    ExternalLink,
+    Loader2,
+    MapPin,
+    MessageSquare,
+    Users,
+    Video,
+} from "lucide-react";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
-import { useEvents, eventTypeLabel, fmtEventTime, fmtDuration, isEventPast } from "@/hooks/use-events";
-import { useJobs, fmtJobDate } from "@/hooks/use-jobs";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useToast } from "@/components/ui/toast";
+import { fetchEvents, getEventTypeLabel, getEventsErrorMessage, type EventRecord } from "@/lib/events";
+import { fetchJobs, getApiErrorMessage, getJobTypeLabel, getWorkModeLabel, requestJobReferral, type JobRecord } from "@/lib/jobs";
+import { useQueryInvalidation } from "@/hooks/useQueryInvalidation";
+import { invalidateQuery } from "@/lib/queryInvalidation";
 
-interface DevGoal {
-    id: number;
-    text: string;
-    done: boolean;
-    status: "not-started" | "in-progress" | "completed";
-    details: string;
-    evidence: unknown[];
-    createdAt: string;
-}
-
-function loadGoals(): DevGoal[] {
-    if (typeof window === "undefined") return [];
-    try {
-        const raw = localStorage.getItem("bgg-goals");
-        return raw ? JSON.parse(raw) : [];
-    } catch {
-        return [];
-    }
+interface DevGoalSnapshot {
+    done?: boolean;
+    status?: "not-started" | "in-progress" | "completed";
 }
 
 const container = {
@@ -46,37 +51,171 @@ const item = {
 };
 
 export default function MemberDashboard() {
+    const { getToken } = useAuth();
     const { user } = useUser();
-    const { events: apiEvents, isLoading: eventsLoading } = useEvents();
-    const { jobs: apiJobs, isLoading: jobsLoading } = useJobs();
+    const { toast } = useToast();
     const [scheduleView, setScheduleView] = useState<'upcoming' | 'past'>('upcoming');
-    const [showDevPlanBanner, setShowDevPlanBanner] = useState(false);
-    const [devGoals, setDevGoals] = useState<DevGoal[]>([]);
+    const [devPlanMeta, setDevPlanMeta] = useState({ total: 0, completed: 0 });
+    const [upcomingSessions, setUpcomingSessions] = useState<EventRecord[]>([]);
+    const [pastRecordings, setPastRecordings] = useState<EventRecord[]>([]);
+    const [featuredJobs, setFeaturedJobs] = useState<JobRecord[]>([]);
+    const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
+    const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+    const [scheduleError, setScheduleError] = useState<string | null>(null);
+    const [jobsError, setJobsError] = useState<string | null>(null);
+    const [requestingReferralId, setRequestingReferralId] = useState<string | null>(null);
 
-    // Load dev plan goals from localStorage
     useEffect(() => {
-        setDevGoals(loadGoals());
+        const loadDevPlanMeta = () => {
+            try {
+                const raw = localStorage.getItem("bgg-goals");
+                if (!raw) {
+                    setDevPlanMeta({ total: 0, completed: 0 });
+                    return;
+                }
+
+                const goals = JSON.parse(raw) as DevGoalSnapshot[];
+                if (!Array.isArray(goals) || goals.length === 0) {
+                    setDevPlanMeta({ total: 0, completed: 0 });
+                    return;
+                }
+
+                const completed = goals.filter((goal) => goal.done || goal.status === "completed").length;
+                setDevPlanMeta({ total: goals.length, completed });
+            } catch {
+                setDevPlanMeta({ total: 0, completed: 0 });
+            }
+        };
+
+        loadDevPlanMeta();
+        window.addEventListener("storage", loadDevPlanMeta);
+
+        return () => {
+            window.removeEventListener("storage", loadDevPlanMeta);
+        };
     }, []);
 
-    // Check if user skipped dev plan during onboarding
+    const showDevPlanReminder = devPlanMeta.total === 0 || devPlanMeta.completed < devPlanMeta.total;
+
+    const loadDashboardData = useMemo(() => {
+        let cancelled = false;
+
+        const run = async () => {
+            setIsLoadingSchedule(true);
+            setIsLoadingJobs(true);
+            setScheduleError(null);
+            setJobsError(null);
+
+            try {
+                const [upcomingPage, pastPage] = await Promise.all([
+                    fetchEvents({ status: "upcoming", limit: 4 }, getToken),
+                    fetchEvents({ status: "past", limit: 20 }, getToken),
+                ]);
+
+                if (!cancelled) {
+                    setUpcomingSessions(upcomingPage.items.slice(0, 4));
+                    setPastRecordings(
+                        pastPage.items
+                            .filter((event) => Boolean(event.recordingUrl))
+                            .slice(0, 3),
+                    );
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    setScheduleError(getEventsErrorMessage(error));
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingSchedule(false);
+                }
+            }
+
+            try {
+                const jobsPage = await fetchJobs({ isFeatured: true, limit: 3 });
+                if (!cancelled) {
+                    setFeaturedJobs(jobsPage.items);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    setJobsError(getApiErrorMessage(error, "Unable to load featured jobs right now."));
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingJobs(false);
+                }
+            }
+        };
+
+        return {
+            run,
+            cancel: () => {
+                cancelled = true;
+            },
+        };
+    }, [getToken]);
+
     useEffect(() => {
-        const skipped = localStorage.getItem("bgg_devplan_skipped");
-        const dismissed = localStorage.getItem("bgg_devplan_banner_dismissed");
-        if (skipped === "true" && dismissed !== "true") {
-            setShowDevPlanBanner(true);
+        void loadDashboardData.run();
+
+        return () => {
+            loadDashboardData.cancel();
+        };
+    }, [loadDashboardData]);
+
+    const dashboardInvalidationScopes = useMemo(() => ["events", "jobs"] as const, []);
+    useQueryInvalidation([...dashboardInvalidationScopes], async () => {
+        await loadDashboardData.run();
+    });
+
+    const todayLabel = useMemo(() => {
+        const today = new Date().toDateString();
+        const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toDateString();
+
+        return (dateString: string) => {
+            const value = new Date(dateString).toDateString();
+            if (value === today) {
+                return "TODAY";
+            }
+            if (value === tomorrow) {
+                return "TOMORROW";
+            }
+            return new Date(dateString).toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+        };
+    }, []);
+
+    const formatSessionTime = (value: string, durationMinutes: number) => {
+        const start = new Date(value);
+        const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+        return `${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - ${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+    };
+
+    const formatDuration = (minutes: number) => {
+        if (minutes < 60) {
+            return `${minutes}m`;
         }
-    }, []);
 
-    // Derive upcoming + past sessions from API events
-    const upcomingSessions = apiEvents
-        .filter(e => !isEventPast(e.scheduledAt, e.durationMinutes))
-        .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
-        .slice(0, 4);
+        const hours = Math.floor(minutes / 60);
+        const remainder = minutes % 60;
+        return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+    };
 
-    const pastSessions = apiEvents
-        .filter(e => isEventPast(e.scheduledAt, e.durationMinutes) && e.recordingUrl)
-        .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
-        .slice(0, 3);
+    const handleReferralRequest = async (job: JobRecord) => {
+        if (!job.referralAvailable || requestingReferralId === job.id) {
+            return;
+        }
+
+        setRequestingReferralId(job.id);
+
+        try {
+            await requestJobReferral(job.id, getToken);
+            toast("Referral request sent");
+            invalidateQuery("jobs");
+        } catch (error) {
+            toast(getApiErrorMessage(error, "Unable to request referral for this role."), "error");
+        } finally {
+            setRequestingReferralId(null);
+        }
+    };
 
     const getTypeColor = (type: string) => {
         switch (type) {
@@ -121,41 +260,31 @@ export default function MemberDashboard() {
                 </Link>
             </motion.div>
 
-            {/* Complete Dev Plan Banner */}
-            {showDevPlanBanner && (
-                <motion.div
-                    variants={item}
-                    className="relative bg-gradient-to-r from-accent-50 via-amber-50 to-accent-50 border border-accent-200 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4"
-                >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="w-10 h-10 bg-accent-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <Target size={20} className="text-accent-600" />
+            {showDevPlanReminder ? (
+                <motion.div variants={item} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 md:p-5">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-start gap-3">
+                            <span className="mt-0.5 rounded-lg bg-amber-100 p-2 text-amber-700">
+                                <AlertTriangle size={16} />
+                            </span>
+                            <div>
+                                <p className="text-sm font-semibold text-amber-900">Complete your dev plan to unlock a clearer weekly focus.</p>
+                                <p className="mt-1 text-sm text-amber-800">
+                                    {devPlanMeta.total === 0
+                                        ? "You skipped setup during onboarding. Add your first milestones now."
+                                        : `${devPlanMeta.completed}/${devPlanMeta.total} milestones completed. Keep going until all are done.`}
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-sm font-bold text-stone-900">Complete your Development Plan</p>
-                            <p className="text-xs text-stone-500 mt-0.5">You skipped this during onboarding. Setting goals helps you stay on track and get the most out of your cohort.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
                         <Link
                             href="/member/devplan"
-                            className="px-4 py-2 bg-accent-500 text-white text-sm font-bold rounded-xl hover:bg-accent-600 transition-colors shadow-sm"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800"
                         >
-                            Set Up Dev Plan
+                            Open Dev Plan <ArrowRight size={14} />
                         </Link>
-                        <button
-                            onClick={() => {
-                                setShowDevPlanBanner(false);
-                                localStorage.setItem("bgg_devplan_banner_dismissed", "true");
-                            }}
-                            className="p-2 text-stone-400 hover:text-stone-600 transition-colors"
-                            aria-label="Dismiss banner"
-                        >
-                            <X size={16} />
-                        </button>
                     </div>
                 </motion.div>
-            )}
+            ) : null}
 
             {/* Main Content Grid */}
             <motion.div variants={item}>
@@ -179,47 +308,32 @@ export default function MemberDashboard() {
                                         <h3 className="text-3xl font-bold leading-tight">Dev Plan</h3>
                                         <p className="text-brand-200 text-sm mt-1">Track your growth & hit your goals</p>
                                     </div>
-                                    {devGoals.length > 0 && (
-                                        <div className="text-right hidden sm:block">
-                                            <div className="text-4xl font-bold text-accent-400">
-                                                {devGoals.filter(g => g.status === "completed").length}
-                                                <span className="text-lg text-white/60">/{devGoals.length}</span>
-                                            </div>
-                                            <div className="text-xs text-brand-200 font-medium uppercase tracking-wide">Goals Completed</div>
-                                        </div>
-                                    )}
+                                    <div className="text-right hidden sm:block">
+                                        <div className="text-4xl font-bold text-accent-400">{devPlanMeta.completed}<span className="text-lg text-white/60">/{devPlanMeta.total || "-"}</span></div>
+                                        <div className="text-xs text-brand-200 font-medium uppercase tracking-wide">Goals Completed</div>
+                                    </div>
                                 </div>
 
-                                {/* Goal Progress Pills */}
-                                {devGoals.length > 0 ? (
-                                    <div className="flex flex-wrap gap-2 mb-6">
-                                        {devGoals.map(g => (
-                                            <span
-                                                key={g.id}
-                                                className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                                                    g.status === "completed"
-                                                        ? "bg-accent-500 text-white"
-                                                        : "bg-white/10 border border-white/20 text-white/80"
-                                                }`}
-                                            >
-                                                {g.status === "completed" ? <CheckCircle size={12} /> : <Clock size={12} className="text-accent-400" />}
-                                                {g.text}
-                                            </span>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-brand-200 text-sm mb-6">No goals set yet — start building your plan!</p>
-                                )}
+                                <div className="flex flex-wrap gap-2 mb-6">
+                                    {devPlanMeta.total > 0 ? (
+                                        <span className="bg-accent-500 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
+                                            <CheckCircle size={12} /> {devPlanMeta.completed} completed
+                                        </span>
+                                    ) : null}
+                                    <span className="bg-white/10 border border-white/20 text-white/80 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5">
+                                        <Clock size={12} className="text-accent-400" /> {devPlanMeta.total === 0 ? "No plan yet" : `${Math.max(devPlanMeta.total - devPlanMeta.completed, 0)} remaining`}
+                                    </span>
+                                </div>
 
                                 <div className="flex items-center gap-4">
                                     <Link href="/member/devplan" className="bg-accent-500 hover:bg-accent-600 text-white px-6 py-3 rounded-xl font-bold text-sm transition-colors flex items-center gap-2 shadow-lg shadow-accent-500/20">
-                                        {devGoals.length > 0 ? "Update Dev Plan" : "Create Dev Plan"} <ArrowRight size={16} />
+                                        Update Dev Plan <ArrowRight size={16} />
                                     </Link>
-                                    {devGoals.length > 0 && (
-                                        <span className="text-sm font-medium text-brand-200">
-                                            {Math.round((devGoals.filter(g => g.status === "completed").length / devGoals.length) * 100)}% to your goals 🔥
-                                        </span>
-                                    )}
+                                    <span className="text-sm font-medium text-brand-200">
+                                        {devPlanMeta.total > 0
+                                            ? `${Math.round((devPlanMeta.completed / devPlanMeta.total) * 100)}% to your goals`
+                                            : "Set your first goals to get started"}
+                                    </span>
                                 </div>
                             </div>
 
@@ -264,140 +378,106 @@ export default function MemberDashboard() {
 
                             {/* Schedule Content */}
                             <div className="p-6">
-                                {scheduleView === 'upcoming' ? (
+                                {isLoadingSchedule ? (
+                                    <div className="py-12 flex items-center justify-center text-stone-500 gap-2">
+                                        <Loader2 size={18} className="animate-spin" /> Loading your schedule...
+                                    </div>
+                                ) : scheduleError ? (
+                                    <EmptyState icon={Calendar} heading="Schedule unavailable" description={scheduleError} variant="plain" />
+                                ) : scheduleView === 'upcoming' ? (
                                     <div className="space-y-4">
-                                        {eventsLoading && upcomingSessions.length === 0 && (
-                                            <div className="flex items-center justify-center py-10">
-                                                <Loader2 className="animate-spin text-brand-500" size={24} />
-                                            </div>
-                                        )}
-                                        {upcomingSessions.map((session) => {
-                                            const dt = new Date(session.scheduledAt);
-                                            const day = String(dt.getDate());
-                                            const monthStr = dt.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-                                            const today = new Date();
-                                            const isToday = dt.toDateString() === today.toDateString();
-                                            const tomorrow = new Date(today);
-                                            tomorrow.setDate(tomorrow.getDate() + 1);
-                                            const isTomorrow = dt.toDateString() === tomorrow.toDateString();
-                                            const dayLabel = isToday ? "TODAY" : isTomorrow ? "TOMORROW" : dt.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-                                            const typeLabel = eventTypeLabel(session.type);
-                                            const timeStr = fmtEventTime(session.scheduledAt);
-                                            const endTime = new Date(dt.getTime() + session.durationMinutes * 60_000);
-                                            const endTimeStr = endTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-                                            const platform = session.platform ?? (session.meetingLink?.includes("zoom") ? "Zoom" : session.meetingLink?.includes("meet.google") ? "Google Meet" : "Virtual");
+                                        {upcomingSessions.map((session) => (
+                                            <div
+                                                key={session.id}
+                                                className="group bg-stone-50 hover:bg-white border border-stone-100 hover:border-brand-200 rounded-2xl p-5 transition-all hover:shadow-md"
+                                            >
+                                                <div className="flex flex-col lg:flex-row gap-5">
+                                                    {/* Date Badge */}
+                                                    <div className="flex-shrink-0 flex lg:flex-col items-center lg:items-center gap-4 lg:gap-0">
+                                                        <div className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center ${todayLabel(session.scheduledAt) === 'TODAY' ? 'bg-gradient-to-br from-brand-600 to-brand-800 text-white' : 'bg-white border border-stone-200'}`}>
+                                                            <span className={`text-[10px] font-bold uppercase tracking-wider ${todayLabel(session.scheduledAt) === 'TODAY' ? 'text-brand-200' : 'text-stone-400'}`}>
+                                                                {new Date(session.scheduledAt).toLocaleDateString("en-US", { month: "short" }).toUpperCase()}
+                                                            </span>
+                                                            <span className={`text-2xl font-bold ${todayLabel(session.scheduledAt) === 'TODAY' ? 'text-white' : 'text-stone-900'}`}>
+                                                                {new Date(session.scheduledAt).getDate()}
+                                                            </span>
+                                                        </div>
+                                                        <span className={`text-xs font-bold uppercase tracking-wide ${todayLabel(session.scheduledAt) === 'TODAY' ? 'text-brand-600' : 'text-stone-400'}`}>
+                                                            {todayLabel(session.scheduledAt)}
+                                                        </span>
+                                                    </div>
 
-                                            return (
-                                                <div
-                                                    key={session.id}
-                                                    className="group bg-stone-50 hover:bg-white border border-stone-100 hover:border-brand-200 rounded-2xl p-5 transition-all hover:shadow-md"
-                                                >
-                                                    <div className="flex flex-col lg:flex-row gap-5">
-                                                        {/* Date Badge */}
-                                                        <div className="flex-shrink-0 flex lg:flex-col items-center lg:items-center gap-4 lg:gap-0">
-                                                            <div className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center ${isToday ? 'bg-gradient-to-br from-brand-600 to-brand-800 text-white' : 'bg-white border border-stone-200'}`}>
-                                                                <span className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-brand-200' : 'text-stone-400'}`}>
-                                                                    {monthStr}
-                                                                </span>
-                                                                <span className={`text-2xl font-bold ${isToday ? 'text-white' : 'text-stone-900'}`}>
-                                                                    {day}
-                                                                </span>
-                                                            </div>
-                                                            <span className={`text-xs font-bold uppercase tracking-wide ${isToday ? 'text-brand-600' : 'text-stone-400'}`}>
-                                                                {dayLabel}
+                                                    {/* Session Details */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                            <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide border ${getTypeColor(getEventTypeLabel(session.type))}`}>
+                                                                {getEventTypeLabel(session.type)}
                                                             </span>
                                                         </div>
 
-                                                        {/* Session Details */}
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                                <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide border ${getTypeColor(typeLabel)}`}>
-                                                                    {typeLabel}
-                                                                </span>
-                                                            </div>
+                                                        <h3 className="text-lg font-bold text-stone-900 group-hover:text-brand-800 transition-colors mb-2">
+                                                            {session.title}
+                                                        </h3>
 
-                                                            <h3 className="text-lg font-bold text-stone-900 group-hover:text-brand-800 transition-colors mb-2">
-                                                                {session.title}
-                                                            </h3>
-
-                                                            <div className="flex flex-wrap items-center gap-4 text-sm text-stone-500">
-                                                                <span className="flex items-center gap-1.5">
-                                                                    <Clock size={15} className="text-stone-400" />
-                                                                    {timeStr} - {endTimeStr}
-                                                                </span>
-                                                                <span className="flex items-center gap-1.5">
-                                                                    <MapPin size={15} className="text-stone-400" />
-                                                                    Virtual - {platform}
-                                                                </span>
-                                                                <span className="flex items-center gap-1.5">
-                                                                    <Users size={15} className="text-stone-400" />
-                                                                    {session.host}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Action Button */}
-                                                        <div className="flex-shrink-0 flex items-center">
-                                                            {session.meetingLink ? (
-                                                                <a href={session.meetingLink} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors flex items-center gap-2">
-                                                                    <Video size={16} /> Join Session
-                                                                </a>
-                                                            ) : (
-                                                                <Link href="/member/schedule" className="px-5 py-2.5 bg-white border-2 border-stone-200 text-stone-700 font-bold rounded-xl hover:border-brand-300 hover:text-brand-700 transition-colors">
-                                                                    View Details
-                                                                </Link>
-                                                            )}
+                                                        <div className="flex flex-wrap items-center gap-4 text-sm text-stone-500">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <Clock size={15} className="text-stone-400" />
+                                                                {formatSessionTime(session.scheduledAt, session.durationMinutes)}
+                                                            </span>
+                                                            <span className="flex items-center gap-1.5">
+                                                                <MapPin size={15} className="text-stone-400" />
+                                                                {session.platform === "ZOOM" ? "Virtual - Zoom" : session.platform === "GOOGLE_MEET" ? "Virtual - Google Meet" : "Virtual"}
+                                                            </span>
+                                                            <span className="flex items-center gap-1.5">
+                                                                <AvatarInitials name={session.host} size="xs" className="!w-5 !h-5" />
+                                                                {session.host}
+                                                            </span>
                                                         </div>
                                                     </div>
+
+                                                    {/* Action Button */}
+                                                    <div className="flex-shrink-0 flex items-center">
+                                                        <Link href="/member/schedule" className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors flex items-center gap-2">
+                                                            <Video size={16} /> Open Schedule
+                                                        </Link>
+                                                    </div>
                                                 </div>
-                                            );
-                                        })}
-                                        {!eventsLoading && upcomingSessions.length === 0 && (
-                                            <div className="text-center py-10 text-stone-500">
-                                                <Calendar size={32} className="mx-auto mb-2 text-stone-300" />
-                                                <p className="font-semibold">No upcoming events</p>
-                                                <p className="text-sm">Check back soon for new events.</p>
                                             </div>
-                                        )}
+                                        ))}
+                                        {upcomingSessions.length === 0 ? (
+                                            <EmptyState icon={Calendar} heading="No upcoming sessions" description="Check back soon for your next cohort events." variant="plain" />
+                                        ) : null}
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                        {eventsLoading && pastSessions.length === 0 && (
-                                            <div className="col-span-full flex items-center justify-center py-10">
-                                                <Loader2 className="animate-spin text-brand-500" size={24} />
-                                            </div>
-                                        )}
-                                        {pastSessions.map((session) => {
-                                            const dt = new Date(session.scheduledAt);
-                                            const monthStr = dt.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-                                            const day = String(dt.getDate());
-
-                                            return (
-                                                <div key={session.id} className="group cursor-pointer">
-                                                    {/* Video Thumbnail */}
-                                                    <a href={session.recordingUrl ?? "#"} target="_blank" rel="noopener noreferrer" className="block">
-                                                        <div className="aspect-video bg-stone-800 rounded-2xl flex items-center justify-center mb-3 group-hover:bg-stone-700 transition-colors overflow-hidden relative">
-                                                            <div className="w-14 h-14 bg-stone-700 group-hover:bg-stone-600 rounded-xl flex items-center justify-center transition-colors">
-                                                                <Video size={28} className="text-stone-400" />
-                                                            </div>
-                                                            {/* Play overlay on hover */}
-                                                            <div className="absolute inset-0 bg-brand-800/0 group-hover:bg-brand-800/20 transition-colors flex items-center justify-center">
-                                                                <div className="w-16 h-16 bg-white/0 group-hover:bg-white/90 rounded-full flex items-center justify-center transition-all scale-75 group-hover:scale-100 opacity-0 group-hover:opacity-100">
-                                                                    <ArrowRight size={28} className="text-brand-800 ml-1" />
-                                                                </div>
-                                                            </div>
-                                                            {/* Duration Badge */}
-                                                            <div className="absolute bottom-3 right-3 px-2 py-1 bg-black/70 rounded-md text-white text-xs font-medium">
-                                                                {fmtDuration(session.durationMinutes)}
-                                                            </div>
+                                        {pastRecordings.map((session) => (
+                                            <a key={session.id} className="group cursor-pointer" href={session.recordingUrl ?? "#"} target="_blank" rel="noreferrer">
+                                                {/* Video Thumbnail */}
+                                                <div className="aspect-video bg-stone-800 rounded-2xl flex items-center justify-center mb-3 group-hover:bg-stone-700 transition-colors overflow-hidden relative">
+                                                    <div className="w-14 h-14 bg-stone-700 group-hover:bg-stone-600 rounded-xl flex items-center justify-center transition-colors">
+                                                        <Video size={28} className="text-stone-400" />
+                                                    </div>
+                                                    {/* Play overlay on hover */}
+                                                    <div className="absolute inset-0 bg-brand-800/0 group-hover:bg-brand-800/20 transition-colors flex items-center justify-center">
+                                                        <div className="w-16 h-16 bg-white/0 group-hover:bg-white/90 rounded-full flex items-center justify-center transition-all scale-75 group-hover:scale-100 opacity-0 group-hover:opacity-100">
+                                                            <ArrowRight size={28} className="text-brand-800 ml-1" />
                                                         </div>
-                                                    </a>
-                                                    {/* Recording Info */}
-                                                    <h4 className="font-bold text-stone-900 group-hover:text-brand-800 transition-colors">{session.title}</h4>
-                                                    <p className="text-sm text-stone-500">{monthStr} {day}</p>
+                                                    </div>
+                                                    {/* Duration Badge */}
+                                                    <div className="absolute bottom-3 right-3 px-2 py-1 bg-black/70 rounded-md text-white text-xs font-medium">
+                                                        {formatDuration(session.durationMinutes)}
+                                                    </div>
                                                 </div>
-                                            );
-                                        })}
+                                                {/* Recording Info */}
+                                                <h4 className="font-bold text-stone-900 group-hover:text-brand-800 transition-colors">{session.title}</h4>
+                                                <p className="text-sm text-stone-500">{new Date(session.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                                            </a>
+                                        ))}
+                                        {pastRecordings.length === 0 ? (
+                                            <div className="sm:col-span-2 lg:col-span-3">
+                                                <EmptyState icon={Video} heading="No recordings yet" description="Past sessions with recordings will appear here." variant="plain" />
+                                            </div>
+                                        ) : null}
 
                                         {/* View All Card */}
                                         <Link href="/member/schedule" className="aspect-video border-2 border-dashed border-stone-200 rounded-2xl flex flex-col items-center justify-center text-stone-400 hover:border-accent-400 hover:text-accent-500 transition-colors cursor-pointer group">
@@ -413,7 +493,7 @@ export default function MemberDashboard() {
 
                     {/* Right Column (1/3): Action Center & Daily Standup */}
                     <div className="space-y-6">
-                        {/* Action Center (Dev Plan Goals) */}
+                        {/* Action Center (Due Soon) */}
                         <div className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm flex flex-col">
                             <div className="flex items-center gap-2 mb-4">
                                 <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
@@ -423,89 +503,96 @@ export default function MemberDashboard() {
                             </div>
 
                             <div className="space-y-3 flex-1">
-                                {devGoals.filter(g => g.status !== "completed").length === 0 ? (
-                                    <div className="text-center py-6">
-                                        {devGoals.length > 0 ? (
-                                            <>
-                                                <CheckCircle size={28} className="mx-auto text-green-400 mb-2" />
-                                                <p className="text-sm font-semibold text-stone-700">All goals completed!</p>
-                                                <Link href="/member/devplan" className="text-xs text-brand-600 font-bold hover:text-brand-800 mt-1 inline-block">Set new goals</Link>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Target size={28} className="mx-auto text-stone-300 mb-2" />
-                                                <p className="text-sm text-stone-400">No goals set yet</p>
-                                                <Link href="/member/devplan" className="text-xs text-brand-600 font-bold hover:text-brand-800 mt-1 inline-block">Create your Dev Plan</Link>
-                                            </>
-                                        )}
+                                {showDevPlanReminder ? (
+                                    <div className="p-3 bg-stone-50 rounded-xl border border-stone-100 flex items-start gap-3">
+                                        <div className="mt-0.5 w-4 h-4 rounded border-2 border-amber-300 bg-amber-50"></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-stone-800 leading-tight">Finish your dev plan milestones</p>
+                                            <p className="text-xs text-amber-600 font-semibold mt-1">{devPlanMeta.completed}/{devPlanMeta.total || 0} completed</p>
+                                        </div>
                                     </div>
-                                ) : (
-                                    devGoals
-                                        .filter(g => g.status !== "completed")
-                                        .slice(0, 4)
-                                        .map(goal => (
-                                            <Link
-                                                key={goal.id}
-                                                href="/member/devplan"
-                                                className="p-3 bg-stone-50 rounded-xl border border-stone-100 flex items-start gap-3 hover:bg-stone-100 transition-colors cursor-pointer group block"
-                                            >
-                                                <div className={`mt-0.5 w-4 h-4 rounded border-2 flex-shrink-0 ${goal.status === "in-progress" ? "border-amber-400 bg-amber-50" : "border-stone-300 bg-white"} group-hover:border-accent-400 transition-colors`} />
-                                                <div>
-                                                    <p className="text-sm font-bold text-stone-800 leading-tight group-hover:text-brand-800">{goal.text}</p>
-                                                    <p className={`text-xs font-medium mt-1 ${goal.status === "in-progress" ? "text-amber-600" : "text-stone-400"}`}>
-                                                        {goal.status === "in-progress" ? "In Progress" : "Not Started"}
-                                                    </p>
-                                                </div>
-                                            </Link>
-                                        ))
-                                )}
+                                ) : null}
+                                {upcomingSessions.slice(0, 2).map((session) => (
+                                    <div key={session.id} className="p-3 bg-stone-50 rounded-xl border border-stone-100 flex items-start gap-3">
+                                        <div className="mt-0.5 w-4 h-4 rounded border-2 border-brand-300 bg-brand-50"></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-stone-800 leading-tight">Attend {session.title}</p>
+                                            <p className="text-xs text-stone-500 font-medium mt-1">{new Date(session.scheduledAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {!showDevPlanReminder && upcomingSessions.length === 0 ? (
+                                    <p className="text-sm text-stone-500">You are all caught up for now.</p>
+                                ) : null}
                             </div>
                         </div>
 
                         {/* Featured Jobs */}
                         <div className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm">
                             <h3 className="text-lg font-bold text-stone-900 mb-4">Featured Jobs</h3>
-                            <div className="space-y-4">
-                                {jobsLoading && (
-                                    <div className="flex items-center justify-center py-6">
-                                        <Loader2 className="animate-spin text-brand-500" size={20} />
-                                    </div>
-                                )}
-                                {apiJobs.filter(j => j.isFeatured).slice(0, 3).map(job => (
-                                    <div key={job.id} className="bg-white rounded-xl border border-stone-200 p-4 hover:border-brand-200 hover:shadow-md transition-all">
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <div className="w-10 h-10 bg-gradient-to-br from-brand-600 to-brand-800 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                                                {job.company.substring(0, 3).toUpperCase()}
+                            {isLoadingJobs ? (
+                                <div className="py-10 flex items-center justify-center text-stone-500 gap-2">
+                                    <Loader2 size={18} className="animate-spin" /> Loading featured roles...
+                                </div>
+                            ) : jobsError ? (
+                                <EmptyState icon={Briefcase} heading="Jobs unavailable" description={jobsError} variant="plain" />
+                            ) : (
+                                <div className="space-y-4">
+                                    {featuredJobs.map((job) => (
+                                        <div key={job.id} className="bg-white rounded-xl border border-stone-200 p-4 hover:border-brand-200 hover:shadow-md transition-all">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-10 h-10 bg-gradient-to-br from-rose-500 to-rose-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                                                    {job.company.slice(0, 3).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-stone-900 text-sm">{job.company}</p>
+                                                    <p className="text-xs text-stone-400">{job.postedAtLabel}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-semibold text-stone-900 text-sm">{job.company}</p>
-                                                <p className="text-xs text-stone-400">{fmtJobDate(job.createdAt)}</p>
-                                            </div>
-                                        </div>
-                                        <h4 className="font-bold text-stone-900 mb-2 line-clamp-1">{job.title}</h4>
-                                        <div className="flex flex-wrap gap-2 mb-3">
-                                            {job.location && (
+                                            <h4 className="font-bold text-stone-900 mb-2 line-clamp-1">{job.title}</h4>
+                                            <div className="flex flex-wrap gap-2 mb-3">
                                                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                                    <MapPin size={10} /> {job.location}
+                                                    <MapPin size={12} /> {job.location}
                                                 </span>
-                                            )}
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
+                                                    {getJobTypeLabel(job.jobType)}
+                                                </span>
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
+                                                    {getWorkModeLabel(job.workMode)}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {job.externalUrl ? (
+                                                    <a href={job.externalUrl} target="_blank" rel="noreferrer" className="flex-1 px-3 py-2 bg-brand-800 text-white font-bold rounded-lg hover:bg-brand-700 transition-colors text-xs flex items-center justify-center gap-1">
+                                                        Apply <ExternalLink size={12} />
+                                                    </a>
+                                                ) : (
+                                                    <Link href="/member/jobs" className="flex-1 px-3 py-2 bg-brand-800 text-white font-bold rounded-lg hover:bg-brand-700 transition-colors text-xs text-center">
+                                                        View Job
+                                                    </Link>
+                                                )}
+                                                {job.referralAvailable ? (
+                                                    <button
+                                                        onClick={() => void handleReferralRequest(job)}
+                                                        className="flex-1 px-3 py-2 bg-accent-100 text-accent-700 font-bold rounded-lg hover:bg-accent-200 transition-colors text-xs flex items-center justify-center gap-1 disabled:opacity-60"
+                                                        disabled={requestingReferralId === job.id}
+                                                    >
+                                                        {requestingReferralId === job.id ? (
+                                                            <Loader2 size={12} className="animate-spin" />
+                                                        ) : (
+                                                            <Users size={12} />
+                                                        )}
+                                                        Seek Referral
+                                                    </button>
+                                                ) : null}
+                                            </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <a href={job.externalUrl} target="_blank" rel="noopener noreferrer" className={`${job.referralAvailable ? "flex-1" : "w-full"} px-3 py-2 bg-brand-800 text-white font-bold rounded-lg hover:bg-brand-700 transition-colors text-xs text-center`}>
-                                                Apply
-                                            </a>
-                                            {job.referralAvailable && (
-                                                <Link href="/member/jobs" className="flex-1 px-3 py-2 bg-accent-100 text-accent-700 font-bold rounded-lg hover:bg-accent-200 transition-colors text-xs flex items-center justify-center gap-1">
-                                                    <Users size={12} /> Seek Referral
-                                                </Link>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                                {!jobsLoading && apiJobs.filter(j => j.isFeatured).length === 0 && (
-                                    <p className="text-sm text-stone-400 text-center py-4">No featured jobs right now.</p>
-                                )}
-                            </div>
+                                    ))}
+                                    {featuredJobs.length === 0 ? (
+                                        <EmptyState icon={Briefcase} heading="No featured jobs yet" description="Featured opportunities will appear here as soon as they are published." variant="plain" />
+                                    ) : null}
+                                </div>
+                            )}
 
                             <Link href="/member/jobs" className="block w-full mt-4 bg-accent-500 hover:bg-accent-600 text-white px-6 py-3 rounded-full font-bold text-sm transition-colors text-center">
                                 Explore More Jobs

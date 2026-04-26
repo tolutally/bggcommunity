@@ -1,37 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useEffect, useMemo, useState } from "react";
 import {
-    Bell, Calendar, MessageSquare, Award, Users, AlertCircle, Clock, CheckCheck, Trash2, X,
+    Bell, Calendar, MessageSquare, Award, Users, AlertCircle, Clock, CheckCheck, Trash2, X, Loader2,
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useToast } from "@/components/ui/toast";
+import {
+    fetchNotificationsFeed,
+    loadNotificationState,
+    saveNotificationState,
+    type NotificationRecord,
+    type NotificationType,
+} from "@/lib/notifications";
+import { getApiErrorMessage } from "@/lib/jobs";
 
-type NotificationType = "event" | "message" | "achievement" | "community" | "system" | "reminder";
-
-interface Notification {
-    id: number;
-    type: NotificationType;
-    title: string;
-    description: string;
-    time: string;
+interface Notification extends NotificationRecord {
     read: boolean;
-    avatar?: string;
 }
-
-const MOCK_NOTIFICATIONS: Notification[] = [
-    { id: 1, type: "event", title: "Upcoming Workshop", description: "Leadership in Tech starts in 2 hours", time: "2h ago", read: false },
-    { id: 2, type: "message", title: "Brianna Sterling", description: "Replied to your question in the Product Design group", time: "3h ago", read: false, avatar: "https://i.pravatar.cc/150?u=brianna" },
-    { id: 3, type: "achievement", title: "Badge Earned!", description: "You've completed your first workshop 🎉", time: "1d ago", read: false },
-    { id: 4, type: "community", title: "New Discussion", description: "Maya started a thread in Tech Careers", time: "1d ago", read: true, avatar: "https://i.pravatar.cc/150?u=maya" },
-    { id: 5, type: "system", title: "Profile Incomplete", description: "Add your bio and skills to unlock community features", time: "2d ago", read: true },
-    { id: 6, type: "reminder", title: "Session Reminder", description: "Don't forget your 1:1 session tomorrow at 3pm", time: "2d ago", read: true },
-    { id: 7, type: "event", title: "Product Strategy Workshop", description: "Starts next Tuesday at 2 PM EST. RSVP now!", time: "3d ago", read: true },
-    { id: 8, type: "message", title: "Keisha Williams", description: "Sent you a referral link for the CGI opening", time: "4d ago", read: true, avatar: "https://i.pravatar.cc/150?u=keisha" },
-    { id: 9, type: "community", title: "Welcome to Cohort Alpha!", description: "You've been added to the Alpha cohort channel", time: "5d ago", read: true },
-    { id: 10, type: "achievement", title: "7-Day Streak 🔥", description: "You've been active 7 days in a row!", time: "1w ago", read: true },
-];
 
 const TYPE_ICON: Record<NotificationType, { icon: typeof Bell; color: string; bg: string }> = {
     event: { icon: Calendar, color: "text-brand-600", bg: "bg-brand-100" },
@@ -44,22 +33,108 @@ const TYPE_ICON: Record<NotificationType, { icon: typeof Bell; color: string; bg
 
 type Filter = "all" | "unread" | NotificationType;
 
+function formatRelativeTime(value: string) {
+    const date = new Date(value);
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+    if (diffMinutes < 1) return "just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleDateString();
+}
+
 export default function MemberNotificationsPage() {
-    const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+    const { getToken, userId } = useAuth();
+    const { toast } = useToast();
+    const [feed, setFeed] = useState<NotificationRecord[]>([]);
+    const [state, setState] = useState<{ readIds: string[]; dismissedIds: string[] }>({ readIds: [], dismissedIds: [] });
     const [filter, setFilter] = useState<Filter>("all");
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        setState(loadNotificationState(userId ?? null));
+    }, [userId]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadNotifications() {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const items = await fetchNotificationsFeed(getToken);
+                if (cancelled) return;
+                setFeed(items);
+            } catch (loadError) {
+                if (!cancelled) {
+                    setError(getApiErrorMessage(loadError, "Unable to load notifications right now."));
+                    toast(getApiErrorMessage(loadError, "Unable to load notifications right now."), "error");
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoading(false);
+                }
+            }
+        }
+
+        void loadNotifications();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [getToken, toast]);
+
+    useEffect(() => {
+        saveNotificationState(userId ?? null, state);
+    }, [state, userId]);
+
+    const notifications: Notification[] = useMemo(() => {
+        const readSet = new Set(state.readIds);
+        const dismissedSet = new Set(state.dismissedIds);
+
+        return feed
+            .filter((item) => !dismissedSet.has(item.id))
+            .map((item) => ({ ...item, read: readSet.has(item.id) }));
+    }, [feed, state]);
 
     const unreadCount = notifications.filter(n => !n.read).length;
 
-    const filtered = notifications.filter(n => {
+    const filtered = useMemo(() => notifications.filter(n => {
         if (filter === "all") return true;
         if (filter === "unread") return !n.read;
         return n.type === filter;
-    });
+    }), [filter, notifications]);
 
-    const markRead = (id: number) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    const deleteNotif = (id: number) => setNotifications(prev => prev.filter(n => n.id !== id));
-    const clearAll = () => setNotifications([]);
+    const markRead = (id: string) => {
+        setState((prev) => prev.readIds.includes(id)
+            ? prev
+            : { ...prev, readIds: [...prev.readIds, id] });
+    };
+    const markAllRead = () => {
+        setState((prev) => ({
+            ...prev,
+            readIds: Array.from(new Set([...prev.readIds, ...notifications.map((n) => n.id)])),
+        }));
+    };
+    const deleteNotif = (id: string) => {
+        setState((prev) => prev.dismissedIds.includes(id)
+            ? prev
+            : { ...prev, dismissedIds: [...prev.dismissedIds, id] });
+    };
+    const clearAll = () => {
+        setState((prev) => ({
+            ...prev,
+            dismissedIds: Array.from(new Set([...prev.dismissedIds, ...notifications.map((n) => n.id)])),
+        }));
+    };
 
     return (
         <ErrorBoundary>
@@ -102,50 +177,56 @@ export default function MemberNotificationsPage() {
                 ))}
             </div>
 
-            {/* Notification List */}
-            <div className="space-y-2">
-                {filtered.map(notif => {
-                    const cfg = TYPE_ICON[notif.type];
-                    const Icon = cfg.icon;
-                    return (
-                        <div
-                            key={notif.id}
-                            onClick={() => markRead(notif.id)}
-                            className={`flex items-start gap-4 p-4 rounded-2xl border transition-all cursor-pointer group ${notif.read ? "bg-white border-stone-100 hover:border-stone-200" : "bg-brand-50/40 border-brand-100 hover:border-brand-200"}`}
-                        >
-                            {/* Icon or Avatar */}
-                            {notif.avatar ? (
-                                <AvatarInitials name="User" src={notif.avatar} size="md" />
-                            ) : (
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.bg}`}>
-                                    <Icon size={18} className={cfg.color} />
-                                </div>
-                            )}
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <h3 className={`text-sm font-bold ${notif.read ? "text-stone-700" : "text-stone-900"}`}>{notif.title}</h3>
-                                    {!notif.read && <span className="w-2 h-2 rounded-full bg-brand-600 flex-shrink-0" />}
-                                </div>
-                                <p className="text-sm text-stone-500 mt-0.5">{notif.description}</p>
-                                <span className="text-[11px] text-stone-400 font-medium mt-1 block">{notif.time}</span>
-                            </div>
-
-                            {/* Delete */}
-                            <button
-                                onClick={e => { e.stopPropagation(); deleteNotif(notif.id); }}
-                                className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+            {isLoading ? (
+                <div className="rounded-2xl border border-stone-200 bg-white p-8 text-stone-500 flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" /> Loading notifications...
+                </div>
+            ) : error ? (
+                <EmptyState icon={Bell} heading="Notifications unavailable" description={error} variant="plain" />
+            ) : (
+                <div className="space-y-2">
+                    {filtered.map(notif => {
+                        const cfg = TYPE_ICON[notif.type];
+                        const Icon = cfg.icon;
+                        return (
+                            <div
+                                key={notif.id}
+                                onClick={() => markRead(notif.id)}
+                                className={`flex items-start gap-4 p-4 rounded-2xl border transition-all cursor-pointer group ${notif.read ? "bg-white border-stone-100 hover:border-stone-200" : "bg-brand-50/40 border-brand-100 hover:border-brand-200"}`}
                             >
-                                <X size={16} />
-                            </button>
-                        </div>
-                    );
-                })}
-            </div>
+                                {notif.avatarUrl ? (
+                                    <AvatarInitials name={notif.title} src={notif.avatarUrl} size="md" />
+                                ) : (
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.bg}`}>
+                                        <Icon size={18} className={cfg.color} />
+                                    </div>
+                                )}
+
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className={`text-sm font-bold ${notif.read ? "text-stone-700" : "text-stone-900"}`}>{notif.title}</h3>
+                                        {!notif.read ? <span className="w-2 h-2 rounded-full bg-brand-600 flex-shrink-0" /> : null}
+                                    </div>
+                                    <p className="text-sm text-stone-500 mt-0.5">{notif.description}</p>
+                                    <span className="text-[11px] text-stone-400 font-medium mt-1 block">{formatRelativeTime(notif.createdAt)}</span>
+                                </div>
+
+                                <button
+                                    onClick={event => { event.stopPropagation(); deleteNotif(notif.id); }}
+                                    title="Dismiss notification"
+                                    aria-label="Dismiss notification"
+                                    className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Empty State */}
-            {filtered.length === 0 && (
+            {!isLoading && !error && filtered.length === 0 && (
                 <EmptyState
                     icon={Bell}
                     heading={filter === "unread" ? "No unread notifications" : "No notifications"}

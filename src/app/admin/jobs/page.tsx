@@ -1,335 +1,433 @@
 "use client";
 
-import { Briefcase, Plus, Search, Star, Trash2, Edit2, ExternalLink, Loader2, Users, X, MapPin, Check, XCircle, Clock } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { Briefcase, Plus, X, Trash2, Pencil, MapPin, Building2, Clock, ExternalLink, Star, Loader2, RefreshCw } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
-import { useJobs, fmtJobDate } from "@/hooks/use-jobs";
-import { useCreateJob, useUpdateJob, useDeleteJob, useToggleFeatured, useJobReferralRequests, useUpdateReferralStatus } from "@/hooks/use-admin-jobs";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import type { Job, ReferralRequest, ReferralRequestStatus } from "@/lib/types";
+import {
+    createJob,
+    deleteJob,
+    fetchAllJobs,
+    getApiErrorMessage,
+    getJobTypeLabel,
+    getWorkModeLabel,
+    toggleFeaturedStatus,
+    updateJob,
+    type JobRecord,
+    type JobType,
+    type JobUpsertInput,
+    type WorkMode,
+} from "@/lib/jobs";
 
-type Tab = "jobs" | "referrals";
+const JOB_TYPES: Array<{ label: string; value: JobType }> = [
+    { label: "Full-time", value: "FULL_TIME" },
+    { label: "Part-time", value: "PART_TIME" },
+    { label: "Contract", value: "CONTRACT" },
+    { label: "Internship", value: "INTERNSHIP" },
+];
+
+const WORK_MODES: Array<{ label: string; value: WorkMode }> = [
+    { label: "Remote", value: "REMOTE" },
+    { label: "Hybrid", value: "HYBRID" },
+    { label: "On-site", value: "ON_SITE" },
+];
 
 export default function AdminJobsPage() {
-    const { jobs, isLoading, mutate } = useJobs();
+    const { getToken } = useAuth();
     const { toast } = useToast();
-    const [tab, setTab] = useState<Tab>("jobs");
-    const [searchQuery, setSearchQuery] = useState("");
-    const [showForm, setShowForm] = useState(false);
-    const [editingJob, setEditingJob] = useState<Job | null>(null);
-    const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
-    const [referralJobId, setReferralJobId] = useState<string | null>(null);
+    const [jobs, setJobs] = useState<JobRecord[]>([]);
+    const [modal, setModal] = useState<null | "create" | JobRecord>(null);
+    const [deleteTarget, setDeleteTarget] = useState<JobRecord | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [busyFeatureId, setBusyFeatureId] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    const filtered = useMemo(() => {
-        return jobs.filter(job => {
-            if (!searchQuery) return true;
-            const q = searchQuery.toLowerCase();
-            return job.title.toLowerCase().includes(q) || job.company.toLowerCase().includes(q);
-        });
-    }, [jobs, searchQuery]);
+    const loadJobs = async (showRefreshing = false) => {
+        if (showRefreshing) {
+            setIsRefreshing(true);
+        } else {
+            setIsLoading(true);
+        }
+
+        setError(null);
+
+        try {
+            const items = await fetchAllJobs();
+            setJobs(items);
+        } catch (loadError) {
+            setError(getApiErrorMessage(loadError, "Unable to load jobs right now."));
+        } finally {
+            setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    };
+
+    useEffect(() => {
+        void loadJobs();
+    }, []);
+
+    const featured = jobs.filter((job) => job.isFeatured);
+    const unfeatured = jobs.filter((job) => !job.isFeatured);
+
+    const handleSave = async (data: JobUpsertInput) => {
+        setIsSaving(true);
+
+        try {
+            if (modal && typeof modal === "object") {
+                await updateJob(modal.id, data, getToken);
+                toast("Job updated");
+            } else {
+                await createJob(data, getToken);
+                toast("Job created");
+            }
+
+            setModal(null);
+            await loadJobs(true);
+        } catch (saveError) {
+            toast(getApiErrorMessage(saveError, "Unable to save job."), "error");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!deleteTarget) {
+            return;
+        }
+
+        setIsDeleting(true);
+
+        try {
+            await deleteJob(deleteTarget.id, getToken);
+            toast("Job removed");
+            setDeleteTarget(null);
+            await loadJobs(true);
+        } catch (deleteError) {
+            toast(getApiErrorMessage(deleteError, "Unable to remove job."), "error");
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const handleToggleFeatured = async (job: JobRecord) => {
+        if (busyFeatureId === job.id) {
+            return;
+        }
+
+        setBusyFeatureId(job.id);
+
+        try {
+            await toggleFeaturedStatus(job.id, getToken);
+            setJobs((prev) => prev.map((item) => item.id === job.id ? { ...item, isFeatured: !item.isFeatured } : item));
+            toast(job.isFeatured ? "Job moved to unlisted" : "Job featured");
+        } catch (featureError) {
+            toast(getApiErrorMessage(featureError, "Unable to update featured status."), "error");
+        } finally {
+            setBusyFeatureId(null);
+        }
+    };
 
     return (
         <ErrorBoundary>
-        <div className="p-6 md:p-10 max-w-6xl mx-auto space-y-8">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-stone-900">Jobs Management</h1>
-                    <p className="text-stone-500 mt-1">Manage job listings and referral requests.</p>
+            <div className="p-6 md:p-10 max-w-[1600px] mx-auto space-y-8">
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-stone-900">Featured Jobs</h1>
+                        <p className="text-stone-500 mt-1">Manage job listings visible to community members.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                        <button onClick={() => void loadJobs(true)} disabled={isRefreshing} className="bg-white border border-stone-200 text-stone-700 px-4 py-2.5 rounded-xl font-bold hover:border-brand-300 hover:text-brand-700 flex items-center gap-2 w-fit disabled:opacity-70 disabled:cursor-not-allowed">
+                            {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                            Refresh
+                        </button>
+                        <button onClick={() => setModal("create")} className="bg-brand-800 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-brand-700 flex items-center gap-2 shadow-lg shadow-brand-800/10 w-fit">
+                            <Plus size={18} /> Add Job
+                        </button>
+                    </div>
                 </div>
-                <button onClick={() => { setEditingJob(null); setShowForm(true); }} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors flex items-center gap-2 self-start">
-                    <Plus size={18} /> Add Job
-                </button>
-            </div>
 
-            {/* Tabs */}
-            <div className="flex gap-1 bg-stone-100 p-1 rounded-xl w-fit">
-                {(["jobs", "referrals"] as Tab[]).map(t => (
-                    <button key={t} onClick={() => setTab(t)} className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors capitalize ${tab === t ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}>
-                        {t === "jobs" ? "Job Listings" : "Referral Requests"}
-                    </button>
-                ))}
-            </div>
-
-            {tab === "jobs" && (
-                <>
-                    <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                        <div className="relative">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-                            <input type="text" placeholder="Search jobs..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
-                        </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-2xl border border-stone-100 p-5">
+                        <p className="text-sm text-stone-500 font-medium">Total Listings</p>
+                        <p className="text-3xl font-bold text-stone-900 mt-1">{jobs.length}</p>
                     </div>
-
-                    {isLoading && (
-                        <div className="flex items-center justify-center py-16"><Loader2 className="animate-spin text-brand-500" size={28} /></div>
-                    )}
-
-                    <div className="space-y-3">
-                        {filtered.map(job => (
-                            <AdminJobRow key={job.id} job={job} onEdit={() => { setEditingJob(job); setShowForm(true); }} onDelete={() => setDeletingJobId(job.id)} onViewReferrals={() => { setReferralJobId(job.id); setTab("referrals"); }} onToggleFeatured={mutate} />
-                        ))}
+                    <div className="bg-white rounded-2xl border border-stone-100 p-5">
+                        <p className="text-sm text-stone-500 font-medium">Featured</p>
+                        <p className="text-3xl font-bold text-brand-700 mt-1">{featured.length}</p>
                     </div>
+                    <div className="bg-white rounded-2xl border border-stone-100 p-5">
+                        <p className="text-sm text-stone-500 font-medium">Unlisted</p>
+                        <p className="text-3xl font-bold text-stone-400 mt-1">{unfeatured.length}</p>
+                    </div>
+                </div>
 
-                    {!isLoading && filtered.length === 0 && (
-                        <EmptyState icon={Briefcase} heading="No jobs" description={searchQuery ? "Try a different search." : "Add a job listing to get started."} variant="plain" />
-                    )}
-                </>
-            )}
+                {isLoading ? (
+                    <div className="space-y-4">
+                        <SkeletonCard lines={4} />
+                        <SkeletonCard lines={4} />
+                        <SkeletonCard lines={4} />
+                    </div>
+                ) : error ? (
+                    <EmptyState icon={Briefcase} heading="Jobs unavailable" description={error} variant="plain" />
+                ) : (
+                    <>
+                        {featured.length > 0 ? (
+                            <div>
+                                <h2 className="text-sm font-bold text-stone-400 uppercase tracking-wider mb-4">Featured ({featured.length})</h2>
+                                <div className="space-y-3">
+                                    {featured.map((job) => (
+                                        <JobRow
+                                            key={job.id}
+                                            job={job}
+                                            isToggling={busyFeatureId === job.id}
+                                            onEdit={() => setModal(job)}
+                                            onDelete={() => setDeleteTarget(job)}
+                                            onToggle={() => void handleToggleFeatured(job)}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
 
-            {tab === "referrals" && (
-                <ReferralsPanel jobId={referralJobId} jobs={jobs} onSelectJob={setReferralJobId} />
-            )}
+                        {unfeatured.length > 0 ? (
+                            <div>
+                                <h2 className="text-sm font-bold text-stone-400 uppercase tracking-wider mb-4">Unlisted ({unfeatured.length})</h2>
+                                <div className="space-y-3">
+                                    {unfeatured.map((job) => (
+                                        <JobRow
+                                            key={job.id}
+                                            job={job}
+                                            isToggling={busyFeatureId === job.id}
+                                            onEdit={() => setModal(job)}
+                                            onDelete={() => setDeleteTarget(job)}
+                                            onToggle={() => void handleToggleFeatured(job)}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
 
-            {/* Job Form Modal */}
-            {showForm && (
-                <JobFormModal job={editingJob} onClose={() => setShowForm(false)} onSuccess={() => { setShowForm(false); mutate(); toast(editingJob ? "Job updated" : "Job created", "success"); }} onError={(msg) => toast(msg, "error")} />
-            )}
+                        {jobs.length === 0 ? (
+                            <EmptyState icon={Briefcase} heading="No jobs yet" description="Add your first listing." variant="plain" />
+                        ) : null}
+                    </>
+                )}
 
-            {/* Delete Confirm */}
-            {deletingJobId && (
-                <DeleteJobModal jobId={deletingJobId} onClose={() => setDeletingJobId(null)} onSuccess={() => { setDeletingJobId(null); mutate(); toast("Job deleted", "success"); }} onError={(msg) => toast(msg, "error")} />
-            )}
-        </div>
+                {modal !== null ? (
+                    <JobFormModal
+                        initial={typeof modal === "object" ? modal : undefined}
+                        onClose={() => setModal(null)}
+                        onSave={handleSave}
+                        saving={isSaving}
+                    />
+                ) : null}
+
+                <ConfirmModal
+                    open={deleteTarget !== null}
+                    onClose={() => !isDeleting && setDeleteTarget(null)}
+                    onConfirm={() => void handleDelete()}
+                    loading={isDeleting}
+                    title="Remove Job?"
+                    description="This listing will be soft-deleted from the backend."
+                    icon={Trash2}
+                />
+            </div>
         </ErrorBoundary>
     );
 }
 
-/* ── Admin Job Row ── */
-function AdminJobRow({ job, onEdit, onDelete, onViewReferrals, onToggleFeatured }: {
-    job: Job; onEdit: () => void; onDelete: () => void; onViewReferrals: () => void; onToggleFeatured: () => void;
+function JobRow({
+    job,
+    isToggling,
+    onEdit,
+    onDelete,
+    onToggle,
+}: {
+    job: JobRecord;
+    isToggling: boolean;
+    onEdit: () => void;
+    onDelete: () => void;
+    onToggle: () => void;
 }) {
-    const toggle = useToggleFeatured(job.id);
-    const handleToggle = async () => {
-        try { await toggle.trigger(); onToggleFeatured(); } catch { /* ignored */ }
-    };
-
     return (
-        <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col md:flex-row md:items-center gap-4">
+        <div className={`bg-white rounded-2xl border p-5 flex flex-col md:flex-row md:items-center gap-4 transition-all ${job.isFeatured ? "border-brand-200 hover:border-brand-300" : "border-stone-100 opacity-80 hover:opacity-100"}`}>
+            <div className="w-12 h-12 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600 font-bold text-lg flex-shrink-0">
+                {job.company[0]}
+            </div>
+
             <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h3 className="font-bold text-stone-900">{job.title}</h3>
-                    {job.isFeatured && <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold uppercase">Featured</span>}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-bold text-stone-900">{job.title}</h3>
+                    {job.referralAvailable ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-1 text-[10px] font-bold text-brand-700 border border-brand-100">
+                            Referral enabled
+                        </span>
+                    ) : null}
                 </div>
-                <p className="text-sm text-stone-500">{job.company} {job.location && `· ${job.location}`} · {fmtJobDate(job.createdAt)}</p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-                {job.referralAvailable && (
-                    <button onClick={onViewReferrals} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors" title="View referral requests">
-                        <Users size={16} />
-                    </button>
-                )}
-                <button onClick={handleToggle} disabled={toggle.isLoading} className={`p-2 rounded-lg border transition-colors ${job.isFeatured ? "bg-amber-50 text-amber-600 border-amber-200" : "text-stone-400 border-stone-200 hover:bg-stone-50"}`} title="Toggle featured">
-                    <Star size={16} />
-                </button>
-                <button onClick={onEdit} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors" title="Edit">
-                    <Edit2 size={16} />
-                </button>
-                <button onClick={onDelete} className="p-2 rounded-lg border border-stone-200 text-red-500 hover:bg-red-50 transition-colors" title="Delete">
-                    <Trash2 size={16} />
-                </button>
-                <a href={job.externalUrl} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors" title="External link">
-                    <ExternalLink size={16} />
-                </a>
-            </div>
-        </div>
-    );
-}
-
-/* ── Referrals Panel ── */
-function ReferralsPanel({ jobId, jobs, onSelectJob }: { jobId: string | null; jobs: Job[]; onSelectJob: (id: string | null) => void; }) {
-    const { referrals, isLoading, mutate } = useJobReferralRequests(jobId);
-    const { toast } = useToast();
-    const referralJobs = jobs.filter(j => j.referralAvailable);
-
-    return (
-        <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-stone-200 p-4">
-                <label className="text-sm font-semibold text-stone-700 mb-2 block">Filter by Job</label>
-                <select value={jobId ?? ""} onChange={e => onSelectJob(e.target.value || null)} className="w-full md:w-80 px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none">
-                    <option value="">Select a job...</option>
-                    {referralJobs.map(j => <option key={j.id} value={j.id}>{j.title} — {j.company}</option>)}
-                </select>
-            </div>
-
-            {!jobId && <EmptyState icon={Users} heading="Select a job" description="Choose a job above to view referral requests." variant="plain" />}
-
-            {jobId && isLoading && (
-                <div className="flex items-center justify-center py-16"><Loader2 className="animate-spin text-brand-500" size={28} /></div>
-            )}
-
-            {jobId && !isLoading && referrals.length === 0 && (
-                <EmptyState icon={Users} heading="No referral requests" description="No one has requested a referral for this job yet." variant="plain" />
-            )}
-
-            {referrals.length > 0 && (
-                <div className="space-y-3">
-                    {referrals.map(r => <ReferralRow key={r.id} referral={r} onStatusChange={() => mutate()} onError={(msg) => toast(msg, "error")} />)}
+                <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-stone-500">
+                    <span className="flex items-center gap-1"><Building2 size={14} /> {job.company}</span>
+                    <span className="flex items-center gap-1"><MapPin size={14} /> {job.location}</span>
+                    <span className="flex items-center gap-1"><Clock size={14} /> {getJobTypeLabel(job.jobType)}</span>
+                    <span className="inline-flex items-center rounded-full border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-semibold text-stone-600">{getWorkModeLabel(job.workMode)}</span>
                 </div>
-            )}
-        </div>
-    );
-}
-
-/* ── Referral Row ── */
-const STATUS_COLORS: Record<ReferralRequestStatus, string> = {
-    PENDING: "bg-amber-50 text-amber-700 border-amber-200",
-    FULFILLED: "bg-green-50 text-green-700 border-green-200",
-    DECLINED: "bg-red-50 text-red-700 border-red-200",
-};
-const STATUS_ICONS: Record<ReferralRequestStatus, React.ReactNode> = {
-    PENDING: <Clock size={12} />,
-    FULFILLED: <Check size={12} />,
-    DECLINED: <XCircle size={12} />,
-};
-
-function ReferralRow({ referral, onStatusChange, onError }: { referral: ReferralRequest; onStatusChange: () => void; onError: (msg: string) => void; }) {
-    const update = useUpdateReferralStatus(referral.id);
-
-    const handleStatus = async (status: ReferralRequestStatus) => {
-        try { await update.trigger({ status }); onStatusChange(); } catch { onError("Failed to update status."); }
-    };
-
-    const name = referral.user?.profile
-        ? `${referral.user.profile.firstName ?? ""} ${referral.user.profile.lastName ?? ""}`.trim() || referral.user.email
-        : referral.user?.email ?? "Unknown";
-
-    return (
-        <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col md:flex-row md:items-center gap-4">
-            <div className="flex-1 min-w-0">
-                <p className="font-semibold text-stone-900">{name}</p>
-                {referral.message && <p className="text-sm text-stone-500 mt-1 line-clamp-2">{referral.message}</p>}
-                <p className="text-xs text-stone-400 mt-1">{fmtJobDate(referral.createdAt)}</p>
+                {job.referralContact ? (
+                    <p className="mt-2 text-xs font-semibold text-brand-700">Referral contact: {job.referralContact}</p>
+                ) : null}
             </div>
+
             <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${STATUS_COLORS[referral.status]}`}>
-                    {STATUS_ICONS[referral.status]} {referral.status.charAt(0) + referral.status.slice(1).toLowerCase()}
-                </span>
-                {referral.status === "PENDING" && (
-                    <>
-                        <button onClick={() => handleStatus("FULFILLED")} disabled={update.isLoading} className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50">Fulfill</button>
-                        <button onClick={() => handleStatus("DECLINED")} disabled={update.isLoading} className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50">Decline</button>
-                    </>
-                )}
+                <button onClick={onToggle} disabled={isToggling} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed ${job.isFeatured ? "bg-brand-50 text-brand-700 hover:bg-brand-100" : "bg-stone-50 text-stone-500 hover:bg-stone-100"}`}>
+                    {isToggling ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} className="inline-block mr-1" />}
+                    {job.isFeatured ? "Unfeature" : "Feature"}
+                </button>
+                {job.externalUrl ? (
+                    <a href={job.externalUrl} target="_blank" rel="noopener noreferrer" aria-label="Open job posting" title="Open job posting" className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors"><ExternalLink size={16} /></a>
+                ) : null}
+                <button onClick={onEdit} aria-label="Edit job" title="Edit job" className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors"><Pencil size={16} /></button>
+                <button onClick={onDelete} aria-label="Delete job" title="Delete job" className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
             </div>
         </div>
     );
 }
 
-/* ── Job Form Modal ── */
-function JobFormModal({ job, onClose, onSuccess, onError }: {
-    job: Job | null; onClose: () => void; onSuccess: () => void; onError: (msg: string) => void;
+function JobFormModal({
+    initial,
+    onClose,
+    onSave,
+    saving,
+}: {
+    initial?: JobRecord;
+    onClose: () => void;
+    onSave: (data: JobUpsertInput) => Promise<void>;
+    saving: boolean;
 }) {
-    const create = useCreateJob();
-    const update = useUpdateJob(job?.id ?? "");
-    const isEdit = !!job;
-    const mutation = isEdit ? update : create;
+    const [title, setTitle] = useState(initial?.title ?? "");
+    const [company, setCompany] = useState(initial?.company ?? "");
+    const [location, setLocation] = useState(initial?.location ?? "");
+    const [jobType, setJobType] = useState<JobType>(initial?.jobType ?? "FULL_TIME");
+    const [workMode, setWorkMode] = useState<WorkMode>(initial?.workMode ?? "REMOTE");
+    const [externalUrl, setExternalUrl] = useState(initial?.externalUrl ?? "");
+    const [referralContact, setReferralContact] = useState(initial?.referralContact ?? "");
+    const [isFeatured, setIsFeatured] = useState(initial?.isFeatured ?? true);
+    const [referralAvailable, setReferralAvailable] = useState(initial?.referralAvailable ?? Boolean(initial?.referralContact));
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
-    const [form, setForm] = useState({
-        title: job?.title ?? "",
-        company: job?.company ?? "",
-        location: job?.location ?? "",
-        description: job?.description ?? "",
-        externalUrl: job?.externalUrl ?? "",
-        isFeatured: job?.isFeatured ?? false,
-        referralAvailable: job?.referralAvailable ?? false,
-        referralContact: job?.referralContact ?? "",
-    });
+    const handleSubmit = async () => {
+        const nextErrors: Record<string, string> = {};
 
-    const set = (key: string, val: string | boolean) => setForm(prev => ({ ...prev, [key]: val }));
+        if (!title.trim()) nextErrors.title = "Required";
+        if (!company.trim()) nextErrors.company = "Required";
+        if (!location.trim()) nextErrors.location = "Required";
+        if (externalUrl && !/^https?:\/\/.+/i.test(externalUrl)) nextErrors.externalUrl = "Enter a valid URL";
+        if (referralAvailable && !referralContact.trim()) nextErrors.referralContact = "Referral contact is required when referrals are enabled";
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!form.title.trim() || !form.company.trim() || !form.externalUrl.trim() || !form.description.trim()) {
-            onError("Please fill in all required fields."); return;
+        setErrors(nextErrors);
+
+        if (Object.keys(nextErrors).length > 0) {
+            return;
         }
-        try {
-            await mutation.trigger({
-                title: form.title.trim(),
-                company: form.company.trim(),
-                location: form.location.trim() || undefined,
-                description: form.description.trim(),
-                externalUrl: form.externalUrl.trim(),
-                isFeatured: form.isFeatured,
-                referralAvailable: form.referralAvailable,
-                referralContact: form.referralContact.trim() || undefined,
-            });
-            onSuccess();
-        } catch {
-            onError(`Failed to ${isEdit ? "update" : "create"} job.`);
-        }
+
+        await onSave({
+            title: title.trim(),
+            company: company.trim(),
+            location: location.trim(),
+            jobType,
+            workMode,
+            externalUrl: externalUrl.trim() || null,
+            referralContact: referralAvailable ? referralContact.trim() : null,
+            isFeatured,
+            referralAvailable,
+        });
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-stone-900">{isEdit ? "Edit Job" : "Add Job"}</h2>
-                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-stone-100"><X size={18} /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !saving && onClose()}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={(event) => event.stopPropagation()}>
+                <div className="flex items-center justify-between p-6 border-b border-stone-100">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-brand-50 rounded-xl text-brand-700"><Briefcase size={20} /></div>
+                        <h2 className="text-lg font-bold text-stone-900">{initial ? "Edit Job" : "Add Job"}</h2>
+                    </div>
+                    <button onClick={onClose} disabled={saving} aria-label="Close dialog" title="Close dialog" className="text-stone-400 hover:text-stone-600 disabled:opacity-50"><X size={20} /></button>
                 </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <Field label="Title *" value={form.title} onChange={v => set("title", v)} />
-                    <Field label="Company *" value={form.company} onChange={v => set("company", v)} />
-                    <Field label="Location" value={form.location} onChange={v => set("location", v)} placeholder="e.g. Toronto, ON" />
+                <div className="p-6 space-y-4">
+                    <Field label="Job Title" error={errors.title}>
+                        <input type="text" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Senior Product Manager" className={inputClass(errors.title)} />
+                    </Field>
+                    <Field label="Company" error={errors.company}>
+                        <input type="text" value={company} onChange={(event) => setCompany(event.target.value)} placeholder="e.g. Shopify" className={inputClass(errors.company)} />
+                    </Field>
+                    <Field label="Location" error={errors.location}>
+                        <input type="text" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="e.g. Remote, Canada" className={inputClass(errors.location)} />
+                    </Field>
                     <div>
-                        <label className="text-sm font-semibold text-stone-700 mb-1 block">Description *</label>
-                        <textarea value={form.description} onChange={e => set("description", e.target.value)} rows={3} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none resize-none" />
+                        <label className="block text-sm font-semibold text-stone-700 mb-1">Job Type</label>
+                        <div className="flex gap-2 flex-wrap">
+                            {JOB_TYPES.map((type) => (
+                                <button key={type.value} type="button" onClick={() => setJobType(type.value)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${jobType === type.value ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{type.label}</button>
+                            ))}
+                        </div>
                     </div>
-                    <Field label="External URL *" value={form.externalUrl} onChange={v => set("externalUrl", v)} placeholder="https://..." />
-                    <Field label="Referral Contact" value={form.referralContact} onChange={v => set("referralContact", v)} placeholder="Name or email" />
-                    <div className="flex gap-6">
-                        <Toggle label="Featured" checked={form.isFeatured} onChange={v => set("isFeatured", v)} />
-                        <Toggle label="Referral Available" checked={form.referralAvailable} onChange={v => set("referralAvailable", v)} />
+                    <div>
+                        <label className="block text-sm font-semibold text-stone-700 mb-1">Work Mode</label>
+                        <div className="flex gap-2 flex-wrap">
+                            {WORK_MODES.map((mode) => (
+                                <button key={mode.value} type="button" onClick={() => setWorkMode(mode.value)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${workMode === mode.value ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{mode.label}</button>
+                            ))}
+                        </div>
                     </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600 hover:text-stone-800">Cancel</button>
-                        <button type="submit" disabled={mutation.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
-                            {mutation.isLoading && <Loader2 size={14} className="animate-spin" />}
-                            {isEdit ? "Update" : "Create"}
+                    <Field label="External URL" optional error={errors.externalUrl}>
+                        <input type="url" value={externalUrl} onChange={(event) => setExternalUrl(event.target.value)} placeholder="https://careers.company.com/job/123" className={inputClass(errors.externalUrl)} />
+                    </Field>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <button type="button" onClick={() => setReferralAvailable(!referralAvailable)} className={`w-10 h-6 rounded-full transition-colors relative ${referralAvailable ? "bg-brand-600" : "bg-stone-300"}`}>
+                            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${referralAvailable ? "left-[18px]" : "left-0.5"}`} />
                         </button>
-                    </div>
-                </form>
+                        <span className="text-sm font-semibold text-stone-700">Referral available</span>
+                    </label>
+                    {referralAvailable ? (
+                        <Field label="Referral Contact" error={errors.referralContact}>
+                            <input type="text" value={referralContact} onChange={(event) => setReferralContact(event.target.value)} placeholder="e.g. Amara Okafor" className={inputClass(errors.referralContact)} />
+                        </Field>
+                    ) : null}
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <button type="button" onClick={() => setIsFeatured(!isFeatured)} className={`w-10 h-6 rounded-full transition-colors relative ${isFeatured ? "bg-brand-600" : "bg-stone-300"}`}>
+                            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${isFeatured ? "left-[18px]" : "left-0.5"}`} />
+                        </button>
+                        <span className="text-sm font-semibold text-stone-700">Feature this job</span>
+                    </label>
+                </div>
+                <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
+                    <button onClick={onClose} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors disabled:opacity-50">Cancel</button>
+                    <button onClick={() => void handleSubmit()} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                        {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+                        {initial ? "Save Changes" : "Add Job"}
+                    </button>
+                </div>
             </div>
         </div>
     );
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; }) {
+function Field({ label, optional, error, children }: { label: string; optional?: boolean; error?: string; children: ReactNode }) {
     return (
         <div>
-            <label className="text-sm font-semibold text-stone-700 mb-1 block">{label}</label>
-            <input type="text" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+            <label className="block text-sm font-semibold text-stone-700 mb-1">
+                {label} {optional ? <span className="text-stone-400 font-normal">(optional)</span> : null}
+            </label>
+            {children}
+            {error ? <p className="text-red-500 text-xs mt-1">{error}</p> : null}
         </div>
     );
 }
 
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void; }) {
-    return (
-        <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="w-4 h-4 rounded border-stone-300 text-brand-600 focus:ring-brand-500" />
-            <span className="text-sm font-medium text-stone-700">{label}</span>
-        </label>
-    );
-}
-
-/* ── Delete Confirm Modal ── */
-function DeleteJobModal({ jobId, onClose, onSuccess, onError }: { jobId: string; onClose: () => void; onSuccess: () => void; onError: (msg: string) => void; }) {
-    const del = useDeleteJob(jobId);
-    const handleDelete = async () => {
-        try { await del.trigger(); onSuccess(); } catch { onError("Failed to delete job."); }
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm mx-4 p-6 space-y-4" onClick={e => e.stopPropagation()}>
-                <h2 className="text-lg font-bold text-stone-900">Delete Job</h2>
-                <p className="text-sm text-stone-500">This action cannot be undone. Are you sure?</p>
-                <div className="flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600 hover:text-stone-800">Cancel</button>
-                    <button onClick={handleDelete} disabled={del.isLoading} className="px-5 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
-                        {del.isLoading && <Loader2 size={14} className="animate-spin" />} Delete
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
+function inputClass(error?: string) {
+    return `w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${error ? "border-red-300 bg-red-50" : "border-stone-200"}`;
 }
