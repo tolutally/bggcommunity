@@ -92,7 +92,7 @@ export default function MentorResourcesPage() {
                                 </div>
                                 {/* Microtip */}
                                 <div className="absolute left-0 bottom-6 w-48 bg-stone-800 text-white text-[10px] p-2 rounded-lg opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
-                                    'Download' allows mentees to save a copy. 'View Only' restricts them to viewing it in the browser.
+                                    &lsquo;Download&rsquo; allows mentees to save a copy. &lsquo;View Only&rsquo; restricts them to viewing it in the browser.
                                 </div>
 
                                 <div className="flex items-center bg-stone-100 rounded-lg p-0.5">
@@ -109,7 +109,7 @@ export default function MentorResourcesPage() {
                                 </div>
                                 {/* Microtip */}
                                 <div className="absolute left-0 bottom-6 w-48 bg-stone-800 text-white text-[10px] p-2 rounded-lg opacity-0 group-hover/tip2:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
-                                    'Shared' is visible to all your mentees. 'Private' is only visible to you (good for drafts).
+                                    &lsquo;Shared&rsquo; is visible to all your mentees. &lsquo;Private&rsquo; is only visible to you (good for drafts).
                                 </div>
 
                                 <button

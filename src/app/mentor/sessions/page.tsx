@@ -6,7 +6,7 @@ import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export default function MentorSessionsPage() {
-    const [availability, setAvailability] = useState({
+    const [availability] = useState({
         Mon: true,
         Tue: false,
         Wed: true,
@@ -91,7 +91,14 @@ export default function MentorSessionsPage() {
     )
 }
 
-function CoachingCard({ mentee, time, topic, avatar }: any) {
+interface CoachingCardProps {
+    mentee: string;
+    time: string;
+    topic: string;
+    avatar?: string;
+}
+
+function CoachingCard({ mentee, time, topic, avatar }: CoachingCardProps) {
     return (
         <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm flex flex-col">
             <div className="flex items-start justify-between mb-4">
@@ -115,7 +122,15 @@ function CoachingCard({ mentee, time, topic, avatar }: any) {
     )
 }
 
-function SessionRow({ day, month, title, time, type }: any) {
+interface SessionRowProps {
+    day: string;
+    month: string;
+    title: string;
+    time: string;
+    type: string;
+}
+
+function SessionRow({ day, month, title, time, type }: SessionRowProps) {
     return (
         <div className="bg-white rounded-xl border border-stone-200 p-4 flex items-center gap-4">
             <div className="flex-shrink-0 flex flex-col items-center justify-center w-12 h-12 bg-stone-50 rounded-lg border border-stone-100 text-stone-400">

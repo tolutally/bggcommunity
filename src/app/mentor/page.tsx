@@ -105,7 +105,13 @@ export default function MentorDashboard() {
     );
 }
 
-function BookingRequestItem({ name, topic, time }: any) {
+interface BookingRequestItemProps {
+    name: string;
+    topic: string;
+    time: string;
+}
+
+function BookingRequestItem({ name, topic, time }: BookingRequestItemProps) {
     return (
         <div className="p-4 flex items-center justify-between hover:bg-stone-50 transition-colors">
             <div className="flex items-center gap-3">
@@ -125,7 +131,13 @@ function BookingRequestItem({ name, topic, time }: any) {
     )
 }
 
-function StatRow({ label, value, trend }: any) {
+interface StatRowProps {
+    label: string;
+    value: string;
+    trend: string;
+}
+
+function StatRow({ label, value, trend }: StatRowProps) {
     return (
         <div className="flex items-center justify-between">
             <span className="text-stone-600">{label}</span>

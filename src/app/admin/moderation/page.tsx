@@ -1,20 +1,16 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle, XCircle, ShieldAlert, BadgeInfo, Search, Clock, RotateCcw, Loader2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useToast } from "@/components/ui/toast";
-import {
-    deleteCommunityComment,
-    deleteCommunityPost,
-    fetchModerationContent,
-    getCommunityErrorMessage,
-    type ModerationContentRecord,
-} from "@/lib/community";
+import { useReportQueue } from "@/hooks/use-admin-moderation";
+import { apiRequest } from "@/lib/api";
+import type { ModerationReport } from "@/lib/types";
 
 // Types
 type ReportSeverity = "High" | "Medium" | "Low";
@@ -66,84 +62,71 @@ function detectSeverity(content: string): ReportSeverity {
     const normalized = content.toLowerCase();
     const highSignals = ["hate", "kill", "threat", "harass", "slur"];
     const mediumSignals = ["spam", "scam", "fake", "misleading", "offensive"];
-
     if (highSignals.some((signal) => normalized.includes(signal))) return "High";
     if (mediumSignals.some((signal) => normalized.includes(signal))) return "Medium";
     return "Low";
 }
 
-function detectReason(content: string): string {
-    const normalized = content.toLowerCase();
-    if (normalized.includes("spam") || normalized.includes("http")) return "Possible Spam";
-    if (normalized.includes("hate") || normalized.includes("slur") || normalized.includes("harass")) return "Potential Harassment";
-    if (normalized.includes("fake") || normalized.includes("misleading")) return "Potential Misinformation";
-    return "Manual Review";
+function profileName(profile: { firstName: string; lastName: string } | null | undefined, fallback: string): string {
+    if (profile) return `${profile.firstName} ${profile.lastName}`;
+    return fallback;
 }
 
-function mapModerationContent(item: ModerationContentRecord): Report {
+function mapApiReport(item: ModerationReport): Report {
     return {
-        id: `R-${item.sourceType}-${item.id}`,
-        sourceId: item.id,
-        type: item.sourceType,
-        reason: detectReason(item.content),
-        reporter: "Automated moderation",
+        id: item.id,
+        type: item.type === "POST" ? "Post" : item.type === "COMMENT" ? "Comment" : "Profile",
+        reason: item.reason,
+        reporter: profileName(item.reporter?.profile, "Anonymous"),
         reportedUser: {
-            name: item.authorName,
-            id: item.authorName.toLowerCase().replace(/\s+/g, "-"),
+            name: profileName(item.reportedUser.profile, item.reportedUser.email),
+            avatar: item.reportedUser.profile?.avatarUrl ?? undefined,
+            id: item.reportedUser.id,
         },
-        content: item.content,
-        context: `${item.groupName} / ${item.channelName}${item.postTitle ? ` / ${item.postTitle}` : ""}`,
-        severity: detectSeverity(item.content),
+        content: item.content ?? "",
+        severity: detectSeverity(item.content ?? ""),
         status: "Pending",
         timestamp: formatRelativeTime(item.createdAt),
         createdAt: item.createdAt,
     };
 }
 
+function mapApiResolvedReport(item: ModerationReport): ResolvedReport {
+    const action: ActionType = item.status === "DISMISSED" ? "Dismiss" : item.status === "WARNED" ? "Warn" : "Delete";
+    return {
+        ...mapApiReport(item),
+        status: item.status === "DISMISSED" ? "Dismissed" : "Resolved",
+        action,
+        resolvedAt: item.resolvedAt ? formatRelativeTime(item.resolvedAt) : "previously",
+    };
+}
+
 export default function AdminModerationPage() {
     const { getToken } = useAuth();
     const { toast } = useToast();
-    const [reports, setReports] = useState<Report[]>([]);
-    const [resolvedReports, setResolvedReports] = useState<ResolvedReport[]>([]);
     const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
     const [tab, setTab] = useState<"pending" | "history">("pending");
-    const [isLoading, setIsLoading] = useState(true);
     const [isActingId, setIsActingId] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    // Optimistic local state for actions taken this session
+    const [localResolved, setLocalResolved] = useState<ResolvedReport[]>([]);
+    const [localPendingRemovals, setLocalPendingRemovals] = useState<Set<string>>(new Set());
 
     // Filters
     const [severityFilter, setSeverityFilter] = useState<"All" | ReportSeverity>("All");
     const [typeFilter, setTypeFilter] = useState<"All" | "Post" | "Comment" | "Profile">("All");
     const [searchQuery, setSearchQuery] = useState("");
 
-    useEffect(() => {
-        let cancelled = false;
+    const { reports: apiReports, isLoading, error, mutate } = useReportQueue();
 
-        async function loadModerationData() {
-            setIsLoading(true);
-            setError(null);
+    const reports = useMemo(
+        () => (apiReports).filter(r => r.status === "PENDING" && !localPendingRemovals.has(r.id)).map(mapApiReport),
+        [apiReports, localPendingRemovals],
+    );
 
-            try {
-                const items = await fetchModerationContent(getToken);
-                if (cancelled) return;
-                setReports(items.map(mapModerationContent));
-            } catch (loadError) {
-                if (!cancelled) {
-                    setError(getCommunityErrorMessage(loadError));
-                }
-            } finally {
-                if (!cancelled) {
-                    setIsLoading(false);
-                }
-            }
-        }
-
-        void loadModerationData();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [getToken]);
+    const resolvedReports: ResolvedReport[] = useMemo(() => [
+        ...(apiReports).filter(r => r.status !== "PENDING").map(mapApiResolvedReport),
+        ...localResolved.filter(lr => !apiReports.some(r => r.id === lr.id)),
+    ], [apiReports, localResolved]);
 
     const filteredReports = reports.filter((report) => {
         const matchSeverity = severityFilter === "All" || report.severity === severityFilter;
@@ -167,53 +150,43 @@ export default function AdminModerationPage() {
 
     const handleAction = async (action: ActionType, reportId: string) => {
         const report = reports.find(r => r.id === reportId);
-        if (!report) return;
+        if (!report || isActingId === reportId) return;
 
-        if (action === "Delete") {
-            if (!report.sourceId) {
-                toast("Unable to resolve source content for delete", "error");
-                return;
-            }
+        setIsActingId(reportId);
+        try {
+            const endpoint =
+                action === "Dismiss"
+                    ? `/admin/moderation/reports/${reportId}/dismiss`
+                    : action === "Warn"
+                    ? `/admin/moderation/reports/${reportId}/warn`
+                    : `/admin/moderation/reports/${reportId}/delete-content`;
+            await apiRequest(endpoint, { method: "POST", getToken });
 
-            setIsActingId(reportId);
-            try {
-                if (report.type === "Post") {
-                    await deleteCommunityPost(report.sourceId, getToken);
-                } else if (report.type === "Comment") {
-                    await deleteCommunityComment(report.sourceId, getToken);
-                }
-            } catch (deleteError) {
-                toast(getCommunityErrorMessage(deleteError), "error");
-                setIsActingId(null);
-                return;
-            }
+            const resolved: ResolvedReport = {
+                ...report,
+                content: action === "Delete" ? "[deleted]" : report.content,
+                status: action === "Dismiss" ? "Dismissed" : "Resolved",
+                action,
+                resolvedAt: "just now",
+            };
+            setLocalPendingRemovals(prev => new Set([...prev, reportId]));
+            setLocalResolved(prev => [resolved, ...prev]);
+            if (selectedReportId === reportId) setSelectedReportId(null);
+            void mutate();
+            toast(action === "Delete" ? "Content removed" : action === "Warn" ? "Warning logged" : "Report dismissed");
+        } catch {
+            toast("Action failed. Please try again.", "error");
+        } finally {
             setIsActingId(null);
         }
-
-        const resolved: ResolvedReport = {
-            ...report,
-            // For "Delete" action, replace content with "[deleted]" placeholder
-            content: action === "Delete" ? "[deleted]" : report.content,
-            status: action === "Dismiss" ? "Dismissed" : "Resolved",
-            action,
-            resolvedAt: "just now",
-        };
-        setResolvedReports(prev => [resolved, ...prev]);
-        setReports(prev => prev.filter(r => r.id !== reportId));
-        if (selectedReportId === reportId) setSelectedReportId(null);
-        toast(action === "Delete" ? "Content removed" : action === "Warn" ? "Warning logged" : "Report dismissed");
     };
 
     const handleReopen = (reportId: string) => {
-        const resolved = resolvedReports.find(r => r.id === reportId);
-        if (!resolved) return;
-        if (resolved.action === "Delete") {
-            toast("Deleted content cannot be reopened from this view.", "error");
-            return;
-        }
-        const { action: _a, resolvedAt: _r, ...report } = resolved;
-        setReports(prev => [{ ...report, status: "Pending" as ReportStatus }, ...prev]);
-        setResolvedReports(prev => prev.filter(r => r.id !== reportId));
+        const resolved = localResolved.find(r => r.id === reportId);
+        if (!resolved) { toast("Only reports resolved in this session can be reopened.", "error"); return; }
+        if (resolved.action === "Delete") { toast("Deleted content cannot be reopened.", "error"); return; }
+        setLocalResolved(prev => prev.filter(r => r.id !== reportId));
+        setLocalPendingRemovals(prev => { const next = new Set(prev); next.delete(reportId); return next; });
         setTab("pending");
     };
 
@@ -260,13 +233,13 @@ export default function AdminModerationPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={16} />
                     <input type="text" placeholder="Search reports..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
                 </div>
-                <select title="Filter by severity" aria-label="Filter by severity" value={severityFilter} onChange={e => setSeverityFilter(e.target.value as any)} className="bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 outline-none">
+                <select title="Filter by severity" aria-label="Filter by severity" value={severityFilter} onChange={e => setSeverityFilter(e.target.value as "All" | ReportSeverity)} className="bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 outline-none">
                     <option value="All">All Severity</option>
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
                     <option value="Low">Low</option>
                 </select>
-                <select title="Filter by content type" aria-label="Filter by content type" value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)} className="bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 outline-none">
+                <select title="Filter by content type" aria-label="Filter by content type" value={typeFilter} onChange={e => setTypeFilter(e.target.value as "All" | "Post" | "Comment" | "Profile")} className="bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 outline-none">
                     <option value="All">All Types</option>
                     <option value="Post">Post</option>
                     <option value="Comment">Comment</option>
@@ -280,7 +253,7 @@ export default function AdminModerationPage() {
                     <Loader2 size={18} className="animate-spin" /> Loading moderation queue...
                 </div>
             ) : error ? (
-                <EmptyState icon={AlertTriangle} heading="Moderation queue unavailable" description={error} variant="plain" />
+                <EmptyState icon={AlertTriangle} heading="Moderation queue unavailable" description={error instanceof Error ? error.message : "Could not load moderation queue."} variant="plain" />
             ) : currentList.length > 0 ? (
                 <div className="flex flex-col lg:flex-row gap-6 h-full min-h-0">
                     {/* Report Sidebar List */}

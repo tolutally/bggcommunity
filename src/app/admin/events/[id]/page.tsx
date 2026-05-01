@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { Calendar, Clock, Users, X, Check, UserCheck, Video, Copy, ExternalLink, Link2, ArrowLeft, Download, Play, Search, Mail, Loader2 } from "lucide-react";
+import { Calendar, Clock, Users, Check, UserCheck, Video, Copy, ExternalLink, Link2, ArrowLeft, Play, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useEvent, eventTypeLabel, fmtEventDate, fmtEventTime, fmtDuration, isEventPast, detectPlatform } from "@/hooks/use-events";
 import { useEventRsvps, useAttachRecording } from "@/hooks/use-admin-events";
 import { useToast } from "@/components/ui/toast";
+import { ApiError } from "@/lib/api";
 
 const PLATFORMS: Record<string, { label: string; color: string }> = {
     zoom: { label: "Zoom", color: "bg-blue-50 text-blue-700 border-blue-200" },
@@ -54,7 +55,7 @@ export default function AdminEventDetailPage() {
         navigator.clipboard.writeText(event.meetingLink);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    }, [event?.meetingLink]);
+    }, [event]);
 
     const saveRecording = async () => {
         const url = recordingInput.trim();
@@ -65,8 +66,9 @@ export default function AdminEventDetailPage() {
             setRecordingSaved(true);
             setRecordingInput("");
             setTimeout(() => setRecordingSaved(false), 2000);
-        } catch (err: any) {
-            toast(err?.message ?? "Failed to attach recording", "error");
+        } catch (err: unknown) {
+            const message = err instanceof ApiError || err instanceof Error ? err.message : "Failed to attach recording";
+            toast(message, "error");
         }
     };
 
@@ -113,7 +115,7 @@ export default function AdminEventDetailPage() {
                             {/* Event Info */}
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-3 flex-wrap">
-                                    <StatusBadge label={typeLabel} preset={typeLabel as any} variant="tag" />
+                                    <StatusBadge label={typeLabel} preset={typeLabel as "Workshop" | "Q&A" | "Speaker Series" | "Social" | "Hackathon"} variant="tag" />
                                     <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${platformMeta.color}`}>{platformMeta.label}</span>
                                     {past && <StatusBadge label="Past" preset="Inactive" variant="tag" />}
                                 </div>

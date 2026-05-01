@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useState } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -21,7 +23,6 @@ import {
 } from "lucide-react";
 import {
   completeOnboarding,
-  defaultOnboardingDraft,
   isOnboardingComplete,
   loadOnboardingDraft,
   saveOnboardingDraft,
@@ -79,44 +80,57 @@ export default function OnboardingPage() {
   const { userId, isLoaded } = useAuth();
   const { user } = useUser();
 
-  const [draft, setDraft] = useState<OnboardingDraft>(defaultOnboardingDraft);
-  const [hydrated, setHydrated] = useState(false);
-
   useEffect(() => {
-    if (!isLoaded || !userId) {
-      return;
-    }
-
-    if (isOnboardingComplete(userId)) {
+    if (isLoaded && userId && isOnboardingComplete(userId)) {
       router.replace("/member");
-      return;
     }
-
-    const savedDraft = loadOnboardingDraft(userId);
-    const seededDraft: OnboardingDraft = {
-      ...savedDraft,
-      profile: {
-        ...savedDraft.profile,
-        website: savedDraft.profile.website,
-        occupation: savedDraft.profile.occupation,
-      },
-    };
-
-    setDraft(seededDraft);
-    setHydrated(true);
   }, [isLoaded, router, userId]);
 
-  useEffect(() => {
-    if (!hydrated || !userId) {
-      return;
-    }
+  if (!isLoaded || !userId || isOnboardingComplete(userId)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-stone-50">
+        <div className="flex items-center gap-3 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm text-stone-500 shadow-sm">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-300 border-t-brand-700" />
+          Preparing your onboarding flow...
+        </div>
+      </div>
+    );
+  }
 
+  return <OnboardingFlow key={userId} userId={userId} router={router} userLabel={user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "New member"} />;
+}
+
+function buildSeededDraft(userId: string): OnboardingDraft {
+  const savedDraft = loadOnboardingDraft(userId);
+
+  return {
+    ...savedDraft,
+    profile: {
+      ...savedDraft.profile,
+      website: savedDraft.profile.website,
+      occupation: savedDraft.profile.occupation,
+    },
+  };
+}
+
+function OnboardingFlow({
+  userId,
+  router,
+  userLabel,
+}: {
+  userId: string;
+  router: ReturnType<typeof useRouter>;
+  userLabel: string;
+}) {
+  const [draft, setDraft] = useState<OnboardingDraft>(() => buildSeededDraft(userId));
+
+  useEffect(() => {
     saveOnboardingDraft(userId, draft);
-  }, [draft, hydrated, userId]);
+  }, [draft, userId]);
 
   const currentStep = STEPS[draft.currentStep];
 
-  if (!isLoaded || !hydrated || !userId || !currentStep) {
+  if (!currentStep) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-50">
         <div className="flex items-center gap-3 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm text-stone-500 shadow-sm">
@@ -318,7 +332,7 @@ export default function OnboardingPage() {
               <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">{currentStep.description}</p>
             </div>
             <div className="rounded-2xl bg-stone-50 px-4 py-3 text-sm text-stone-500">
-              <p className="font-semibold text-stone-800">{user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "New member"}</p>
+              <p className="font-semibold text-stone-800">{userLabel}</p>
               <p className="mt-1 text-xs uppercase tracking-[0.16em] text-stone-400">Setting up your space</p>
             </div>
           </div>

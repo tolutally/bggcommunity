@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import React, { useState } from "react";
 import {
     MessageSquare,
@@ -14,7 +16,8 @@ import {
     FileText,
     Video,
     Download,
-    Clock
+    Clock,
+    type LucideIcon,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -253,7 +256,14 @@ function MembersTab() {
 
 // --- Helper Components ---
 
-function TabButton({ active, onClick, label, icon: Icon }: any) {
+interface TabButtonProps {
+    active: boolean;
+    onClick: () => void;
+    label: string;
+    icon: LucideIcon;
+}
+
+function TabButton({ active, onClick, label, icon: Icon }: TabButtonProps) {
     return (
         <button
             onClick={onClick}
@@ -265,7 +275,16 @@ function TabButton({ active, onClick, label, icon: Icon }: any) {
     )
 }
 
-function PostCard({ author, role, time, content, likes, comments }: any) {
+interface PostCardProps {
+    author: string;
+    role: string;
+    time: string;
+    content: string;
+    likes: number;
+    comments: number;
+}
+
+function PostCard({ author, role, time, content, likes, comments }: PostCardProps) {
     return (
         <div className="bg-white rounded-2xl border border-stone-200 p-6">
             <div className="flex items-center justify-between mb-4">

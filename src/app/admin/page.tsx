@@ -1,16 +1,17 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { Users, Activity, AlertTriangle, Calendar, Plus, X, Check, UserPlus, ChevronDown, Loader2, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { Users, Activity, AlertTriangle, Calendar, X, UserPlus, ChevronDown, Loader2, TrendingUp, TrendingDown, Info } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useMembers } from "@/hooks/use-members";
 import { useEvents } from "@/hooks/use-events";
 import { useCohorts, cohortStatusLabel } from "@/hooks/use-cohorts";
 import { useCommunityGroups } from "@/hooks/use-community";
+import { useReportQueue } from "@/hooks/use-admin-moderation";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -35,6 +36,7 @@ export default function AdminDashboard() {
     const { events } = useEvents();
     const { cohorts } = useCohorts();
     const { groups } = useCommunityGroups();
+    const { reports: openReports, isLoading: reportsLoading } = useReportQueue();
 
     const totalMembers = members.length;
     const upcomingEvents = events.filter(e => new Date(e.scheduledAt) > new Date()).length;
@@ -107,12 +109,23 @@ export default function AdminDashboard() {
                         <div className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-bold text-stone-900">Recent Reports</h3>
-                                <Link href="/admin/moderation" className="bg-rose-100 text-rose-600 text-xs px-2 py-0.5 rounded-full font-bold hover:bg-rose-200 transition-colors">2 New</Link>
+                                {!reportsLoading && openReports.length > 0 && (
+                                    <Link href="/admin/moderation" className="bg-rose-100 text-rose-600 text-xs px-2 py-0.5 rounded-full font-bold hover:bg-rose-200 transition-colors">{openReports.length} Open</Link>
+                                )}
                             </div>
-                            <div className="space-y-3">
-                                <ReportItem user="Sarah J." reason="Inappropriate comment" time="2h ago" />
-                                <ReportItem user="Davon L." reason="Spam profile" time="5h ago" />
-                            </div>
+                            {reportsLoading ? (
+                                <div className="flex items-center gap-2 text-stone-400 text-sm"><Loader2 size={14} className="animate-spin" /> Loading...</div>
+                            ) : openReports.length > 0 ? (
+                                <div className="space-y-3">
+                                    {openReports.slice(0, 2).map(r => {
+                                        const profile = r.reportedUser?.profile;
+                                        const name = profile ? `${profile.firstName} ${profile.lastName}`.trim() : r.reportedUser?.email ?? "Unknown";
+                                        return <ReportItem key={r.id} user={name} reason={r.reason} time={new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />;
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-stone-400">No open reports.</p>
+                            )}
                         </div>
                     </div>
 
@@ -330,7 +343,7 @@ function AdminStatCard({ title, value, change, negative, icon: Icon, isHealth, t
     );
 }
 
-function CohortStatusCard({ name, phase, health, stats }: any) {
+function CohortStatusCard({ name, phase, health, stats }: { name: string; phase: string; health: string; stats?: string }) {
     return (
         <Link href="/admin/cohorts" className="p-4 border border-stone-100 rounded-2xl bg-stone-50/50 hover:bg-white hover:shadow-md transition-all flex items-center justify-between group cursor-pointer">
             <div>
@@ -343,7 +356,7 @@ function CohortStatusCard({ name, phase, health, stats }: any) {
     );
 }
 
-function ReportItem({ user, reason, time }: any) {
+function ReportItem({ user, reason, time }: { user: string; reason: string; time: string }) {
     return (
         <Link href="/admin/moderation" className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100 transition-colors">
             <div className="flex items-center gap-3">

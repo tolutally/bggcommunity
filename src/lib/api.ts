@@ -1,6 +1,7 @@
 const DEFAULT_API_BASE_URL = "https://bggather-api.duckdns.org/api/v1";
 
-export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
+export const API_BASE_URL =
+    (process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
 
 export type TokenProvider = () => Promise<string | null>;
 
@@ -16,10 +17,20 @@ export class ApiError extends Error {
     }
 }
 
+export class ApiRequestError extends ApiError {}
+
 interface ApiRequestOptions {
-    method?: "GET" | "POST" | "PATCH" | "DELETE";
+    method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
     body?: unknown;
     headers?: HeadersInit;
+    getToken?: TokenProvider;
+}
+
+interface ApiClientOptions {
+    method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+    body?: unknown;
+    headers?: HeadersInit;
+    token?: string | null;
     getToken?: TokenProvider;
 }
 
@@ -45,7 +56,8 @@ export function buildQueryString(params: Record<string, string | number | boolea
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
     const { method = "GET", body, headers, getToken } = options;
     const token = getToken ? await getToken() : null;
-    const isJsonBody = body !== undefined;
+    const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+    const isJsonBody = body !== undefined && !isFormData;
 
     const response = await fetch(buildUrl(path), {
         method,
@@ -54,7 +66,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...headers,
         },
-        body: isJsonBody ? JSON.stringify(body) : undefined,
+        body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
     });
 
     const contentType = response.headers.get("content-type") ?? "";
@@ -67,8 +79,28 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
             (typeof payload === "string" && payload) ||
             `Request failed with status ${response.status}`;
 
-        throw new ApiError(message, response.status, payload);
+        throw new ApiRequestError(message, response.status, payload);
     }
 
     return payload as T;
+}
+
+export async function apiClient<T>(path: string, options: ApiClientOptions = {}): Promise<T> {
+    const { token, headers, ...rest } = options;
+
+    return apiRequest<T>(path, {
+        ...rest,
+        headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...headers,
+        },
+    });
+}
+
+export function handle401() {
+    if (typeof window === "undefined") {
+        return;
+    }
+
+    window.dispatchEvent(new CustomEvent("bgg:auth-expired"));
 }

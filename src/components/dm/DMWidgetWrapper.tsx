@@ -11,5 +11,5 @@ export default function DMWidgetWrapper() {
         return null;
     }
 
-    return <DMWidget userRole={role} />;
+    return <DMWidget />;
 }

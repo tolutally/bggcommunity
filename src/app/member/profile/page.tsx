@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useUser } from "@/context/UserContext";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@clerk/nextjs";
@@ -131,7 +133,6 @@ export default function MemberProfilePage() {
 
     /* --- Danger zone --- */
     const [deleteModal, setDeleteModal] = useState(false);
-    const [deleteConfirm, setDeleteConfirm] = useState("");
 
     useEffect(() => {
         let cancelled = false;
@@ -295,7 +296,6 @@ export default function MemberProfilePage() {
         try {
             await deleteOwnAccount(getToken);
             setDeleteModal(false);
-            setDeleteConfirm("");
             toast("Account deletion requested");
         } catch (error) {
             toast(getUsersErrorMessage(error), "error");
@@ -623,13 +623,13 @@ export default function MemberProfilePage() {
             {/* ========== DELETE ACCOUNT MODAL ========== */}
             <ConfirmModal
                 open={deleteModal}
-                onClose={() => { setDeleteModal(false); setDeleteConfirm(""); }}
+                onClose={() => { setDeleteModal(false); }}
                 onConfirm={() => { void handleDeleteAccount(); }}
                 title="Delete Account"
                 description="This will permanently delete your account and all associated data. This action cannot be undone."
                 confirmLabel="Delete Account"
                 icon={AlertTriangle}
-                isLoading={isDeletingAccount}
+                loading={isDeletingAccount}
             />
         </div>
         </ErrorBoundary>

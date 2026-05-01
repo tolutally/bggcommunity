@@ -2,12 +2,13 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { Briefcase, Plus, X, Trash2, Pencil, MapPin, Building2, Clock, ExternalLink, Star, Loader2, RefreshCw } from "lucide-react";
+import { Briefcase, Plus, X, Trash2, Pencil, MapPin, Building2, Clock, ExternalLink, Star, Loader2, RefreshCw, Users, CheckCircle, XCircle } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
     createJob,
     deleteJob,
@@ -22,6 +23,7 @@ import {
     type JobUpsertInput,
     type WorkMode,
 } from "@/lib/jobs";
+import { useJobReferralRequests, useUpdateReferralStatus } from "@/hooks/use-admin-jobs";
 
 const JOB_TYPES: Array<{ label: string; value: JobType }> = [
     { label: "Full-time", value: "FULL_TIME" },
@@ -42,6 +44,7 @@ export default function AdminJobsPage() {
     const [jobs, setJobs] = useState<JobRecord[]>([]);
     const [modal, setModal] = useState<null | "create" | JobRecord>(null);
     const [deleteTarget, setDeleteTarget] = useState<JobRecord | null>(null);
+    const [referralJobId, setReferralJobId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -190,6 +193,7 @@ export default function AdminJobsPage() {
                                             onEdit={() => setModal(job)}
                                             onDelete={() => setDeleteTarget(job)}
                                             onToggle={() => void handleToggleFeatured(job)}
+                                            onReferrals={job.referralAvailable ? () => setReferralJobId(job.id) : undefined}
                                         />
                                     ))}
                                 </div>
@@ -208,6 +212,7 @@ export default function AdminJobsPage() {
                                             onEdit={() => setModal(job)}
                                             onDelete={() => setDeleteTarget(job)}
                                             onToggle={() => void handleToggleFeatured(job)}
+                                            onReferrals={job.referralAvailable ? () => setReferralJobId(job.id) : undefined}
                                         />
                                     ))}
                                 </div>
@@ -238,6 +243,14 @@ export default function AdminJobsPage() {
                     description="This listing will be soft-deleted from the backend."
                     icon={Trash2}
                 />
+
+                {referralJobId ? (
+                    <ReferralPanel
+                        jobId={referralJobId}
+                        jobTitle={jobs.find((j) => j.id === referralJobId)?.title ?? ""}
+                        onClose={() => setReferralJobId(null)}
+                    />
+                ) : null}
             </div>
         </ErrorBoundary>
     );
@@ -249,12 +262,14 @@ function JobRow({
     onEdit,
     onDelete,
     onToggle,
+    onReferrals,
 }: {
     job: JobRecord;
     isToggling: boolean;
     onEdit: () => void;
     onDelete: () => void;
     onToggle: () => void;
+    onReferrals?: () => void;
 }) {
     return (
         <div className={`bg-white rounded-2xl border p-5 flex flex-col md:flex-row md:items-center gap-4 transition-all ${job.isFeatured ? "border-brand-200 hover:border-brand-300" : "border-stone-100 opacity-80 hover:opacity-100"}`}>
@@ -283,6 +298,11 @@ function JobRow({
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
+                {onReferrals ? (
+                    <button onClick={onReferrals} title="View referral requests" className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors flex items-center gap-1">
+                        <Users size={13} /> Referrals
+                    </button>
+                ) : null}
                 <button onClick={onToggle} disabled={isToggling} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed ${job.isFeatured ? "bg-brand-50 text-brand-700 hover:bg-brand-100" : "bg-stone-50 text-stone-500 hover:bg-stone-100"}`}>
                     {isToggling ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} className="inline-block mr-1" />}
                     {job.isFeatured ? "Unfeature" : "Feature"}
@@ -430,4 +450,115 @@ function Field({ label, optional, error, children }: { label: string; optional?:
 
 function inputClass(error?: string) {
     return `w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${error ? "border-red-300 bg-red-50" : "border-stone-200"}`;
+}
+
+/* ------------------------------------------------------------------ */
+/*  ReferralPanel                                                       */
+/* ------------------------------------------------------------------ */
+
+function ReferralPanel({ jobId, jobTitle, onClose }: { jobId: string; jobTitle: string; onClose: () => void }) {
+    const { referrals, isLoading, error, mutate } = useJobReferralRequests(jobId);
+    const { toast } = useToast();
+
+    return (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+                    <div>
+                        <h2 className="text-lg font-bold text-stone-900">Referral Requests</h2>
+                        <p className="text-sm text-stone-500 truncate max-w-xs">{jobTitle}</p>
+                    </div>
+                    <button onClick={onClose} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {isLoading ? (
+                        <div className="flex items-center gap-2 text-stone-500 py-8 justify-center">
+                            <Loader2 size={18} className="animate-spin" /> Loading requests…
+                        </div>
+                    ) : error ? (
+                        <p className="text-center text-sm text-stone-500 py-8">Unable to load requests.</p>
+                    ) : referrals.length === 0 ? (
+                        <p className="text-center text-sm text-stone-500 py-8">No referral requests yet.</p>
+                    ) : (
+                        referrals.map((req) => (
+                            <ReferralRequestRow
+                                key={req.id}
+                                request={req}
+                                onStatusChange={() => void mutate()}
+                                toast={toast}
+                            />
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ReferralRequestRow({ request, onStatusChange, toast }: {
+    request: import("@/lib/types").ReferralRequest;
+    onStatusChange: () => void;
+    toast: (msg: string, variant?: "success" | "error") => void;
+}) {
+    const { trigger: updateStatus, isLoading } = useUpdateReferralStatus(request.id);
+
+    const profile = request.user?.profile;
+    const name = profile ? `${profile.firstName} ${profile.lastName}`.trim() : (request.user?.email ?? "Unknown");
+
+    const handleAction = async (status: import("@/lib/types").ReferralRequestStatus) => {
+        try {
+            await updateStatus({ status });
+            toast(status === "FULFILLED" ? "Marked as fulfilled" : "Marked as declined");
+            onStatusChange();
+        } catch {
+            toast("Unable to update request", "error");
+        }
+    };
+
+    const statusBadge: Record<import("@/lib/types").ReferralRequestStatus, string> = {
+        PENDING: "bg-amber-50 text-amber-700 border-amber-200",
+        FULFILLED: "bg-green-50 text-green-700 border-green-200",
+        DECLINED: "bg-red-50 text-red-700 border-red-200",
+    };
+
+    return (
+        <div className="bg-stone-50 rounded-xl border border-stone-100 p-4 flex items-start gap-3">
+            <AvatarInitials name={name} src={profile?.avatarUrl ?? undefined} size="sm" />
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm text-stone-900">{name}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${statusBadge[request.status]}`}>
+                        {request.status}
+                    </span>
+                </div>
+                {request.message ? (
+                    <p className="text-xs text-stone-500 mt-1 line-clamp-2">{request.message}</p>
+                ) : null}
+                <p className="text-xs text-stone-400 mt-1">
+                    {new Date(request.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+            </div>
+            {request.status === "PENDING" ? (
+                <div className="flex gap-1 flex-shrink-0">
+                    <button
+                        onClick={() => void handleAction("FULFILLED")}
+                        disabled={isLoading}
+                        title="Mark fulfilled"
+                        className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 disabled:opacity-50"
+                    >
+                        {isLoading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                    </button>
+                    <button
+                        onClick={() => void handleAction("DECLINED")}
+                        disabled={isLoading}
+                        title="Mark declined"
+                        className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50"
+                    >
+                        <XCircle size={14} />
+                    </button>
+                </div>
+            ) : null}
+        </div>
+    );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useUser } from "@/context/UserContext";
 import { useAuth } from "@/context/AuthContext";
 import { useApiMutation } from "@/hooks/use-api-mutation";

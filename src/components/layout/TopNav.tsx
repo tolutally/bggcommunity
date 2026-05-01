@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useSidebar } from "@/context/SidebarContext";
 import { useUser } from "@/context/UserContext";
 import { Menu } from "lucide-react";
