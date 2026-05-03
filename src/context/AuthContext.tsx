@@ -52,10 +52,24 @@ export function validateName(name: string): string | null {
 }
 
 /* ── Map BE uppercase role to FE lowercase ── */
-function normalizeRole(role: string | undefined): UserRole {
+/* ── Allowed admin emails (comma-separated env var, empty = no restriction) ── */
+const ADMIN_WHITELIST: Set<string> = new Set(
+    (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean)
+);
+
+function normalizeRole(role: string | undefined, email?: string): UserRole {
     if (!role) return "member";
     const lower = role.toLowerCase();
-    if (lower === "admin") return "admin";
+    if (lower === "admin") {
+        // If a whitelist is configured, the email must be on it
+        if (ADMIN_WHITELIST.size > 0 && (!email || !ADMIN_WHITELIST.has(email.toLowerCase()))) {
+            return "member";
+        }
+        return "admin";
+    }
     if (lower === "mentor") return "mentor";
     return "member";
 }
@@ -78,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   : clerkUser?.fullName ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
               email: apiUser?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
               avatar: apiUser?.profile?.avatarUrl ?? clerkUser?.imageUrl ?? "",
-              role: normalizeRole(apiUser?.role),
+              role: normalizeRole(apiUser?.role, apiUser?.email ?? clerkUser?.primaryEmailAddress?.emailAddress),
           }
         : null;
 
