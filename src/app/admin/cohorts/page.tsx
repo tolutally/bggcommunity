@@ -157,7 +157,7 @@ export default function AdminCohortsPage() {
                                                 <h3 className="text-lg font-bold text-stone-900 group-hover:text-brand-700 transition-colors">{cohort.name}</h3>
                                             </div>
                                         </div>
-                                        <StatusBadge label={cohortStatusLabel(cohort.status)} preset={cohortStatusLabel(cohort.status) as any} />
+                                        <StatusBadge label={cohortStatusLabel(cohort.status)} preset={cohortStatusLabel(cohort.status) as "Active" | "Upcoming" | "Completed"} />
                                     </div>
 
                                     {cohort.description && (

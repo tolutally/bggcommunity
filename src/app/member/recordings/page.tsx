@@ -5,7 +5,6 @@ import { Video, Search, LayoutGrid, List as ListIcon, Clock, Calendar, Play, Loa
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useEvents, eventTypeLabel, fmtDuration } from "@/hooks/use-events";
-import type { Event } from "@/lib/types";
 
 function fmtDate(d: string) {
     const dt = new Date(d);

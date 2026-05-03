@@ -1,6 +1,5 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import { useUser } from "@/context/UserContext";
 import {
     Activity,
@@ -25,10 +24,8 @@ import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
-import { fetchEvents, getEventTypeLabel, getEventsErrorMessage, type EventRecord } from "@/lib/events";
-import { fetchJobs, getApiErrorMessage, getJobTypeLabel, getWorkModeLabel, requestJobReferral, type JobRecord } from "@/lib/jobs";
-import { useQueryInvalidation } from "@/hooks/useQueryInvalidation";
-import { invalidateQuery } from "@/lib/queryInvalidation";
+import { useEvents, eventTypeLabel, fmtDuration } from "@/hooks/use-events";
+import { useJobs, fmtJobDate, useRequestReferral } from "@/hooks/use-jobs";
 
 interface DevGoalSnapshot {
     done?: boolean;
@@ -51,19 +48,24 @@ const item = {
 };
 
 export default function MemberDashboard() {
-    const { getToken } = useAuth();
     const { user } = useUser();
-    const { toast } = useToast();
     const [scheduleView, setScheduleView] = useState<'upcoming' | 'past'>('upcoming');
     const [devPlanMeta, setDevPlanMeta] = useState({ total: 0, completed: 0 });
-    const [upcomingSessions, setUpcomingSessions] = useState<EventRecord[]>([]);
-    const [pastRecordings, setPastRecordings] = useState<EventRecord[]>([]);
-    const [featuredJobs, setFeaturedJobs] = useState<JobRecord[]>([]);
-    const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
-    const [isLoadingJobs, setIsLoadingJobs] = useState(true);
-    const [scheduleError, setScheduleError] = useState<string | null>(null);
-    const [jobsError, setJobsError] = useState<string | null>(null);
-    const [requestingReferralId, setRequestingReferralId] = useState<string | null>(null);
+
+    const { events, isLoading: isLoadingSchedule, error: scheduleErrorRaw } = useEvents();
+    const { jobs, isLoading: isLoadingJobs, error: jobsErrorRaw } = useJobs();
+
+    const scheduleError = scheduleErrorRaw instanceof Error ? scheduleErrorRaw.message : scheduleErrorRaw ? "Could not load schedule." : null;
+    const jobsError = jobsErrorRaw instanceof Error ? jobsErrorRaw.message : jobsErrorRaw ? "Could not load jobs." : null;
+
+    const now = useMemo(() => new Date(), []);
+    const upcomingSessions = useMemo(() =>
+        events.filter(e => new Date(e.scheduledAt) > now).sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()).slice(0, 4)
+    , [events, now]);
+    const pastRecordings = useMemo(() =>
+        events.filter(e => e.recordingUrl && new Date(e.scheduledAt) <= now).slice(0, 3)
+    , [events, now]);
+    const featuredJobs = useMemo(() => jobs.filter(j => j.isFeatured), [jobs]);
 
     useEffect(() => {
         const loadDevPlanMeta = () => {
@@ -97,79 +99,10 @@ export default function MemberDashboard() {
 
     const showDevPlanReminder = devPlanMeta.total === 0 || devPlanMeta.completed < devPlanMeta.total;
 
-    const loadDashboardData = useMemo(() => {
-        let cancelled = false;
-
-        const run = async () => {
-            setIsLoadingSchedule(true);
-            setIsLoadingJobs(true);
-            setScheduleError(null);
-            setJobsError(null);
-
-            try {
-                const [upcomingPage, pastPage] = await Promise.all([
-                    fetchEvents({ status: "upcoming", limit: 4 }, getToken),
-                    fetchEvents({ status: "past", limit: 20 }, getToken),
-                ]);
-
-                if (!cancelled) {
-                    setUpcomingSessions(upcomingPage.items.slice(0, 4));
-                    setPastRecordings(
-                        pastPage.items
-                            .filter((event) => Boolean(event.recordingUrl))
-                            .slice(0, 3),
-                    );
-                }
-            } catch (error) {
-                if (!cancelled) {
-                    setScheduleError(getEventsErrorMessage(error));
-                }
-            } finally {
-                if (!cancelled) {
-                    setIsLoadingSchedule(false);
-                }
-            }
-
-            try {
-                const jobsPage = await fetchJobs({ isFeatured: true, limit: 3 });
-                if (!cancelled) {
-                    setFeaturedJobs(jobsPage.items);
-                }
-            } catch (error) {
-                if (!cancelled) {
-                    setJobsError(getApiErrorMessage(error, "Unable to load featured jobs right now."));
-                }
-            } finally {
-                if (!cancelled) {
-                    setIsLoadingJobs(false);
-                }
-            }
-        };
-
-        return {
-            run,
-            cancel: () => {
-                cancelled = true;
-            },
-        };
-    }, [getToken]);
-
-    useEffect(() => {
-        void loadDashboardData.run();
-
-        return () => {
-            loadDashboardData.cancel();
-        };
-    }, [loadDashboardData]);
-
-    const dashboardInvalidationScopes = useMemo(() => ["events", "jobs"] as const, []);
-    useQueryInvalidation([...dashboardInvalidationScopes], async () => {
-        await loadDashboardData.run();
-    });
-
     const todayLabel = useMemo(() => {
-        const today = new Date().toDateString();
-        const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toDateString();
+        const ref = now;
+        const today = ref.toDateString();
+        const tomorrow = new Date(ref.getTime() + 24 * 60 * 60 * 1000).toDateString();
 
         return (dateString: string) => {
             const value = new Date(dateString).toDateString();
@@ -181,7 +114,7 @@ export default function MemberDashboard() {
             }
             return new Date(dateString).toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
         };
-    }, []);
+    }, [now]);
 
     const formatSessionTime = (value: string, durationMinutes: number) => {
         const start = new Date(value);
@@ -189,33 +122,7 @@ export default function MemberDashboard() {
         return `${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - ${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
     };
 
-    const formatDuration = (minutes: number) => {
-        if (minutes < 60) {
-            return `${minutes}m`;
-        }
 
-        const hours = Math.floor(minutes / 60);
-        const remainder = minutes % 60;
-        return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
-    };
-
-    const handleReferralRequest = async (job: JobRecord) => {
-        if (!job.referralAvailable || requestingReferralId === job.id) {
-            return;
-        }
-
-        setRequestingReferralId(job.id);
-
-        try {
-            await requestJobReferral(job.id, getToken);
-            toast("Referral request sent");
-            invalidateQuery("jobs");
-        } catch (error) {
-            toast(getApiErrorMessage(error, "Unable to request referral for this role."), "error");
-        } finally {
-            setRequestingReferralId(null);
-        }
-    };
 
     const getTypeColor = (type: string) => {
         switch (type) {
@@ -410,8 +317,8 @@ export default function MemberDashboard() {
                                                     {/* Session Details */}
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                            <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide border ${getTypeColor(getEventTypeLabel(session.type))}`}>
-                                                                {getEventTypeLabel(session.type)}
+                                                            <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wide border ${getTypeColor(eventTypeLabel(session.type))}`}>
+                                                                {eventTypeLabel(session.type)}
                                                             </span>
                                                         </div>
 
@@ -465,7 +372,7 @@ export default function MemberDashboard() {
                                                     </div>
                                                     {/* Duration Badge */}
                                                     <div className="absolute bottom-3 right-3 px-2 py-1 bg-black/70 rounded-md text-white text-xs font-medium">
-                                                        {formatDuration(session.durationMinutes)}
+                                                        {fmtDuration(session.durationMinutes)}
                                                     </div>
                                                 </div>
                                                 {/* Recording Info */}
@@ -546,20 +453,16 @@ export default function MemberDashboard() {
                                                 </div>
                                                 <div>
                                                     <p className="font-semibold text-stone-900 text-sm">{job.company}</p>
-                                                    <p className="text-xs text-stone-400">{job.postedAtLabel}</p>
+                                                    <p className="text-xs text-stone-400">{fmtJobDate(job.createdAt)}</p>
                                                 </div>
                                             </div>
                                             <h4 className="font-bold text-stone-900 mb-2 line-clamp-1">{job.title}</h4>
                                             <div className="flex flex-wrap gap-2 mb-3">
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                                    <MapPin size={12} /> {job.location}
-                                                </span>
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                                    {getJobTypeLabel(job.jobType)}
-                                                </span>
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
-                                                    {getWorkModeLabel(job.workMode)}
-                                                </span>
+                                                {job.location ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-stone-100 rounded-full text-xs font-medium text-stone-600">
+                                                        <MapPin size={12} /> {job.location}
+                                                    </span>
+                                                ) : null}
                                             </div>
                                             <div className="flex gap-2">
                                                 {job.externalUrl ? (
@@ -572,18 +475,7 @@ export default function MemberDashboard() {
                                                     </Link>
                                                 )}
                                                 {job.referralAvailable ? (
-                                                    <button
-                                                        onClick={() => void handleReferralRequest(job)}
-                                                        className="flex-1 px-3 py-2 bg-accent-100 text-accent-700 font-bold rounded-lg hover:bg-accent-200 transition-colors text-xs flex items-center justify-center gap-1 disabled:opacity-60"
-                                                        disabled={requestingReferralId === job.id}
-                                                    >
-                                                        {requestingReferralId === job.id ? (
-                                                            <Loader2 size={12} className="animate-spin" />
-                                                        ) : (
-                                                            <Users size={12} />
-                                                        )}
-                                                        Seek Referral
-                                                    </button>
+                                                    <JobReferralButton jobId={job.id} />
                                                 ) : null}
                                             </div>
                                         </div>
@@ -611,5 +503,20 @@ export default function MemberDashboard() {
               </ErrorBoundary>
             </motion.div>
         </motion.div>
+    );
+}
+
+function JobReferralButton({ jobId }: { jobId: string }) {
+    const { trigger, isLoading } = useRequestReferral(jobId);
+    const { toast } = useToast();
+    return (
+        <button
+            onClick={() => void trigger({}).then(() => toast("Referral request sent")).catch(() => toast("Could not request referral", "error"))}
+            disabled={isLoading}
+            className="flex-1 px-3 py-2 bg-accent-100 text-accent-700 font-bold rounded-lg hover:bg-accent-200 transition-colors text-xs flex items-center justify-center gap-1 disabled:opacity-60"
+        >
+            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
+            Seek Referral
+        </button>
     );
 }

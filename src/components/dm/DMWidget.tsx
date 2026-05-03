@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState } from "react";
 import { MessageCircle, X, Send, ChevronDown } from "lucide-react";
 
@@ -9,12 +11,14 @@ const MOCK_CONTACTS = [
     { id: 5, name: "Chiamaka Nnadi", avatar: "https://i.pravatar.cc/150?u=5", role: "member", lastMessage: "Thanks for the feedback!", dmOpen: true },
 ];
 
-export default function DMWidget({ userRole = 'member' }: { userRole?: string }) {
+type Contact = (typeof MOCK_CONTACTS)[number];
+
+export default function DMWidget() {
     const [isOpen, setIsOpen] = useState(false);
-    const [selectedContact, setSelectedContact] = useState<any>(null);
+    const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
     const [message, setMessage] = useState("");
 
-    const handleSelectContact = (contact: any) => {
+    const handleSelectContact = (contact: Contact) => {
         setSelectedContact(contact);
     };
 
@@ -33,7 +37,7 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                         {selectedContact ? (
                             <button onClick={() => setSelectedContact(null)} className="flex items-center gap-2 hover:opacity-80">
                                 <ChevronDown size={18} className="rotate-90" />
-                                <img src={selectedContact.avatar} className="w-8 h-8 rounded-full" />
+                                <img src={selectedContact.avatar} alt={selectedContact.name} className="w-8 h-8 rounded-full" />
                                 <span className="font-bold">{selectedContact.name}</span>
                             </button>
                         ) : (
@@ -49,7 +53,7 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                         <div className="flex flex-col h-80">
                             <div className="flex-1 p-4 space-y-4 overflow-y-auto bg-stone-50">
                                 <div className="flex gap-2">
-                                    <img src={selectedContact.avatar} className="w-8 h-8 rounded-full" />
+                                    <img src={selectedContact.avatar} alt={selectedContact.name} className="w-8 h-8 rounded-full" />
                                     <div className="bg-white p-3 rounded-xl border border-stone-100 shadow-sm max-w-[80%]">
                                         <p className="text-sm text-stone-700">{selectedContact.lastMessage}</p>
                                     </div>
@@ -82,7 +86,7 @@ export default function DMWidget({ userRole = 'member' }: { userRole?: string })
                                     onClick={() => handleSelectContact(contact)}
                                     className="w-full p-4 flex items-center gap-3 hover:bg-stone-50 transition-colors text-left"
                                 >
-                                    <img src={contact.avatar} className="w-10 h-10 rounded-full" />
+                                    <img src={contact.avatar} alt={contact.name} className="w-10 h-10 rounded-full" />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex justify-between items-center">
                                             <h4 className="font-bold text-stone-900 text-sm truncate">{contact.name}</h4>

@@ -316,6 +316,8 @@ export default function AdminEventsPage() {
         setTimeout(() => setCopied(null), 2000);
     }, []);
 
+    const detailEvent = detailEventId ? eventDetails[detailEventId] ?? items.find((event) => event.id === detailEventId) ?? null : null;
+
     useEffect(() => {
         setRecordingUrlDraft(detailEvent?.recordingUrl ?? "");
         setRecordingError(null);
@@ -356,7 +358,6 @@ export default function AdminEventsPage() {
         }
     }, [detailEvent, getToken, recordingUrlDraft, setItems, toast]);
 
-    const detailEvent = detailEventId ? eventDetails[detailEventId] ?? items.find((event) => event.id === detailEventId) ?? null : null;
     const sortedItems = useMemo(() => [...items].sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime()), [items]);
     const myRsvpCount = useMemo(() => Object.values(eventDetails).filter((event) => event.hasRsvp).length, [eventDetails]);
     const upcomingCount = useMemo(() => items.filter((event) => getStatus(event) === "upcoming").length, [items]);
@@ -405,11 +406,11 @@ export default function AdminEventsPage() {
                 <div className="flex flex-wrap gap-3">
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Type:</span>
-                        {["All", ...EVENT_TYPES.map((type) => type.value)].map((type) => {
+                        {(["All", ...EVENT_TYPES.map((type) => type.value)] as const).map((type) => {
                             const active = filterType === type;
                             const label = type === "All" ? type : getEventTypeLabel(type);
                             return (
-                                <button key={type} onClick={() => setFilterType(type as "All" | EventType)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${active ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{label}</button>
+                                <button key={type} onClick={() => setFilterType(type)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${active ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{label}</button>
                             );
                         })}
                     </div>
@@ -475,7 +476,7 @@ export default function AdminEventsPage() {
                                                         <StatusBadge label={getEventTypeLabel(event.type)} preset={event.type as never} variant="tag" />
                                                         <StatusBadge label={getEventPlatformLabel(event.platform)} preset={getEventPlatformLabel(event.platform) as never} variant="tag" />
                                                         {status === "past" ? <StatusBadge label="Past" preset="Inactive" variant="tag" /> : null}
-                                                        {hasRsvp ? <StatusBadge label="RSVP'd" preset="Success" variant="tag" /> : null}
+                                                        {hasRsvp ? <StatusBadge label="RSVP'd" preset="Active" variant="tag" /> : null}
                                                     </div>
                                                     <h3 className="text-xl font-bold text-stone-900 mb-1 group-hover:text-brand-700 transition-colors cursor-pointer" onClick={() => void openEventDetail(event.id)}>{event.title}</h3>
                                                     {event.description ? <p className="text-sm text-stone-500 mb-2 line-clamp-2">{event.description}</p> : null}
@@ -552,7 +553,7 @@ export default function AdminEventsPage() {
                                     <StatusBadge label={getEventTypeLabel(detailEvent.type)} preset={detailEvent.type as never} variant="tag" />
                                     <StatusBadge label={getEventPlatformLabel(detailEvent.platform)} preset={getEventPlatformLabel(detailEvent.platform) as never} variant="tag" />
                                     {getStatus(detailEvent) === "past" ? <StatusBadge label="Past" preset="Inactive" variant="tag" /> : null}
-                                    {"hasRsvp" in detailEvent && detailEvent.hasRsvp ? <StatusBadge label="RSVP'd" preset="Success" variant="tag" /> : null}
+                                    {"hasRsvp" in detailEvent && detailEvent.hasRsvp ? <StatusBadge label="RSVP'd" preset="Active" variant="tag" /> : null}
                                 </div>
                                 <h3 className="text-2xl font-bold text-stone-900">{detailEvent.title}</h3>
                                 {detailEvent.description ? <p className="text-sm text-stone-600 leading-relaxed">{detailEvent.description}</p> : <p className="text-sm text-stone-500">No description has been added for this event yet.</p>}

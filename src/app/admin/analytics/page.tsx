@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Users, Calendar, TrendingUp, Activity, Download, Check, ChevronDown, X, Eye, FileSpreadsheet, FileText } from "lucide-react";
-import { useState } from "react";
+import { ArrowDown, ArrowUp, Users, Calendar, TrendingUp, Activity, Download, Check, ChevronDown, X, Eye, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import React, { useState } from "react";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { DatePicker } from "@/components/ui/date-picker";
 import { exportCSV, exportXLSX, exportPDF } from "@/lib/export";
+import { useAnalyticsOverview, useAnalyticsCohorts } from "@/hooks/use-analytics";
 
 // Demo data for platform growth
 const GROWTH_DATA = {
@@ -69,6 +70,9 @@ export default function AdminAnalyticsPage() {
     const [showExportMenu, setShowExportMenu] = useState(false);
     const [drillDownCohort, setDrillDownCohort] = useState<string | null>(null);
 
+    const { overview, isLoading: loadingOverview } = useAnalyticsOverview();
+    const { cohorts: apiCohorts, isLoading: loadingCohorts } = useAnalyticsCohorts();
+
     // Generate custom range data
     const getCustomData = () => {
         if (!customStart || !customEnd) return GROWTH_DATA["30days"];
@@ -82,8 +86,8 @@ export default function AdminAnalyticsPage() {
         for (let i = 0; i < points; i++) {
             const d = new Date(start.getTime() + (i / (points - 1)) * (end.getTime() - start.getTime()));
             labels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
-            members.push(Math.round(1000 + Math.random() * 250 + i * 20));
-            active.push(Math.round(700 + Math.random() * 150 + i * 12));
+            members.push(Math.round(1000 + i * 20));
+            active.push(Math.round(700 + i * 12));
         }
         return { labels, members, active };
     };
@@ -191,10 +195,16 @@ export default function AdminAnalyticsPage() {
 
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <MetricCard title="Total Members" value="1,248" change="+12%" trend="up" icon={Users} />
-                <MetricCard title="Active Learners" value="856" change="+5%" trend="up" icon={Activity} />
-                <MetricCard title="Event Attendance" value="92%" change="+2%" trend="up" icon={Calendar} />
-                <MetricCard title="Churn Rate" value="1.2%" change="-0.5%" trend="down" icon={TrendingUp} inverse />
+                {loadingOverview ? (
+                    <div className="col-span-4 flex items-center justify-center py-8 text-stone-400 gap-2"><Loader2 size={18} className="animate-spin" /> Loading metrics...</div>
+                ) : (
+                    <>
+                        <MetricCard title="Total Members" value={overview ? overview.totalMembers.toLocaleString() : "—"} change={overview ? `+${overview.newThisMonth} this month` : ""} trend="up" icon={Users} />
+                        <MetricCard title="Active This Month" value={overview ? overview.activeThisMonth.toLocaleString() : "—"} change="" trend="up" icon={Activity} />
+                        <MetricCard title="Total Events" value={overview ? overview.totalEvents.toLocaleString() : "—"} change={overview ? `${overview.totalRsvpsThisMonth} RSVPs this month` : ""} trend="up" icon={Calendar} />
+                        <MetricCard title="Open Reports" value={overview ? overview.openReports.toString() : "—"} change={overview && overview.openReports === 0 ? "All clear" : ""} trend={overview && overview.openReports === 0 ? "up" : "down"} icon={TrendingUp} inverse={overview ? overview.openReports > 0 : false} />
+                    </>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -217,16 +227,33 @@ export default function AdminAnalyticsPage() {
                 <div className="space-y-6">
                     <div className="bg-white rounded-2xl p-6 border border-stone-100 shadow-sm">
                         <h3 className="font-bold text-stone-900 mb-4">Engagement by Cohort</h3>
-                        <div className="space-y-4">
-                            {Object.entries(COHORT_DRILL_DOWN).map(([name, data]) => (
-                                <div key={name} className="group">
-                                    <ProgramBar label={name} value={`${data.retention}%`} color={name.includes("Alpha") ? "bg-brand-600" : name.includes("Beta") ? "bg-accent-500" : "bg-stone-500"} />
-                                    <button onClick={() => setDrillDownCohort(name)} className="text-[10px] text-brand-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 hover:underline">
-                                        <Eye size={10} /> View Details
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
+                        {loadingCohorts ? (
+                            <div className="flex items-center gap-2 text-stone-400 text-sm"><Loader2 size={14} className="animate-spin" /> Loading...</div>
+                        ) : apiCohorts.length > 0 ? (
+                            <div className="space-y-4">
+                                {apiCohorts.map((cohort, i) => (
+                                    <div key={cohort.id} className="group">
+                                        <ProgramBar
+                                            label={cohort.name}
+                                            value={`${Math.round(cohort.activeRate * 100)}%`}
+                                            color={i === 0 ? "bg-brand-600" : i === 1 ? "bg-accent-500" : "bg-stone-500"}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            // Fallback to demo data if API cohorts not available
+                            <div className="space-y-4">
+                                {Object.entries(COHORT_DRILL_DOWN).map(([name, cohortData]) => (
+                                    <div key={name} className="group">
+                                        <ProgramBar label={name} value={`${cohortData.retention}%`} color={name.includes("Alpha") ? "bg-brand-600" : name.includes("Beta") ? "bg-accent-500" : "bg-stone-500"} />
+                                        <button onClick={() => setDrillDownCohort(name)} className="text-[10px] text-brand-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 hover:underline">
+                                            <Eye size={10} /> View Details
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-2xl p-6 text-white shadow-lg">
@@ -290,7 +317,7 @@ export default function AdminAnalyticsPage() {
     );
 }
 
-function MetricCard({ title, value, change, trend, icon: Icon, inverse }: any) {
+function MetricCard({ title, value, change, trend, icon: Icon, inverse }: { title: string; value: string; change: string; trend: string; icon: React.ElementType; inverse?: boolean }) {
     const isPositive = trend === "up";
     const isGood = inverse ? !isPositive : isPositive;
     return (
@@ -309,7 +336,7 @@ function MetricCard({ title, value, change, trend, icon: Icon, inverse }: any) {
     );
 }
 
-function ProgramBar({ label, value, color }: any) {
+function ProgramBar({ label, value, color }: { label: string; value: string; color: string }) {
     return (
         <div>
             <div className="flex justify-between text-sm font-medium text-stone-700 mb-1.5"><span>{label}</span><span>{value}</span></div>

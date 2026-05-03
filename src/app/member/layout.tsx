@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { SidebarProvider } from "@/context/SidebarContext";
@@ -52,25 +52,15 @@ export default function MemberLayout({
 }) {
     const { isLoaded, userId } = useAuth();
     const router = useRouter();
-    const [canRender, setCanRender] = useState(false);
+    const onboardingComplete = userId ? isOnboardingComplete(userId) : true;
 
     useEffect(() => {
-        if (!isLoaded) {
-            return;
-        }
-
-        if (!userId) {
-            setCanRender(true);
-            return;
-        }
-
-        if (!isOnboardingComplete(userId)) {
+        if (isLoaded && userId && !onboardingComplete) {
             router.replace("/onboarding");
-            return;
         }
+    }, [isLoaded, onboardingComplete, router, userId]);
 
-        setCanRender(true);
-    }, [isLoaded, router, userId]);
+    const canRender = isLoaded && (!userId || onboardingComplete);
 
     if (!canRender) {
         return (
