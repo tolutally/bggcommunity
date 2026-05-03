@@ -70,10 +70,10 @@ export default function SignInPage() {
 
   const handleSocialSignIn = async (strategy: OAuthStrategy) => {
     if (!signIn) return;
-    await signIn.authenticateWithRedirect({
+    await signIn.sso({
       strategy,
       redirectUrl: `${window.location.origin}/sso-callback`,
-      redirectUrlComplete: `${window.location.origin}/member`,
+      redirectCallbackUrl: `${window.location.origin}/member`,
     });
   };
 
