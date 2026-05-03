@@ -53,10 +53,10 @@ export default function SignUpPage() {
 
   const handleSocialSignUp = async (strategy: OAuthStrategy) => {
     if (!signUp) return;
-    await signUp.sso({
+    await signUp.authenticateWithRedirect({
       strategy,
       redirectUrl: `${window.location.origin}/sso-callback`,
-      redirectCallbackUrl: `${window.location.origin}/onboarding`,
+      redirectUrlComplete: `${window.location.origin}/onboarding`,
     });
   };
 

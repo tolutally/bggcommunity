@@ -1,7 +1,17 @@
-const DEFAULT_API_BASE_URL = "https://bggather-api.duckdns.org/api/v1";
+const DEFAULT_API_BASE_URL = "/api/v1";
+
+function normalizeApiBaseUrl(value?: string) {
+    const trimmed = value?.replace(/\/$/, "");
+
+    if (!trimmed) {
+        return DEFAULT_API_BASE_URL;
+    }
+
+    return /^https?:\/\//i.test(trimmed) ? DEFAULT_API_BASE_URL : trimmed;
+}
 
 export const API_BASE_URL =
-    (process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
+    normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL);
 
 export type TokenProvider = () => Promise<string | null>;
 
