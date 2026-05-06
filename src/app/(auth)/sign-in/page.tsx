@@ -36,7 +36,7 @@ function FacebookIcon() {
 type OAuthStrategy = "oauth_google" | "oauth_linkedin_oidc" | "oauth_facebook";
 
 export default function SignInPage() {
-  const { signIn } = useSignIn();
+  const { signIn, setActive } = useSignIn();
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -51,13 +51,18 @@ export default function SignInPage() {
     setLoading(true);
     setError("");
     try {
-      const { error: signInError } = await signIn.password({ identifier: email, password });
+      const signInResult = await signIn.password({ identifier: email, password });
+      const { error: signInError } = signInResult;
       if (signInError) {
         setError(signInError.message ?? "Sign in failed. Please try again.");
         return;
       }
-      if (signIn.status === "complete") {
-        await signIn.finalize();
+      if (signInResult.status === "complete") {
+        if (signInResult.createdSessionId) {
+          await setActive({ session: signInResult.createdSessionId });
+        } else {
+          await signIn.finalize();
+        }
         router.replace("/member");
       }
     } catch (err: unknown) {

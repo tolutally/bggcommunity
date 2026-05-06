@@ -9,7 +9,7 @@ import { useSignIn } from "@clerk/nextjs";
 type Step = "email" | "reset" | "done";
 
 export default function ForgotPasswordPage() {
-  const { signIn } = useSignIn();
+  const { signIn, setActive } = useSignIn();
   const router = useRouter();
 
   const [step, setStep] = useState<Step>("email");
@@ -79,17 +79,22 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      const { error: submitError } = await signIn.resetPasswordEmailCode.submitPassword({
+      const resetResult = await signIn.resetPasswordEmailCode.submitPassword({
         password: newPassword,
       });
+      const { error: submitError } = resetResult;
 
       if (submitError) {
         setError(submitError.message ?? "Could not update password.");
         return;
       }
 
-      if (signIn.status === "complete") {
-        await signIn.finalize();
+      if (resetResult.status === "complete") {
+        if (resetResult.createdSessionId) {
+          await setActive({ session: resetResult.createdSessionId });
+        } else {
+          await signIn.finalize();
+        }
       }
 
       setStep("done");
