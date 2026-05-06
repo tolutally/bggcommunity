@@ -15,12 +15,19 @@ export function useAuthSWR<T = unknown>(
   path: string | null,
   config?: SWRConfiguration<T>,
 ) {
-  const { getToken } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const fetcher = async (key: string): Promise<T> => {
     const token = await getToken();
+
+    if (!token) {
+      throw new Error("Missing auth token");
+    }
+
     return apiClient<T>(key, { token });
   };
 
-  return useSWR<T>(path, fetcher, config);
+  const swrKey = isLoaded && isSignedIn ? path : null;
+
+  return useSWR<T>(swrKey, fetcher, config);
 }
