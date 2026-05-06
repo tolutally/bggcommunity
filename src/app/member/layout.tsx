@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { UserProvider } from "@/context/UserContext";
 import FloatingNav from "@/components/layout/FloatingNav";
 import { isOnboardingComplete } from "@/lib/onboarding";
+import { useCohorts } from "@/hooks/use-cohorts";
 import {
     LayoutDashboard,
     MessageSquare,
@@ -14,36 +15,59 @@ import {
     Settings,
     Briefcase,
     Target,
+    GraduationCap,
 } from "lucide-react";
 
-const memberNavGroups = [
-    {
-        items: [
-            { name: "Dashboard", href: "/member", icon: LayoutDashboard },
-            { name: "Jobs", href: "/member/jobs", icon: Briefcase },
-            { name: "Dev Plan", href: "/member/devplan", icon: Target },
-        ],
-    },
-    {
-        title: "Community",
-        items: [
-            { name: "Community", href: "/member/community", icon: MessageSquare },
-            { name: "Members", href: "/member/members", icon: Users },
-        ],
-    },
-    {
-        title: "Cohorts",
-        items: [
-            { name: "Cohort Alpha", href: "/member/cohorts/alpha", icon: Users },
-            { name: "Cohort Beta", href: "/member/cohorts/beta", icon: Users },
-        ],
-    },
-    {
-        items: [
-            { name: "Settings", href: "/member/settings", icon: Settings },
-        ]
-    }
-];
+function MemberLayoutInner({ children }: { children: React.ReactNode }) {
+    const { cohorts } = useCohorts();
+
+    const navGroups = useMemo(() => {
+        const base = [
+            {
+                items: [
+                    { name: "Dashboard", href: "/member", icon: LayoutDashboard },
+                    { name: "Jobs", href: "/member/jobs", icon: Briefcase },
+                    { name: "Dev Plan", href: "/member/devplan", icon: Target },
+                ],
+            },
+            {
+                title: "Community",
+                items: [
+                    { name: "Community", href: "/member/community", icon: MessageSquare },
+                    { name: "Members", href: "/member/members", icon: Users },
+                ],
+            },
+        ];
+
+        if (cohorts.length > 0) {
+            base.push({
+                title: "Cohorts",
+                items: cohorts.map((c) => ({
+                    name: c.name,
+                    href: `/member/cohorts/${c.id}`,
+                    icon: GraduationCap,
+                })),
+            });
+        }
+
+        base.push({
+            items: [
+                { name: "Settings", href: "/member/settings", icon: Settings },
+            ],
+        });
+
+        return base;
+    }, [cohorts]);
+
+    return (
+        <div className="min-h-screen bg-stone-50">
+            <FloatingNav navGroups={navGroups} moduleType="member" />
+            <main className="pt-20 pb-6 md:pl-24 lg:pl-28">
+                {children}
+            </main>
+        </div>
+    );
+}
 
 export default function MemberLayout({
     children,
@@ -76,15 +100,7 @@ export default function MemberLayout({
     return (
         <SidebarProvider>
             <UserProvider>
-                <div className="min-h-screen bg-stone-50">
-                    {/* Navigation (Header + Left Bar) */}
-                    <FloatingNav navGroups={memberNavGroups} moduleType="member" />
-
-                    {/* Main Content - with padding for header and left nav (desktop only) */}
-                    <main className="pt-20 pb-6 md:pl-24 lg:pl-28">
-                        {children}
-                    </main>
-                </div>
+                <MemberLayoutInner>{children}</MemberLayoutInner>
             </UserProvider>
         </SidebarProvider>
     );
