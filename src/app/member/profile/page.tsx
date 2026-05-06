@@ -417,11 +417,11 @@ export default function MemberProfilePage() {
                                     </div>
                                 </div>
 
-                                <div className="flex gap-2">
+                                <div className="flex flex-col gap-2">
                                     {isEditing ? (
                                         <>
                                             <button onClick={handleCancel} className="px-5 py-2.5 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors">Cancel</button>
-                                            <button onClick={() => { void handleSave(); }} disabled={isSavingProfile} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-brand-800 text-white hover:bg-brand-700 transition-colors flex items-center gap-2 disabled:opacity-70">{isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save</button>
+                                            <button onClick={() => { void handleSave(); }} disabled={isSavingProfile} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-brand-800 text-white hover:bg-brand-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-70">{isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save</button>
                                         </>
                                     ) : (
                                         <button onClick={() => setIsEditing(true)} className="px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 bg-white border text-stone-700 hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50 transition-all shadow-sm"><Edit2 size={18} /> Edit Profile</button>
