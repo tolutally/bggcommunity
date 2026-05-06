@@ -359,7 +359,7 @@ async function main() {
       });
       const label = await result.issueLabel;
       labelMap[name] = label.id;
-    } catch (e) {
+    } catch {
       // label may exist at workspace level
       const all = await linear.issueLabels({ filter: { name: { eq: name } } });
       if (all.nodes.length > 0) labelMap[name] = all.nodes[0].id;

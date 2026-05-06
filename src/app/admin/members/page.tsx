@@ -1,29 +1,46 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useEffect, useState } from "react";
 import {
     Search,
     LayoutGrid,
     List as ListIcon,
     MoreHorizontal,
     Mail,
-    Eye,
-    Send,
+    UserPlus,
+    AlertTriangle,
     Ban,
+    UserCheck,
+    Trash2,
     Loader2,
+    X,
 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useCursorPagination } from "@/hooks/useCursorPagination";
 import { fetchMembers, getMembersErrorMessage, type MemberRecord } from "@/lib/members";
+import {
+    useAddMember,
+    useSuspendMember,
+    useReinstateMember,
+    useDeleteMember,
+    useSendWarning,
+} from "@/hooks/use-admin-users";
+import { useToast } from "@/components/ui/toast";
 
 export default function AdminMembersPage() {
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCohort, setSelectedCohort] = useState("All");
     const [selectedStatus, setSelectedStatus] = useState("All");
+
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [addForm, setAddForm] = useState({ email: "", firstName: "", lastName: "" });
+    const { trigger: addMember, isLoading: isAdding } = useAddMember();
+    const { toast } = useToast();
 
     const paginationQuery = useMemo(() => ({ limit: 30 }), []);
     const {
@@ -33,6 +50,7 @@ export default function AdminMembersPage() {
         hasMore,
         error,
         loadMore,
+        reload,
     } = useCursorPagination<MemberRecord, typeof paginationQuery>({
         query: paginationQuery,
         loadPage: fetchMembers,
@@ -72,6 +90,7 @@ export default function AdminMembersPage() {
     }, [items, searchQuery, selectedCohort, selectedStatus]);
 
     return (
+        <>
         <ErrorBoundary>
             <div className="p-6 md:p-10 max-w-[1600px] mx-auto space-y-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -83,8 +102,11 @@ export default function AdminMembersPage() {
                         <span className="bg-stone-100 text-stone-600 px-3 py-1 rounded-lg text-sm font-bold">
                             {filteredMembers.length} Members
                         </span>
-                        <button className="bg-stone-900 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-stone-800 transition-colors">
-                            Export CSV
+                        <button
+                            onClick={() => { setAddForm({ email: "", firstName: "", lastName: "" }); setShowAddModal(true); }}
+                            className="bg-brand-800 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2"
+                        >
+                            <UserPlus size={15} /> Add Member
                         </button>
                     </div>
                 </div>
@@ -157,7 +179,7 @@ export default function AdminMembersPage() {
                 ) : viewMode === "grid" ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {filteredMembers.map((member) => (
-                            <MemberGridCard key={member.id} member={member} />
+                            <MemberGridCard key={member.id} member={member} onRefresh={() => void reload()} />
                         ))}
                     </div>
                 ) : (
@@ -176,7 +198,7 @@ export default function AdminMembersPage() {
                                 </thead>
                                 <tbody>
                                     {filteredMembers.map((member) => (
-                                        <MemberListRow key={member.id} member={member} />
+                                        <MemberListRow key={member.id} member={member} onRefresh={() => void reload()} />
                                     ))}
                                 </tbody>
                             </table>
@@ -206,6 +228,72 @@ export default function AdminMembersPage() {
                 ) : null}
             </div>
         </ErrorBoundary>
+
+        {showAddModal ? (
+            <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-bold text-stone-900">Add Member</h2>
+                        <button onClick={() => setShowAddModal(false)} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
+                    </div>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Email *</label>
+                            <input
+                                type="email"
+                                value={addForm.email}
+                                onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+                                className="mt-1 w-full border border-stone-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
+                                placeholder="member@example.com"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">First Name *</label>
+                                <input
+                                    type="text"
+                                    value={addForm.firstName}
+                                    onChange={(e) => setAddForm((f) => ({ ...f, firstName: e.target.value }))}
+                                    className="mt-1 w-full border border-stone-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
+                                    placeholder="First"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Last Name *</label>
+                                <input
+                                    type="text"
+                                    value={addForm.lastName}
+                                    onChange={(e) => setAddForm((f) => ({ ...f, lastName: e.target.value }))}
+                                    className="mt-1 w-full border border-stone-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
+                                    placeholder="Last"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                        <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-2 rounded-xl border border-stone-200 text-sm font-semibold text-stone-700 hover:bg-stone-50">Cancel</button>
+                        <button
+                            disabled={isAdding || !addForm.email.trim() || !addForm.firstName.trim() || !addForm.lastName.trim()}
+                            onClick={async () => {
+                                try {
+                                    await addMember(addForm);
+                                    toast(`${addForm.firstName} added`);
+                                    setShowAddModal(false);
+                                    void reload();
+                                } catch {
+                                    toast("Unable to add member", "error");
+                                }
+                            }}
+                            className="flex-1 px-4 py-2 rounded-xl bg-brand-800 text-white text-sm font-bold hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {isAdding ? <Loader2 size={14} className="animate-spin" /> : null}
+                            Add Member
+                        </button>
+                    </div>
+                </div>
+            </div>
+        ) : null}
+        </>
     );
 }
 
@@ -220,16 +308,14 @@ function statusDotClass(status: string) {
     return "bg-stone-400";
 }
 
-function MemberGridCard({ member }: { member: MemberRecord }) {
+function MemberGridCard({ member, onRefresh }: { member: MemberRecord; onRefresh: () => void }) {
     const cohortLabel = member.cohort ?? "Unassigned";
     const emailLabel = member.email ?? "No email";
 
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col items-center text-center group hover:border-brand-300 hover:shadow-lg hover:shadow-brand-500/5 transition-all cursor-pointer relative overflow-visible">
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col items-center text-center group hover:border-brand-300 hover:shadow-lg hover:shadow-brand-500/5 transition-all relative overflow-visible">
             <div className="absolute top-4 right-4 z-10">
-                <button className="text-stone-300 hover:text-stone-600 transition-colors p-1 rounded-lg hover:bg-stone-100" title="Member actions">
-                    <MoreHorizontal size={20} />
-                </button>
+                <AdminMemberActions member={member} onRefresh={onRefresh} />
             </div>
 
             <div className="relative mb-4">
@@ -262,11 +348,11 @@ function MemberGridCard({ member }: { member: MemberRecord }) {
     );
 }
 
-function MemberListRow({ member }: { member: MemberRecord }) {
+function MemberListRow({ member, onRefresh }: { member: MemberRecord; onRefresh: () => void }) {
     const cohortLabel = member.cohort ?? "Unassigned";
 
     return (
-        <tr className="bg-white border-b border-stone-100 hover:bg-stone-50 transition-colors cursor-pointer group">
+        <tr className="bg-white border-b border-stone-100 hover:bg-stone-50 transition-colors group">
             <td className="px-6 py-4 flex items-center gap-3">
                 <AvatarInitials name={member.name} src={member.avatarUrl ?? undefined} size="md" />
                 <div>
@@ -289,18 +375,145 @@ function MemberListRow({ member }: { member: MemberRecord }) {
                 {member.joinedLabel}
             </td>
             <td className="px-6 py-4 text-right">
-                <div className="relative inline-block">
-                    <button className="text-stone-400 hover:text-brand-700 transition-colors p-2 hover:bg-brand-50 rounded-full" title="Member actions">
-                        <MoreHorizontal size={18} />
-                    </button>
-                    <div className="sr-only">View profile, send email, and deactivate actions are available in the row menu.</div>
-                    <div className="hidden">
-                        <Eye size={15} />
-                        <Send size={15} />
-                        <Ban size={15} />
-                    </div>
-                </div>
+                <AdminMemberActions member={member} onRefresh={onRefresh} />
             </td>
         </tr>
+    );
+}
+
+function AdminMemberActions({ member, onRefresh }: { member: MemberRecord; onRefresh: () => void }) {
+    const [open, setOpen] = useState(false);
+    const [showWarn, setShowWarn] = useState(false);
+    const [showDelete, setShowDelete] = useState(false);
+    const [warnMsg, setWarnMsg] = useState("");
+    const ref = useRef<HTMLDivElement>(null);
+    const { toast } = useToast();
+
+    const { trigger: suspend, isLoading: suspending } = useSuspendMember(member.id);
+    const { trigger: reinstate, isLoading: reinstating } = useReinstateMember(member.id);
+    const { trigger: deleteMember, isLoading: deleting } = useDeleteMember(member.id);
+    const { trigger: sendWarning, isLoading: warning } = useSendWarning(member.id);
+
+    const isSuspended = member.status.toLowerCase().includes("suspend");
+    const busy = suspending || reinstating || deleting || warning;
+
+    useEffect(() => {
+        function handleClickOutside(e: MouseEvent) {
+            if (ref.current && !ref.current.contains(e.target as Node)) {
+                setOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const doSuspend = async () => {
+        setOpen(false);
+        try { await suspend(); toast(`${member.name} suspended`); onRefresh(); }
+        catch { toast("Unable to suspend member", "error"); }
+    };
+
+    const doReinstate = async () => {
+        setOpen(false);
+        try { await reinstate(); toast(`${member.name} reinstated`); onRefresh(); }
+        catch { toast("Unable to reinstate member", "error"); }
+    };
+
+    const doDelete = async () => {
+        setShowDelete(false);
+        try { await deleteMember(); toast(`${member.name} removed`); onRefresh(); }
+        catch { toast("Unable to remove member", "error"); }
+    };
+
+    const doWarn = async () => {
+        if (!warnMsg.trim()) return;
+        setShowWarn(false);
+        try { await sendWarning({ message: warnMsg.trim() }); toast(`Warning sent to ${member.name}`); setWarnMsg(""); }
+        catch { toast("Unable to send warning", "error"); }
+    };
+
+    return (
+        <>
+            <div ref={ref} className="relative inline-block">
+                <button
+                    onClick={() => setOpen((v) => !v)}
+                    disabled={busy}
+                    title="Member actions"
+                    className="text-stone-400 hover:text-brand-700 transition-colors p-1.5 hover:bg-brand-50 rounded-lg disabled:opacity-40"
+                >
+                    {busy ? <Loader2 size={16} className="animate-spin" /> : <MoreHorizontal size={18} />}
+                </button>
+
+                {open ? (
+                    <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl border border-stone-200 shadow-lg z-20 py-1">
+                        <button
+                            onClick={() => { setOpen(false); setShowWarn(true); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+                        >
+                            <AlertTriangle size={14} className="text-amber-500" /> Send Warning
+                        </button>
+                        {isSuspended ? (
+                            <button
+                                onClick={() => void doReinstate()}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50 transition-colors"
+                            >
+                                <UserCheck size={14} /> Reinstate Account
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => void doSuspend()}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors"
+                            >
+                                <Ban size={14} /> Suspend Account
+                            </button>
+                        )}
+                        <div className="border-t border-stone-100 my-1" />
+                        <button
+                            onClick={() => { setOpen(false); setShowDelete(true); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                            <Trash2 size={14} /> Remove Account
+                        </button>
+                    </div>
+                ) : null}
+            </div>
+
+            {showWarn ? (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+                        <h2 className="text-lg font-bold text-stone-900">Send Warning to {member.name}</h2>
+                        <textarea
+                            value={warnMsg}
+                            onChange={(e) => setWarnMsg(e.target.value)}
+                            rows={4}
+                            placeholder="Describe the policy violation or behaviour concern…"
+                            className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                        />
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowWarn(false)} className="flex-1 px-4 py-2 rounded-xl border border-stone-200 text-sm font-semibold text-stone-700 hover:bg-stone-50">Cancel</button>
+                            <button
+                                disabled={!warnMsg.trim() || warning}
+                                onClick={() => void doWarn()}
+                                className="flex-1 px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-60 flex items-center justify-center gap-2"
+                            >
+                                {warning ? <Loader2 size={14} className="animate-spin" /> : null}
+                                Send Warning
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            <ConfirmModal
+                open={showDelete}
+                title="Remove Member"
+                description={`This will permanently remove ${member.name}'s account. This action cannot be undone.`}
+                confirmLabel="Remove"
+                variant="danger"
+                onConfirm={() => void doDelete()}
+                onClose={() => setShowDelete(false)}
+                loading={deleting}
+            />
+        </>
     );
 }

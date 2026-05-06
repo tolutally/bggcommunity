@@ -311,7 +311,6 @@ export default function AdminCohortDetailPage() {
                         <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm space-y-5">
                             <h3 className="font-bold text-stone-900">Cohort Stats</h3>
                             <div className="space-y-4">
-                                <StatRow icon={Users} label="Members" value={`${cohort.members.length} / ${cohort.maxMembers}`} />
                                 <StatRow icon={Users} label="Members" value={`${memberCount} / ${cohort.maxMembers ?? "-"}`} />
                                 <StatRow icon={Calendar} label="Start" value={startDateLabel} />
                                 <StatRow icon={Calendar} label="End" value={endDateLabel} />

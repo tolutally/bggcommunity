@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useUser } from "@/context/UserContext";
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
@@ -93,7 +95,12 @@ export default function MentorSettingsPage() {
     )
 }
 
-function InputGroup({ label, value }: any) {
+interface InputGroupProps {
+    label: string;
+    value: string;
+}
+
+function InputGroup({ label, value }: InputGroupProps) {
     return (
         <div>
             <label className="block text-sm font-semibold text-stone-700 mb-2">{label}</label>
@@ -102,7 +109,13 @@ function InputGroup({ label, value }: any) {
     )
 }
 
-function ToggleRow({ label, checked, description }: any) {
+interface ToggleRowProps {
+    label: string;
+    checked: boolean;
+    description?: string;
+}
+
+function ToggleRow({ label, checked, description }: ToggleRowProps) {
     return (
         <div className="flex items-center justify-between">
             <div>

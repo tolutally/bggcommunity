@@ -1,7 +1,9 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useUser } from "@/context/UserContext";
-import { Shield, Server, Plug, AlertTriangle, Save, RefreshCw, Database, Check, X, Eye, EyeOff } from "lucide-react";
+import { Shield, Server, Plug, AlertTriangle, Save, RefreshCw, Database, Check, Eye, EyeOff } from "lucide-react";
 import { useState, useCallback } from "react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { ErrorBoundary } from "@/components/ui/error-boundary";

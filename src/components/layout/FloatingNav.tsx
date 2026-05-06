@@ -1,11 +1,13 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
 import { Bell, ChevronDown, Search, Menu, X, type LucideIcon } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 type NavItem = {
     name: string;
@@ -28,12 +30,8 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
     const pathname = usePathname();
     const { user } = useUser();
     const [showProfileMenu, setShowProfileMenu] = useState(false);
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-    // Close mobile menu on route change
-    useEffect(() => {
-        setMobileMenuOpen(false);
-    }, [pathname]);
+    const [mobileMenuState, setMobileMenuState] = useState({ pathname, open: false });
+    const mobileMenuOpen = mobileMenuState.open && mobileMenuState.pathname === pathname;
 
     // Flatten nav items for the main nav bar
     const allNavItems = navGroups.flatMap(group => group.items);
@@ -41,12 +39,6 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
     // Separate settings from main nav
     const mainNavItems = allNavItems.filter(item => item.name !== "Settings");
     const settingsItem = allNavItems.find(item => item.name === "Settings");
-
-    const moduleColors = {
-        member: "from-brand-700 to-brand-600",
-        mentor: "from-emerald-600 to-teal-600",
-        admin: "from-rose-600 to-pink-600",
-    };
 
     const moduleLabels = {
         member: "Member",
@@ -70,7 +62,7 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
                         {/* Hamburger Menu Button - Mobile Only */}
                         <button
                             type="button"
-                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            onClick={() => setMobileMenuState({ pathname, open: !mobileMenuOpen })}
                             className="md:hidden p-2 text-stone-600 hover:bg-stone-100 rounded-lg transition-colors"
                         >
                             {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
@@ -206,7 +198,7 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
             {mobileMenuOpen && (
                 <div 
                     className="md:hidden fixed inset-0 bg-black/50 z-40"
-                    onClick={() => setMobileMenuOpen(false)}
+                    onClick={() => setMobileMenuState({ pathname, open: false })}
                 />
             )}
 
@@ -245,7 +237,7 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
                                     <Link
                                         key={item.name}
                                         href={item.href}
-                                        onClick={() => setMobileMenuOpen(false)}
+                                        onClick={() => setMobileMenuState({ pathname, open: false })}
                                         className={cn(
                                             "flex items-center gap-3 px-4 py-3 mx-2 rounded-xl transition-all",
                                             isActive

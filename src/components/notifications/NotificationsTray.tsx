@@ -1,32 +1,22 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
 import { 
     Bell, 
     X, 
     Calendar, 
     MessageSquare, 
+    Briefcase,
     Award, 
     Users, 
     AlertCircle,
     CheckCircle2,
     Clock,
-    Trash2
 } from "lucide-react";
-import {
-    fetchNotificationsFeed,
-    loadNotificationState,
-    saveNotificationState,
-    type NotificationRecord,
-    type NotificationType,
-} from "@/lib/notifications";
+import { useNotifications, useMarkAllNotificationsRead, useMarkNotificationRead } from "@/hooks/use-notifications";
+import type { AppNotification, NotificationType } from "@/lib/types";
 import { getApiErrorMessage } from "@/lib/jobs";
 import { useToast } from "@/components/ui/toast";
-
-interface Notification extends NotificationRecord {
-    read: boolean;
-}
 
 function formatRelativeTime(value: string) {
     const date = new Date(value);
@@ -45,84 +35,77 @@ function formatRelativeTime(value: string) {
     return date.toLocaleDateString();
 }
 
-const notificationIcons: Record<NotificationType, React.ReactNode> = {
-    event: <Calendar className="w-4 h-4 text-brand-600" />,
-    message: <MessageSquare className="w-4 h-4 text-blue-600" />,
-    achievement: <Award className="w-4 h-4 text-accent-500" />,
-    community: <Users className="w-4 h-4 text-emerald-600" />,
-    system: <AlertCircle className="w-4 h-4 text-stone-500" />,
-    reminder: <Clock className="w-4 h-4 text-rose-500" />,
-};
-
-const notificationBgColors: Record<NotificationType, string> = {
-    event: "bg-brand-100",
-    message: "bg-blue-100",
-    achievement: "bg-accent-100",
-    community: "bg-emerald-100",
-    system: "bg-stone-100",
-    reminder: "bg-rose-100",
-};
+function getNotificationPresentation(type: NotificationType | string) {
+    switch (type) {
+        case "EVENT_CREATED":
+            return {
+                icon: <Calendar className="w-4 h-4 text-brand-600" />,
+                bgColor: "bg-brand-100",
+            };
+        case "SESSION_REMINDER":
+            return {
+                icon: <Clock className="w-4 h-4 text-rose-500" />,
+                bgColor: "bg-rose-100",
+            };
+        case "JOB_POSTED":
+        case "REFERRAL_UPDATE":
+            return {
+                icon: <Briefcase className="w-4 h-4 text-blue-600" />,
+                bgColor: "bg-blue-100",
+            };
+        case "ANNOUNCEMENT":
+        case "COHORT_INVITE":
+            return {
+                icon: <Users className="w-4 h-4 text-emerald-600" />,
+                bgColor: "bg-emerald-100",
+            };
+        case "REPORT_RESOLVED":
+            return {
+                icon: <Award className="w-4 h-4 text-accent-500" />,
+                bgColor: "bg-accent-100",
+            };
+        case "WARNING_SENT":
+            return {
+                icon: <AlertCircle className="w-4 h-4 text-amber-600" />,
+                bgColor: "bg-amber-100",
+            };
+        default:
+            return {
+                icon: <MessageSquare className="w-4 h-4 text-stone-500" />,
+                bgColor: "bg-stone-100",
+            };
+    }
+}
 
 export default function NotificationsTray() {
-    const { getToken, userId } = useAuth();
     const { toast } = useToast();
     const [isOpen, setIsOpen] = useState(false);
-    const [feed, setFeed] = useState<NotificationRecord[]>([]);
-    const [state, setState] = useState<{ readIds: string[]; dismissedIds: string[] }>({ readIds: [], dismissedIds: [] });
     const [filter, setFilter] = useState<"all" | "unread">("all");
-    const [isLoading, setIsLoading] = useState(true);
+    const [optimisticReadIds, setOptimisticReadIds] = useState<string[]>([]);
     const trayRef = useRef<HTMLDivElement>(null);
+    const { notifications: apiNotifications, unreadCount: apiUnreadCount, isLoading, error } = useNotifications();
+    const { trigger: markNotificationRead } = useMarkNotificationRead();
+    const { trigger: markAllNotificationsRead, isLoading: isMarkingAllRead } = useMarkAllNotificationsRead();
 
-    useEffect(() => {
-        setState(loadNotificationState(userId ?? null));
-    }, [userId]);
+    const notifications: AppNotification[] = apiNotifications.map((notification) => (
+        optimisticReadIds.includes(notification.id)
+            ? { ...notification, read: true }
+            : notification
+    ));
 
-    useEffect(() => {
-        saveNotificationState(userId ?? null, state);
-    }, [state, userId]);
-
-    const notifications: Notification[] = (() => {
-        const readSet = new Set(state.readIds);
-        const dismissedSet = new Set(state.dismissedIds);
-        return feed
-            .filter((item) => !dismissedSet.has(item.id))
-            .map((item) => ({ ...item, read: readSet.has(item.id) }));
-    })();
-
-    const unreadCount = notifications.filter((n) => !n.read).length;
+    const unreadCount = Math.max(
+        0,
+        apiUnreadCount - optimisticReadIds.filter((id) => apiNotifications.some((notification) => notification.id === id && !notification.read)).length,
+    );
     const filteredNotifications = filter === "all" 
         ? notifications 
         : notifications.filter((n) => !n.read);
 
     useEffect(() => {
-        let cancelled = false;
-
-        async function loadNotifications() {
-            setIsLoading(true);
-            try {
-                const items = await fetchNotificationsFeed(getToken);
-                if (!cancelled) {
-                    setFeed(items);
-                }
-            } catch (error) {
-                if (!cancelled) {
-                    toast(getApiErrorMessage(error, "Unable to load notifications right now."), "error");
-                }
-            } finally {
-                if (!cancelled) {
-                    setIsLoading(false);
-                }
-            }
+        if (error && isOpen) {
+            toast(getApiErrorMessage(error, "Unable to load notifications right now."), "error");
         }
-
-        if (isOpen) {
-            void loadNotifications();
-        }
-
-        return () => {
-            cancelled = true;
-        };
-    }, [getToken, isOpen, toast]);
+    }, [error, isOpen, toast]);
 
     // Close tray when clicking outside
     useEffect(() => {
@@ -141,24 +124,36 @@ export default function NotificationsTray() {
         };
     }, [isOpen]);
 
-    const markAsRead = (id: string) => {
-        setState((prev) => prev.readIds.includes(id)
-            ? prev
-            : { ...prev, readIds: [...prev.readIds, id] });
+    const markAsRead = async (id: string) => {
+        const target = notifications.find((notification) => notification.id === id);
+        if (!target || target.read || optimisticReadIds.includes(id)) {
+            return;
+        }
+
+        setOptimisticReadIds((prev) => [...prev, id]);
+
+        try {
+            await markNotificationRead(id);
+        } catch (readError) {
+            setOptimisticReadIds((prev) => prev.filter((value) => value !== id));
+            toast(getApiErrorMessage(readError, "Unable to update notification right now."), "error");
+        }
     };
 
-    const markAllAsRead = () => {
-        setState((prev) => ({
-            ...prev,
-            readIds: Array.from(new Set([...prev.readIds, ...notifications.map((n) => n.id)])),
-        }));
-    };
+    const markAllAsRead = async () => {
+        const unreadIds = notifications.filter((notification) => !notification.read).map((notification) => notification.id);
+        if (unreadIds.length === 0) {
+            return;
+        }
 
-    const deleteNotification = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setState((prev) => prev.dismissedIds.includes(id)
-            ? prev
-            : { ...prev, dismissedIds: [...prev.dismissedIds, id] });
+        setOptimisticReadIds((prev) => Array.from(new Set([...prev, ...unreadIds])));
+
+        try {
+            await markAllNotificationsRead();
+        } catch (readError) {
+            setOptimisticReadIds((prev) => prev.filter((value) => !unreadIds.includes(value)));
+            toast(getApiErrorMessage(readError, "Unable to update notifications right now."), "error");
+        }
     };
 
     return (
@@ -230,6 +225,7 @@ export default function NotificationsTray() {
                         {unreadCount > 0 && (
                             <button
                                 onClick={markAllAsRead}
+                                disabled={isMarkingAllRead}
                                 className="text-xs text-brand-600 hover:text-brand-800 font-semibold flex items-center gap-1 transition-colors"
                             >
                                 <CheckCircle2 className="w-3 h-3" />
@@ -254,35 +250,30 @@ export default function NotificationsTray() {
                                         : "No notifications yet"}
                                 </p>
                                 <p className="text-xs text-stone-400 mt-1">
-                                    We'll notify you when something happens
+                                    We&apos;ll notify you when something happens
                                 </p>
                             </div>
                         ) : (
                             filteredNotifications.map((notification) => (
                                 <div
                                     key={notification.id}
-                                    onClick={() => markAsRead(notification.id)}
+                                    onClick={() => void markAsRead(notification.id)}
                                     className={`p-4 flex gap-3 hover:bg-stone-50 transition-colors cursor-pointer group ${
                                         !notification.read ? "bg-brand-50/50" : ""
                                     }`}
                                 >
                                     {/* Icon or Avatar */}
                                     <div className="flex-shrink-0">
-                                        {notification.avatarUrl ? (
-                                            <img
-                                                src={notification.avatarUrl}
-                                                alt=""
-                                                className="w-10 h-10 rounded-full object-cover"
-                                            />
-                                        ) : (
-                                            <div
-                                                className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                                    notificationBgColors[notification.type]
-                                                }`}
-                                            >
-                                                {notificationIcons[notification.type]}
-                                            </div>
-                                        )}
+                                        {(() => {
+                                            const presentation = getNotificationPresentation(notification.type);
+                                            return (
+                                                <div
+                                                    className={`w-10 h-10 rounded-full flex items-center justify-center ${presentation.bgColor}`}
+                                                >
+                                                    {presentation.icon}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                     {/* Content */}
@@ -307,19 +298,9 @@ export default function NotificationsTray() {
                                             </div>
                                         </div>
                                         <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">
-                                            {notification.description}
+                                            {notification.body}
                                         </p>
                                     </div>
-
-                                    {/* Delete Button */}
-                                    <button
-                                        onClick={(e) => deleteNotification(notification.id, e)}
-                                        title="Dismiss notification"
-                                        aria-label="Dismiss notification"
-                                        className="opacity-0 group-hover:opacity-100 p-1.5 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all flex-shrink-0 self-center"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
                                 </div>
                             ))
                         )}

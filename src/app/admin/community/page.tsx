@@ -4,7 +4,7 @@ import { Users, Plus, Search, Edit2, Trash2, Hash, Loader2, X, Megaphone } from 
 import { useState, useMemo } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
-import { useCommunityGroups, useCommunityGroup } from "@/hooks/use-community";
+import { useCommunityGroups } from "@/hooks/use-community";
 import { useCreateGroup, useUpdateGroup, useDeleteGroup, useAddChannel, useAnnounce } from "@/hooks/use-admin-community";
 import { useToast } from "@/components/ui/toast";
 import type { CommunityGroup } from "@/lib/types";

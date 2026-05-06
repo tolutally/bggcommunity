@@ -66,7 +66,7 @@ function normalizeMember(value: unknown): MemberRecord {
     const record = isRecord(value) ? value : {};
     const profile = isRecord(record.profile) ? record.profile : {};
     const createdAt = readString(record.createdAt) ?? readString(record.joinedAt);
-    const status = readString(record.status) ?? (record.isPublic === false ? "Private" : "Active") ?? "Active";
+    const status = readString(record.status) ?? (record.isPublic === false ? "Private" : "Active");
 
     return {
         id: String(record.id ?? record.userId ?? buildName(record)),

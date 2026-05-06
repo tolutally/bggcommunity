@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState } from "react";
 import { FileText, NotebookPen, MessageSquare, ArrowRight, Heart } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -154,7 +156,16 @@ export default function MentorMenteesPage() {
     );
 }
 
-function ReviewCard({ user, avatar, type, title, due, urgent }: any) {
+interface ReviewCardProps {
+    user: string;
+    avatar: string;
+    type: string;
+    title: string;
+    due: string;
+    urgent?: boolean;
+}
+
+function ReviewCard({ user, avatar, type, title, due, urgent = false }: ReviewCardProps) {
     return (
         <div className="min-w-[280px] bg-white p-5 rounded-2xl border border-stone-200 hover:border-brand-300 transition-all cursor-pointer group snap-start">
             <div className="flex justify-between items-start mb-3">
@@ -177,7 +188,19 @@ function ReviewCard({ user, avatar, type, title, due, urgent }: any) {
     )
 }
 
-function MenteeCard({ mentee }: any) {
+interface Mentee {
+    id: number;
+    name: string;
+    title: string;
+    blurb: string;
+    image: string;
+    cohort: string;
+    status: string;
+    progress: number;
+    nextMilestone: string;
+}
+
+function MenteeCard({ mentee }: { mentee: Mentee }) {
     const [showNotes, setShowNotes] = useState(false);
 
     return (
@@ -239,7 +262,18 @@ function MenteeCard({ mentee }: any) {
     )
 }
 
-function ActivityRow({ user, avatar, action, target, time, content, interactive, type }: any) {
+interface ActivityRowProps {
+    user: string;
+    avatar: string;
+    action: string;
+    target: string;
+    time: string;
+    content?: string;
+    interactive?: boolean;
+    type?: string;
+}
+
+function ActivityRow({ user, avatar, action, target, time, content, interactive }: ActivityRowProps) {
     return (
         <div className="p-6 hover:bg-stone-50 transition-colors">
             <div className="flex gap-4">
@@ -253,7 +287,7 @@ function ActivityRow({ user, avatar, action, target, time, content, interactive,
                     </div>
                     {content && (
                         <p className="mt-2 text-sm text-stone-600 bg-stone-50 p-3 rounded-lg border border-stone-100">
-                            "{content}"
+                            &ldquo;{content}&rdquo;
                         </p>
                     )}
                     {interactive && (

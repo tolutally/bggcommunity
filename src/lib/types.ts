@@ -179,6 +179,7 @@ export interface CommunityGroup {
   description: string | null;
   memberCount: number;
   newPostCount: number;
+  isJoined?: boolean;
   createdAt: string;
 }
 
@@ -226,4 +227,96 @@ export interface MemberCard {
   status?: string;
   createdAt?: string;
   profile: Profile | null;
+}
+
+// ── Notifications ──
+
+export type NotificationType =
+  | "JOB_POSTED"
+  | "EVENT_CREATED"
+  | "ANNOUNCEMENT"
+  | "SESSION_REMINDER"
+  | "COHORT_INVITE"
+  | "REFERRAL_UPDATE"
+  | "WARNING_SENT"
+  | "REPORT_RESOLVED";
+
+export interface NotificationMeta {
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType | string;
+  title: string;
+  body: string;
+  referenceType: string | null;
+  referenceId: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface NotificationsPayload {
+  notifications: AppNotification[];
+  unreadCount: number;
+  meta: NotificationMeta;
+}
+
+// ── Developer Plan ──
+
+export interface Milestone {
+  id: string;
+  title: string;
+  order: number;
+  completed: boolean;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface DeveloperPlan {
+  id: string;
+  userId: string;
+  milestones: Milestone[];
+  progress: number;
+  createdAt: string;
+}
+
+// ── Moderation ──
+
+export type ModerationReportStatus = "PENDING" | "DISMISSED" | "WARNED" | "DELETED";
+export type ModerationReportType = "POST" | "COMMENT" | "PROFILE";
+
+export interface ModerationReport {
+  id: string;
+  type: ModerationReportType;
+  status: ModerationReportStatus;
+  reason: string;
+  content: string | null;
+  reportedUser: {
+    id: string;
+    email: string;
+    profile: Pick<Profile, "firstName" | "lastName" | "avatarUrl"> | null;
+  };
+  reporter: {
+    id: string;
+    email: string;
+    profile: Pick<Profile, "firstName" | "lastName" | "avatarUrl"> | null;
+  } | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+// ── Analytics ──
+
+export interface AnalyticsOverview {
+  totalMembers: number;
+  activeThisMonth: number;
+  newThisMonth: number;
+  totalEvents: number;
+  totalRsvpsThisMonth: number;
+  totalCohorts: number;
+  activeCohorts: number;
+  openReports: number;
 }

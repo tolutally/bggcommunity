@@ -2,7 +2,7 @@
 
 import { useAuthSWR } from "./use-auth-swr";
 import { useApiMutation } from "./use-api-mutation";
-import type { ApiResponse, PaginatedResponse, Event, RsvpUser } from "@/lib/types";
+import type { ApiResponse, Event, RsvpUser } from "@/lib/types";
 
 /**
  * Admin: create a new event via POST /admin/events.
