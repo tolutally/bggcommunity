@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
-import { useSignIn } from "@clerk/nextjs";
+import { useClerk, useSignIn } from "@clerk/nextjs";
 
 function GoogleIcon() {
   return (
@@ -36,7 +36,8 @@ function FacebookIcon() {
 type OAuthStrategy = "oauth_google" | "oauth_linkedin_oidc" | "oauth_facebook";
 
 export default function SignInPage() {
-  const { signIn, setActive } = useSignIn();
+  const { signIn } = useSignIn();
+  const { setActive } = useClerk();
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -51,15 +52,14 @@ export default function SignInPage() {
     setLoading(true);
     setError("");
     try {
-      const signInResult = await signIn.password({ identifier: email, password });
-      const { error: signInError } = signInResult;
+      const { error: signInError } = await signIn.password({ identifier: email, password });
       if (signInError) {
         setError(signInError.message ?? "Sign in failed. Please try again.");
         return;
       }
-      if (signInResult.status === "complete") {
-        if (signInResult.createdSessionId) {
-          await setActive({ session: signInResult.createdSessionId });
+      if (signIn.status === "complete") {
+        if (signIn.createdSessionId) {
+          await setActive({ session: signIn.createdSessionId });
         } else {
           await signIn.finalize();
         }

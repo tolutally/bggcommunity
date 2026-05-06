@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
-import { useSignUp } from "@clerk/nextjs";
+import { useClerk, useSignUp } from "@clerk/nextjs";
 
 function GoogleIcon() {
   return (
@@ -37,7 +37,8 @@ type OAuthStrategy = "oauth_google" | "oauth_linkedin_oidc" | "oauth_facebook";
 type Step = "form" | "verify";
 
 export default function SignUpPage() {
-  const { signUp, setActive } = useSignUp();
+  const { signUp } = useSignUp();
+  const { setActive } = useClerk();
   const router = useRouter();
 
   const [step, setStep] = useState<Step>("form");
@@ -96,15 +97,14 @@ export default function SignUpPage() {
     setLoading(true);
     setError("");
     try {
-      const verifyResult = await signUp.verifications.verifyEmailCode({ code: verificationCode });
-      const { error: verifyError } = verifyResult;
+      const { error: verifyError } = await signUp.verifications.verifyEmailCode({ code: verificationCode });
       if (verifyError) {
         setError(verifyError.message ?? "Verification failed.");
         return;
       }
-      if (verifyResult.status === "complete") {
-        if (verifyResult.createdSessionId) {
-          await setActive({ session: verifyResult.createdSessionId });
+      if (signUp.status === "complete") {
+        if (signUp.createdSessionId) {
+          await setActive({ session: signUp.createdSessionId });
         } else {
           await signUp.finalize();
         }

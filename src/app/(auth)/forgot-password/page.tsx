@@ -4,12 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff } from "lucide-react";
-import { useSignIn } from "@clerk/nextjs";
+import { useClerk, useSignIn } from "@clerk/nextjs";
 
 type Step = "email" | "reset" | "done";
 
 export default function ForgotPasswordPage() {
-  const { signIn, setActive } = useSignIn();
+  const { signIn } = useSignIn();
+  const { setActive } = useClerk();
   const router = useRouter();
 
   const [step, setStep] = useState<Step>("email");
@@ -89,9 +90,9 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      if (resetResult.status === "complete") {
-        if (resetResult.createdSessionId) {
-          await setActive({ session: resetResult.createdSessionId });
+      if (signIn.status === "complete") {
+        if (signIn.createdSessionId) {
+          await setActive({ session: signIn.createdSessionId });
         } else {
           await signIn.finalize();
         }
