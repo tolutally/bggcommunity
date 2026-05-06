@@ -37,7 +37,7 @@ type OAuthStrategy = "oauth_google" | "oauth_linkedin_oidc" | "oauth_facebook";
 type Step = "form" | "verify";
 
 export default function SignUpPage() {
-  const { signUp } = useSignUp();
+  const { signUp, setActive } = useSignUp();
   const router = useRouter();
 
   const [step, setStep] = useState<Step>("form");
@@ -96,13 +96,18 @@ export default function SignUpPage() {
     setLoading(true);
     setError("");
     try {
-      const { error: verifyError } = await signUp.verifications.verifyEmailCode({ code: verificationCode });
+      const verifyResult = await signUp.verifications.verifyEmailCode({ code: verificationCode });
+      const { error: verifyError } = verifyResult;
       if (verifyError) {
         setError(verifyError.message ?? "Verification failed.");
         return;
       }
-      if (signUp.status === "complete") {
-        await signUp.finalize();
+      if (verifyResult.status === "complete") {
+        if (verifyResult.createdSessionId) {
+          await setActive({ session: verifyResult.createdSessionId });
+        } else {
+          await signUp.finalize();
+        }
         router.replace("/onboarding");
       }
     } catch (err: unknown) {
