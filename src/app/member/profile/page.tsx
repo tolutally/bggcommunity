@@ -103,6 +103,8 @@ export default function MemberProfilePage() {
     const [isEditing, setIsEditing] = useState(false);
     const [errors, setErrors] = useState<FieldErrors>({});
     const { toast } = useToast();
+    const toastRef = useRef(toast);
+    toastRef.current = toast;
     const [isOpenToWork, setIsOpenToWork] = useState(false);
     const [isProfileVisible, setIsProfileVisible] = useState(true);
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
@@ -159,7 +161,7 @@ export default function MemberProfilePage() {
                 }
             } catch (error) {
                 if (!cancelled) {
-                    toast(getUsersErrorMessage(error), "error");
+                    toastRef.current(getUsersErrorMessage(error), "error");
                 }
             } finally {
                 if (!cancelled) {
@@ -173,7 +175,7 @@ export default function MemberProfilePage() {
         return () => {
             cancelled = true;
         };
-    }, [getToken, toast]);
+    }, [getToken]);
     /* --- Handlers --- */
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
