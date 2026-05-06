@@ -58,23 +58,17 @@ interface FieldErrors {
 /* ------------------------------------------------------------------ */
 
 const DEFAULT_FORM: FormData = {
-    occupation: "Product Designer",
-    industry: "EdTech",
-    location: "Lagos, Nigeria",
-    bio: "Passionate about creating accessible and inclusive user experiences. Currently focusing on educational technology solutions for emerging markets.",
-    website: "https://nia-designs.com",
-    linkedin: "nia-adebayo",
-    twitter: "niadesigns",
-    company: "BGG Tech",
+    occupation: "",
+    industry: "",
+    location: "",
+    bio: "",
+    website: "",
+    linkedin: "",
+    twitter: "",
+    company: "",
 };
 
-const DEFAULT_GOALS: DevGoal[] = [
-    { id: 1, text: "Build Portfolio", done: true },
-    { id: 2, text: "10 Coffee Chats", done: true },
-    { id: 3, text: "Update Resume", done: true },
-    { id: 4, text: "Apply to 5 Jobs", done: false },
-    { id: 5, text: "Mock Interview", done: false },
-];
+const DEFAULT_GOALS: DevGoal[] = [];
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -146,14 +140,14 @@ export default function MemberProfilePage() {
                 }
 
                 const nextForm: FormData = {
-                    occupation: profile.occupation || DEFAULT_FORM.occupation,
-                    industry: profile.industry || DEFAULT_FORM.industry,
-                    location: profile.location || DEFAULT_FORM.location,
-                    bio: profile.bio || DEFAULT_FORM.bio,
-                    website: profile.website || DEFAULT_FORM.website,
-                    linkedin: profile.linkedin || DEFAULT_FORM.linkedin,
-                    twitter: profile.twitter || DEFAULT_FORM.twitter,
-                    company: profile.company || DEFAULT_FORM.company,
+                    occupation: profile.occupation ?? "",
+                    industry: profile.industry ?? "",
+                    location: profile.location ?? "",
+                    bio: profile.bio ?? "",
+                    website: profile.website ?? "",
+                    linkedin: profile.linkedin ?? "",
+                    twitter: profile.twitter ?? "",
+                    company: profile.company ?? "",
                 };
 
                 setFormData(nextForm);
@@ -576,11 +570,13 @@ export default function MemberProfilePage() {
                                         <input type="url" name="website" value={formData.website} onChange={handleChange} className={inputCls("website")} placeholder="https://yoursite.com" />
                                         {errors.website && <p className="text-xs text-rose-500 mt-1">{errors.website}</p>}
                                     </div>
-                                ) : (
+                                ) : formData.website ? (
                                     <a href={formData.website} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between w-full px-4 py-3 bg-stone-50 hover:bg-brand-50 border border-stone-100 hover:border-brand-200 rounded-xl transition-all group">
-                                        <span className="text-stone-700 font-medium truncate group-hover:text-brand-700">{formData.website.replace("https://", "")}</span>
+                                        <span className="text-stone-700 font-medium truncate group-hover:text-brand-700">{formData.website.replace(/^https?:\/\//, "")}</span>
                                         <Globe size={16} className="text-stone-400 group-hover:text-brand-400" />
                                     </a>
+                                ) : (
+                                    <p className="text-sm text-stone-400 italic px-1">Not added yet</p>
                                 )}
                             </div>
 
@@ -592,11 +588,13 @@ export default function MemberProfilePage() {
                                         <input type="text" name="linkedin" value={formData.linkedin} onChange={handleChange} className={inputCls("linkedin")} placeholder="username" />
                                         {errors.linkedin && <p className="text-xs text-rose-500 mt-1">{errors.linkedin}</p>}
                                     </div>
-                                ) : (
+                                ) : formData.linkedin ? (
                                     <a href={`https://linkedin.com/in/${formData.linkedin}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between w-full px-4 py-3 bg-stone-50 hover:bg-blue-50 border border-stone-100 hover:border-blue-200 rounded-xl transition-all group">
                                         <span className="text-stone-700 font-medium truncate group-hover:text-blue-700">/{formData.linkedin}</span>
                                         <Linkedin size={16} className="text-stone-400 group-hover:text-blue-400" />
                                     </a>
+                                ) : (
+                                    <p className="text-sm text-stone-400 italic px-1">Not added yet</p>
                                 )}
                             </div>
 
@@ -608,11 +606,13 @@ export default function MemberProfilePage() {
                                         <input type="text" name="twitter" value={formData.twitter} onChange={handleChange} className={inputCls("twitter")} placeholder="username" />
                                         {errors.twitter && <p className="text-xs text-rose-500 mt-1">{errors.twitter}</p>}
                                     </div>
-                                ) : (
+                                ) : formData.twitter ? (
                                     <a href={`https://x.com/${formData.twitter}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between w-full px-4 py-3 bg-stone-50 hover:bg-stone-100 border border-stone-100 hover:border-stone-300 rounded-xl transition-all group">
                                         <span className="text-stone-700 font-medium truncate group-hover:text-stone-900">@{formData.twitter}</span>
                                         <Twitter size={16} className="text-stone-400 group-hover:text-stone-900" />
                                     </a>
+                                ) : (
+                                    <p className="text-sm text-stone-400 italic px-1">Not added yet</p>
                                 )}
                             </div>
                         </div>
