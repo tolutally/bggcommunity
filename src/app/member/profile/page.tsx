@@ -95,7 +95,7 @@ function isValidURL(s: string): boolean {
 
 export default function MemberProfilePage() {
     const { user } = useUser();
-    const { getToken } = useAuth();
+    const { getToken, isLoaded, isSignedIn } = useAuth();
 
     /* --- Profile form --- */
     const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
@@ -131,6 +131,8 @@ export default function MemberProfilePage() {
     const [deleteModal, setDeleteModal] = useState(false);
 
     useEffect(() => {
+        if (!isLoaded || !isSignedIn) return;
+
         let cancelled = false;
 
         async function loadProfile() {
@@ -175,7 +177,7 @@ export default function MemberProfilePage() {
         return () => {
             cancelled = true;
         };
-    }, [getToken]);
+    }, [getToken, isLoaded, isSignedIn]);
     /* --- Handlers --- */
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
