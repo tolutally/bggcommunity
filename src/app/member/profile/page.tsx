@@ -384,13 +384,13 @@ export default function MemberProfilePage() {
                                                 {errors.occupation && <p className="text-xs text-rose-500 mt-1">{errors.occupation}</p>}
                                             </div>
                                         ) : (
-                                            <span className="text-brand-700 font-semibold">{formData.occupation}</span>
+                                            <span className={formData.occupation ? "text-brand-700 font-semibold" : "text-stone-300 italic text-sm"}>{formData.occupation || "Add your occupation"}</span>
                                         )}
-                                        <span className="text-stone-300 hidden md:inline">&middot;</span>
+                                        {(formData.occupation || formData.company) && <span className="text-stone-300 hidden md:inline">&middot;</span>}
                                         {isEditing ? (
                                             <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder="Company" className="px-3 py-1 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-brand-500/20 focus:bg-white outline-none transition-all" />
                                         ) : (
-                                            <span>{formData.company}</span>
+                                            formData.company ? <span>{formData.company}</span> : null
                                         )}
                                     </div>
 
@@ -402,13 +402,13 @@ export default function MemberProfilePage() {
                                                     <input type="text" title="Location" aria-label="Location" name="location" value={formData.location} onChange={handleChange} className={`${inputCls("location")} !py-1 !text-xs`} />
                                                     {errors.location && <p className="text-xs text-rose-500 mt-0.5">{errors.location}</p>}
                                                 </div>
-                                            ) : formData.location}
+                                            ) : formData.location ? formData.location : <span className="italic text-stone-300">Add location</span>}
                                         </div>
                                         <div className="flex items-center gap-1.5 min-w-[120px]">
                                             <Building2 size={16} className="text-stone-400" />
                                             {isEditing ? (
                                                 <input type="text" title="Industry" aria-label="Industry" name="industry" value={formData.industry} onChange={handleChange} className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500/20 focus:bg-white outline-none w-full" />
-                                            ) : formData.industry}
+                                            ) : formData.industry ? formData.industry : <span className="italic text-stone-300">Add industry</span>}
                                         </div>
                                     </div>
                                 </div>
@@ -444,7 +444,9 @@ export default function MemberProfilePage() {
                                 <p className="text-xs text-stone-400 mt-1 text-right">{formData.bio.length} characters</p>
                             </div>
                         ) : (
-                            <p className="text-stone-600 leading-relaxed">{formData.bio}</p>
+                            formData.bio
+                                ? <p className="text-stone-600 leading-relaxed">{formData.bio}</p>
+                                : <p className="text-stone-300 italic text-sm">No bio added yet. Click Edit Profile to introduce yourself.</p>
                         )}
                     </section>
 
@@ -484,9 +486,15 @@ export default function MemberProfilePage() {
                             )}
                         </div>
 
-                        <Link href="/member/devplan" className="flex items-center justify-center gap-2 w-full py-3 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-sm rounded-xl transition-colors border border-brand-100">
-                            <Edit2 size={15} /> Open Full Development Plan
-                        </Link>
+                        {goals.length === 0 ? (
+                            <Link href="/onboarding?devplan=1" className="flex items-center justify-center gap-2 w-full py-3 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-sm rounded-xl transition-colors border border-brand-100">
+                                <Target size={15} /> Set Up Your Plan
+                            </Link>
+                        ) : (
+                            <Link href="/member/devplan" className="flex items-center justify-center gap-2 w-full py-3 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-sm rounded-xl transition-colors border border-brand-100">
+                                <Edit2 size={15} /> Open Full Development Plan
+                            </Link>
+                        )}
                     </section>
 
                     {/* Account Info */}

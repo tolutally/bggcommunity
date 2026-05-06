@@ -142,8 +142,8 @@ function MemberDetailModal({ member, onClose }: { member: MemberRecord; onClose:
                     <button onClick={onClose} aria-label="Close member detail" title="Close member detail" className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full backdrop-blur-md transition-colors">
                         <X size={20} />
                     </button>
-                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
-                    <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-black/10 rounded-full blur-2xl" />
+                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-40 h-40 bg-black/10 rounded-full blur-2xl pointer-events-none" />
                 </div>
 
                 <div className="px-8 pb-8 -mt-16 flex flex-col items-center text-center">
@@ -181,15 +181,23 @@ function MemberDetailModal({ member, onClose }: { member: MemberRecord; onClose:
                     </div>
 
                     <div className="w-full grid grid-cols-2 gap-4">
-                        <button className="flex items-center justify-center gap-2 px-6 py-3.5 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-colors">
+                        <button disabled title="Coming soon" className="flex items-center justify-center gap-2 px-6 py-3.5 bg-stone-900 text-white rounded-xl font-bold opacity-40 cursor-not-allowed">
                             <MessageSquare size={18} /> Message
                         </button>
-                        <a
-                            href={member.linkedinUrl ?? "#"}
-                            className={`flex items-center justify-center gap-2 px-6 py-3.5 border-2 rounded-xl font-bold transition-all ${member.linkedinUrl ? "border-stone-200 text-stone-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700" : "border-stone-100 text-stone-300 pointer-events-none"}`}
-                        >
-                            <Linkedin size={18} /> LinkedIn
-                        </a>
+                        {member.linkedinUrl ? (
+                            <a
+                                href={member.linkedinUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-2 px-6 py-3.5 border-2 border-stone-200 text-stone-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 rounded-xl font-bold transition-all"
+                            >
+                                <Linkedin size={18} /> LinkedIn
+                            </a>
+                        ) : (
+                            <div className="flex items-center justify-center gap-2 px-6 py-3.5 border-2 border-stone-100 text-stone-300 rounded-xl font-bold opacity-40 blur-[1px] cursor-not-allowed select-none">
+                                <Linkedin size={18} /> LinkedIn
+                            </div>
+                        )}
                     </div>
                 </div>
             </motion.div>

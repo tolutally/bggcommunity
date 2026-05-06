@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import {
     Calendar, CalendarDays, Clock, Users, List, CheckCircle, UserCheck,
@@ -73,6 +73,7 @@ export default function MemberSchedulePage() {
     const [eventDetails, setEventDetails] = useState<Record<string, EventDetailRecord>>({});
     const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
     const [busyRsvpId, setBusyRsvpId] = useState<string | null>(null);
+    const hydratedIdsRef = useRef(new Set<string>());
 
     const paginationQuery = useMemo(() => ({
         limit: 20,
@@ -80,9 +81,14 @@ export default function MemberSchedulePage() {
         status: filterStatus === "all" ? undefined : filterStatus,
     }), [filterStatus, filterType]);
 
+    const loadEventsPage = useCallback(
+        (query: typeof paginationQuery & { cursor?: string | null }) => fetchEvents(query, getToken),
+        [getToken],
+    );
+
     const { items, isLoading, isLoadingMore, error, hasMore, loadMore, reload } = useCursorPagination({
         query: paginationQuery,
-        loadPage: (query) => fetchEvents(query, getToken),
+        loadPage: loadEventsPage,
         getErrorMessage: getEventsErrorMessage,
     });
 
@@ -103,16 +109,21 @@ export default function MemberSchedulePage() {
         async function hydrateLoadedEvents() {
             const idsToHydrate = items
                 .map((event) => event.id)
-                .filter((eventId) => !eventDetails[eventId]);
+                .filter((eventId) => !hydratedIdsRef.current.has(eventId));
 
             if (idsToHydrate.length === 0) {
                 return;
             }
 
+            // Mark immediately to prevent duplicate requests on concurrent renders
+            idsToHydrate.forEach((id) => hydratedIdsRef.current.add(id));
+
             const results = await Promise.all(idsToHydrate.map(async (eventId) => {
                 try {
                     return await fetchEventDetail(eventId, getToken);
                 } catch {
+                    // Allow retry next time items changes
+                    hydratedIdsRef.current.delete(eventId);
                     return null;
                 }
             }));
@@ -138,7 +149,7 @@ export default function MemberSchedulePage() {
         return () => {
             cancelled = true;
         };
-    }, [eventDetails, getToken, items]);
+    }, [getToken, items]);
 
     const hasRsvp = useCallback((eventId: string) => Boolean(eventDetails[eventId]?.hasRsvp), [eventDetails]);
 

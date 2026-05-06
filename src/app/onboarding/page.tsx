@@ -2,9 +2,9 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -75,18 +75,20 @@ function ToggleCard({
   );
 }
 
-export default function OnboardingPage() {
+function OnboardingPageInner() {
   const router = useRouter();
   const { userId, isLoaded } = useAuth();
   const { user } = useUser();
+  const searchParams = useSearchParams();
+  const devPlanMode = searchParams.get("devplan") === "1";
 
   useEffect(() => {
-    if (isLoaded && userId && isOnboardingComplete(userId)) {
+    if (isLoaded && userId && isOnboardingComplete(userId) && !devPlanMode) {
       router.replace("/member");
     }
-  }, [isLoaded, router, userId]);
+  }, [isLoaded, router, userId, devPlanMode]);
 
-  if (!isLoaded || !userId || isOnboardingComplete(userId)) {
+  if (!isLoaded || !userId || (isOnboardingComplete(userId) && !devPlanMode)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-50">
         <div className="flex items-center gap-3 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm text-stone-500 shadow-sm">
@@ -97,7 +99,24 @@ export default function OnboardingPage() {
     );
   }
 
-  return <OnboardingFlow key={userId} userId={userId} router={router} userLabel={user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "New member"} />;
+  return <OnboardingFlow key={userId} userId={userId} router={router} devPlanMode={devPlanMode} userLabel={user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "New member"} />;
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-stone-50">
+          <div className="flex items-center gap-3 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm text-stone-500 shadow-sm">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-300 border-t-brand-700" />
+            Loading...
+          </div>
+        </div>
+      }
+    >
+      <OnboardingPageInner />
+    </Suspense>
+  );
 }
 
 function buildSeededDraft(userId: string): OnboardingDraft {
@@ -117,12 +136,17 @@ function OnboardingFlow({
   userId,
   router,
   userLabel,
+  devPlanMode = false,
 }: {
   userId: string;
   router: ReturnType<typeof useRouter>;
   userLabel: string;
+  devPlanMode?: boolean;
 }) {
-  const [draft, setDraft] = useState<OnboardingDraft>(() => buildSeededDraft(userId));
+  const [draft, setDraft] = useState<OnboardingDraft>(() => {
+    const base = buildSeededDraft(userId);
+    return devPlanMode ? { ...base, currentStep: 4 } : base;
+  });
 
   useEffect(() => {
     saveOnboardingDraft(userId, draft);
@@ -241,7 +265,7 @@ function OnboardingFlow({
 
   const finishOnboarding = () => {
     completeOnboarding(userId, draft);
-    router.replace("/member");
+    router.replace(devPlanMode ? "/member/devplan" : "/member");
   };
 
   const skipDevPlanAndFinish = () => {
@@ -254,7 +278,7 @@ function OnboardingFlow({
     };
 
     completeOnboarding(userId, draftWithoutPlan);
-    router.replace("/member");
+    router.replace(devPlanMode ? "/member/devplan" : "/member");
   };
 
   return (
@@ -572,15 +596,18 @@ function OnboardingFlow({
           </div>
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-6">
-            <button
-              type="button"
-              onClick={goBack}
-              disabled={draft.currentStep === 0}
-              className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-4 py-2.5 text-sm font-medium text-stone-600 transition hover:border-stone-300 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </button>
+            {!devPlanMode && (
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={draft.currentStep === 0}
+                className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-4 py-2.5 text-sm font-medium text-stone-600 transition hover:border-stone-300 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+            )}
+            {devPlanMode && <div />}
 
             <div className="flex items-center gap-3">
               {draft.currentStep === STEPS.length - 1 ? (

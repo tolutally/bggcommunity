@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { Calendar, CalendarDays, Check, Clock, Copy, ExternalLink, Link2, List, Loader2, Pencil, Plus, RefreshCw, Trash2, UserCheck, Users, Video, X, type LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -140,6 +140,7 @@ export default function AdminEventsPage() {
     const [recordingUrlDraft, setRecordingUrlDraft] = useState("");
     const [recordingError, setRecordingError] = useState<string | null>(null);
     const [isSavingRecording, setIsSavingRecording] = useState(false);
+    const hydratedIdsRef = useRef(new Set<string>());
 
     const paginationQuery = useMemo(() => ({
         type: filterType === "All" ? undefined : filterType,
@@ -147,9 +148,14 @@ export default function AdminEventsPage() {
         limit: 50,
     }), [filterStatus, filterType]);
 
+    const loadEventsPage = useCallback(
+        (query: typeof paginationQuery & { cursor?: string | null }) => fetchEvents(query, getToken),
+        [getToken],
+    );
+
     const { items, isLoading, error, hasMore, isLoadingMore, loadMore, reload, setItems } = useCursorPagination({
         query: paginationQuery,
-        loadPage: (query) => fetchEvents(query, getToken),
+        loadPage: loadEventsPage,
         getErrorMessage: getEventsErrorMessage,
     });
 
@@ -171,16 +177,19 @@ export default function AdminEventsPage() {
         async function hydrateLoadedEvents() {
             const idsToHydrate = items
                 .map((event) => event.id)
-                .filter((eventId) => !eventDetails[eventId]);
+                .filter((eventId) => !hydratedIdsRef.current.has(eventId));
 
             if (idsToHydrate.length === 0) {
                 return;
             }
 
+            idsToHydrate.forEach((id) => hydratedIdsRef.current.add(id));
+
             const results = await Promise.all(idsToHydrate.map(async (eventId) => {
                 try {
                     return await fetchEventDetail(eventId, getToken);
                 } catch {
+                    hydratedIdsRef.current.delete(eventId);
                     return null;
                 }
             }));
@@ -206,7 +215,7 @@ export default function AdminEventsPage() {
         return () => {
             cancelled = true;
         };
-    }, [eventDetails, getToken, items]);
+    }, [getToken, items]);
 
     const openEventDetail = useCallback(async (eventId: string) => {
         setDetailEventId(eventId);
