@@ -397,19 +397,19 @@ export default function MemberProfilePage() {
                                     </div>
 
                                     <div className="flex items-center gap-4 mt-3 text-sm text-stone-500 flex-wrap">
-                                        <div className="flex items-center gap-1.5 min-w-[120px]">
-                                            <MapPin size={16} className="text-stone-400" />
+                                        <div className="flex items-center gap-1.5 min-w-[120px] max-w-[200px]">
+                                            <MapPin size={16} className="text-stone-400 shrink-0" />
                                             {isEditing ? (
-                                                <div className="flex-1">
-                                                    <input type="text" title="Location" aria-label="Location" name="location" value={formData.location} onChange={handleChange} className={`${inputCls("location")} !py-1 !text-xs`} />
+                                                <div className="min-w-0 flex-1">
+                                                    <input type="text" title="Location" aria-label="Location" name="location" value={formData.location} onChange={handleChange} className={`${inputCls("location")} !py-1 !text-xs w-full`} />
                                                     {errors.location && <p className="text-xs text-rose-500 mt-0.5">{errors.location}</p>}
                                                 </div>
                                             ) : formData.location ? formData.location : <span className="italic text-stone-300">Add location</span>}
                                         </div>
-                                        <div className="flex items-center gap-1.5 min-w-[120px]">
-                                            <Building2 size={16} className="text-stone-400" />
+                                        <div className="flex items-center gap-1.5 min-w-[120px] max-w-[200px]">
+                                            <Building2 size={16} className="text-stone-400 shrink-0" />
                                             {isEditing ? (
-                                                <input type="text" title="Industry" aria-label="Industry" name="industry" value={formData.industry} onChange={handleChange} className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500/20 focus:bg-white outline-none w-full" />
+                                                <input type="text" title="Industry" aria-label="Industry" name="industry" value={formData.industry} onChange={handleChange} className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500/20 focus:bg-white outline-none w-full min-w-0" />
                                             ) : formData.industry ? formData.industry : <span className="italic text-stone-300">Add industry</span>}
                                         </div>
                                     </div>
@@ -419,7 +419,7 @@ export default function MemberProfilePage() {
                                     {isEditing ? (
                                         <>
                                             <button onClick={handleCancel} className="px-5 py-2.5 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors">Cancel</button>
-                                            <button onClick={() => { void handleSave(); }} disabled={isSavingProfile} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-stone-900 text-white hover:bg-stone-800 transition-colors flex items-center gap-2 disabled:opacity-70">{isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save</button>
+                                            <button onClick={() => { void handleSave(); }} disabled={isSavingProfile} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-brand-800 text-white hover:bg-brand-700 transition-colors flex items-center gap-2 disabled:opacity-70">{isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save</button>
                                         </>
                                     ) : (
                                         <button onClick={() => setIsEditing(true)} className="px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 bg-white border text-stone-700 hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50 transition-all shadow-sm"><Edit2 size={18} /> Edit Profile</button>
