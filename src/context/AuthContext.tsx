@@ -49,6 +49,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_INTENT_STORAGE_KEY = "bgg_auth_intent";
 const MEMBER_REQUIRED_REDIRECT = "/sign-in?memberRequired=1";
+const LOGOUT_REDIRECT = "/sign-in";
 
 /* ── Validation helpers (kept for any remaining consumers) ── */
 export function validateEmail(email: string): string | null {
@@ -146,7 +147,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
             // Backend logout is best-effort
         }
-        await signOut();
+        if (typeof window !== "undefined") {
+            window.sessionStorage.removeItem(AUTH_INTENT_STORAGE_KEY);
+        }
+        await signOut({ redirectUrl: LOGOUT_REDIRECT });
     }, [getToken, signOut]);
 
     const onboardingComplete = apiLoading
