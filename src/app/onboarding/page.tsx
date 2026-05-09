@@ -3,8 +3,9 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { Suspense, useEffect, useState } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useAuth as useClerkAuth, useUser } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSWRConfig } from "swr";
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,23 +23,57 @@ import {
   UserRound,
 } from "lucide-react";
 import {
-  completeOnboarding,
-  isOnboardingComplete,
   loadOnboardingDraft,
+  markOnboardingFallbackComplete,
+  markOnboardingSynced,
   saveOnboardingDraft,
   type OnboardingDraft,
 } from "@/lib/onboarding";
+import { useAuth as useResolvedAuth } from "@/context/AuthContext";
+import {
+  completeCurrentUserOnboarding,
+  getUsersErrorMessage,
+  updateCurrentUserProfile,
+  updateProfileVisibility,
+  uploadCurrentUserAvatar,
+} from "@/lib/users";
 
 const STEPS = [
-  { title: "Basic info", description: "Tell us what you do and where you are headed.", icon: UserRound },
-  { title: "Profile photo", description: "Add a photo so people recognize you across the community.", icon: Camera },
-  { title: "Social links", description: "Make it easy for mentors and peers to connect with you.", icon: Globe },
-  { title: "Privacy", description: "Choose what the community can see and how visible you want to be.", icon: Lock },
-  { title: "Dev plan", description: "Set an initial goal so your dashboard has a clear next step.", icon: Target },
+  { title: "Basic info", description: "Tell us what you do and where you are headed.", icon: UserRound, required: true },
+  { title: "Profile photo", description: "Add a photo so people recognize you across the community.", icon: Camera, required: false },
+  { title: "Social links", description: "Make it easy for mentors and peers to connect with you.", icon: Globe, required: false },
+  { title: "Privacy", description: "Choose what the community can see and confirm those defaults intentionally.", icon: Lock, required: true },
+  { title: "Dev plan", description: "Set an initial goal so your dashboard has a clear next step.", icon: Target, required: false },
 ] as const;
 
-function inputClassName() {
-  return "w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10";
+function hasRequiredBasicInfo(draft: OnboardingDraft) {
+  return Boolean(
+    draft.profile.employmentStatus.trim() &&
+      draft.profile.occupation.trim() &&
+      draft.profile.location.trim() &&
+      draft.profile.bio.trim(),
+  );
+}
+
+function getRequiredBasicInfoErrors(draft: OnboardingDraft) {
+  return {
+    employmentStatus: !draft.profile.employmentStatus.trim(),
+    occupation: !draft.profile.occupation.trim(),
+    location: !draft.profile.location.trim(),
+    bio: !draft.profile.bio.trim(),
+  };
+}
+
+function hasReviewedPrivacy(draft: OnboardingDraft) {
+  return draft.privacy.reviewConfirmed;
+}
+
+function hasCompletedRequiredOnboarding(draft: OnboardingDraft) {
+  return hasRequiredBasicInfo(draft) && hasReviewedPrivacy(draft);
+}
+
+function inputClassName(invalid = false) {
+  return `w-full rounded-2xl border bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:ring-4 ${invalid ? "border-rose-300 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/10" : "border-stone-200 focus:border-brand-500 focus:ring-brand-500/10"}`;
 }
 
 function ToggleCard({
@@ -77,18 +112,19 @@ function ToggleCard({
 
 function OnboardingPageInner() {
   const router = useRouter();
-  const { userId, isLoaded } = useAuth();
+  const { userId, isLoaded } = useClerkAuth();
+  const { onboardingComplete } = useResolvedAuth();
   const { user } = useUser();
   const searchParams = useSearchParams();
   const devPlanMode = searchParams.get("devplan") === "1";
 
   useEffect(() => {
-    if (isLoaded && userId && isOnboardingComplete(userId) && !devPlanMode) {
+    if (isLoaded && userId && onboardingComplete && !devPlanMode) {
       router.replace("/member");
     }
-  }, [isLoaded, router, userId, devPlanMode]);
+  }, [isLoaded, router, userId, devPlanMode, onboardingComplete]);
 
-  if (!isLoaded || !userId || (isOnboardingComplete(userId) && !devPlanMode)) {
+  if (!isLoaded || !userId || (onboardingComplete && !devPlanMode)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-50">
         <div className="flex items-center gap-3 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm text-stone-500 shadow-sm">
@@ -143,10 +179,15 @@ function OnboardingFlow({
   userLabel: string;
   devPlanMode?: boolean;
 }) {
+  const { getToken } = useClerkAuth();
+  const { mutate } = useSWRConfig();
   const [draft, setDraft] = useState<OnboardingDraft>(() => {
     const base = buildSeededDraft(userId);
     return devPlanMode ? { ...base, currentStep: 4 } : base;
   });
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionMessage, setSubmissionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     saveOnboardingDraft(userId, draft);
@@ -220,6 +261,8 @@ function OnboardingFlow({
       return;
     }
 
+    setAvatarFile(file);
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== "string") {
@@ -236,14 +279,13 @@ function OnboardingFlow({
     reader.readAsDataURL(file);
   };
 
-  const canContinue =
-    draft.currentStep !== 0 ||
-    Boolean(
-      draft.profile.employmentStatus.trim() &&
-      draft.profile.occupation.trim() &&
-        draft.profile.location.trim() &&
-        draft.profile.bio.trim(),
-    );
+  const canContinue = draft.currentStep === 0
+    ? hasRequiredBasicInfo(draft)
+    : draft.currentStep === 3
+      ? hasReviewedPrivacy(draft)
+      : true;
+  const canFinishOnboarding = devPlanMode || hasCompletedRequiredOnboarding(draft);
+  const basicInfoErrors = getRequiredBasicInfoErrors(draft);
 
   const goBack = () => {
     setDraft((current) => ({
@@ -263,12 +305,63 @@ function OnboardingFlow({
     }));
   };
 
-  const finishOnboarding = () => {
-    completeOnboarding(userId, draft);
-    router.replace(devPlanMode ? "/member/devplan" : "/member");
+  const submitOnboarding = async (draftToSubmit: OnboardingDraft) => {
+    setIsSubmitting(true);
+    setSubmissionMessage(null);
+
+    let nextDraft = draftToSubmit;
+
+    try {
+      if (avatarFile) {
+        const avatarUrl = await uploadCurrentUserAvatar(avatarFile, getToken);
+        if (avatarUrl) {
+          nextDraft = {
+            ...nextDraft,
+            avatarSrc: avatarUrl,
+          };
+          setDraft(nextDraft);
+          saveOnboardingDraft(userId, nextDraft);
+        }
+      }
+
+      await updateCurrentUserProfile({
+        occupation: nextDraft.profile.occupation,
+        industry: nextDraft.profile.industry,
+        location: nextDraft.profile.location,
+        bio: nextDraft.profile.bio,
+        website: nextDraft.profile.website,
+        linkedin: nextDraft.profile.linkedin,
+        twitter: nextDraft.profile.twitter,
+        company: nextDraft.profile.company,
+        isOpenToWork: nextDraft.privacy.openToWork,
+      }, getToken);
+      await updateProfileVisibility(nextDraft.privacy.profileVisible, getToken);
+      await completeCurrentUserOnboarding(getToken);
+      markOnboardingSynced(userId, nextDraft);
+      await mutate("/users/me");
+    } catch (error) {
+      const message = getUsersErrorMessage(error);
+      markOnboardingFallbackComplete(userId, nextDraft, message);
+      setSubmissionMessage("We saved your onboarding locally and will keep trying to sync it to the server.");
+    } finally {
+      setIsSubmitting(false);
+      router.replace(devPlanMode ? "/member/devplan" : "/member");
+    }
   };
 
-  const skipDevPlanAndFinish = () => {
+  const finishOnboarding = async () => {
+    if (!canFinishOnboarding || isSubmitting) {
+      return;
+    }
+
+    await submitOnboarding(draft);
+  };
+
+  const skipDevPlanAndFinish = async () => {
+    if (!canFinishOnboarding || isSubmitting) {
+      return;
+    }
+
     const draftWithoutPlan: OnboardingDraft = {
       ...draft,
       devPlan: {
@@ -277,8 +370,7 @@ function OnboardingFlow({
       },
     };
 
-    completeOnboarding(userId, draftWithoutPlan);
-    router.replace(devPlanMode ? "/member/devplan" : "/member");
+    await submitOnboarding(draftWithoutPlan);
   };
 
   return (
@@ -331,7 +423,14 @@ function OnboardingFlow({
                       {complete ? <Check className="h-5 w-5" /> : <StepListIcon className="h-5 w-5" />}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">{step.title}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold">{step.title}</p>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${step.required ? "bg-white/15 text-white/85" : "bg-white/10 text-white/60"}`}
+                        >
+                          {step.required ? "Required" : "Optional"}
+                        </span>
+                      </div>
                       <p className="mt-1 text-sm text-white/60">{step.description}</p>
                     </div>
                   </div>
@@ -353,7 +452,21 @@ function OnboardingFlow({
                 </span>
                 {currentStep.title}
               </h2>
+              <p className="mt-2 inline-flex rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
+                {currentStep.required ? "Required" : "Optional"}
+              </p>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">{currentStep.description}</p>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600">
+                {draft.currentStep === 0
+                  ? "Complete these basics now so your profile and dashboard start with the right context."
+                  : draft.currentStep === 1
+                    ? "A profile photo helps trust, but it is not required to finish onboarding."
+                    : draft.currentStep === 2
+                      ? "Share whichever links you want people to use. You can leave this blank and update it later."
+                      : draft.currentStep === 3
+                        ? "Review these visibility settings before you continue. This choice should be explicit, not accidental."
+                        : "Set an initial goal now, or skip it and build your dev plan later from the member dashboard."}
+              </p>
             </div>
             <div className="rounded-2xl bg-stone-50 px-4 py-3 text-sm text-stone-500">
               <p className="font-semibold text-stone-800">{userLabel}</p>
@@ -361,76 +474,99 @@ function OnboardingFlow({
             </div>
           </div>
 
+          {submissionMessage ? (
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {submissionMessage}
+            </div>
+          ) : null}
+
           <div className="mt-8 min-h-[420px]">
             {draft.currentStep === 0 ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-stone-700">Employment status</label>
-                  <select
-                    className={inputClassName()}
-                    value={draft.profile.employmentStatus}
-                    onChange={(event) => updateProfile("employmentStatus", event.target.value)}
-                    title="Employment status"
-                  >
-                    <option value="">Select your status</option>
-                    <option value="employed_full_time">Employed full-time</option>
-                    <option value="employed_part_time">Employed part-time</option>
-                    <option value="self_employed">Self-employed / Founder</option>
-                    <option value="student">Student</option>
-                    <option value="seeking_opportunities">Seeking opportunities</option>
-                    <option value="career_transition">Career transition</option>
-                  </select>
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-4 text-sm leading-6 text-brand-900">
+                  Required here: employment status, occupation or role direction, location, and bio. Industry and company can wait.
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-stone-700">Occupation or future role vision</label>
-                  <input
-                    className={inputClassName()}
-                    value={draft.profile.occupation}
-                    onChange={(event) => updateProfile("occupation", event.target.value)}
-                    placeholder="For example: Product designer now, future PM"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-stone-700">Industry</label>
-                  <input
-                    className={inputClassName()}
-                    value={draft.profile.industry}
-                    onChange={(event) => updateProfile("industry", event.target.value)}
-                    placeholder="Tech, health, education..."
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-stone-700">Location</label>
-                  <div className="relative">
-                    <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-stone-700">Employment status</label>
+                    <select
+                      className={inputClassName(basicInfoErrors.employmentStatus)}
+                      value={draft.profile.employmentStatus}
+                      onChange={(event) => updateProfile("employmentStatus", event.target.value)}
+                      title="Employment status"
+                    >
+                      <option value="">Select your status</option>
+                      <option value="employed_full_time">Employed full-time</option>
+                      <option value="employed_part_time">Employed part-time</option>
+                      <option value="self_employed">Self-employed / Founder</option>
+                      <option value="student">Student</option>
+                      <option value="seeking_opportunities">Seeking opportunities</option>
+                      <option value="career_transition">Career transition</option>
+                    </select>
+                    {basicInfoErrors.employmentStatus ? (
+                      <p className="mt-2 text-sm text-rose-700">Choose the option that best matches your current status.</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-stone-700">Occupation or future role vision</label>
                     <input
-                      className={`${inputClassName()} pl-11`}
-                      value={draft.profile.location}
-                      onChange={(event) => updateProfile("location", event.target.value)}
-                      placeholder="Lagos, Nigeria"
+                      className={inputClassName(basicInfoErrors.occupation)}
+                      value={draft.profile.occupation}
+                      onChange={(event) => updateProfile("occupation", event.target.value)}
+                      placeholder="For example: Product designer now, future PM"
+                    />
+                    {basicInfoErrors.occupation ? (
+                      <p className="mt-2 text-sm text-rose-700">Add your current role or the direction you are working toward.</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-stone-700">Industry</label>
+                    <input
+                      className={inputClassName()}
+                      value={draft.profile.industry}
+                      onChange={(event) => updateProfile("industry", event.target.value)}
+                      placeholder="Tech, health, education..."
                     />
                   </div>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-stone-700">Company (optional)</label>
-                  <div className="relative">
-                    <Briefcase className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                    <input
-                      className={`${inputClassName()} pl-11`}
-                      value={draft.profile.company}
-                      onChange={(event) => updateProfile("company", event.target.value)}
-                      placeholder="Where you work or build"
-                    />
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-stone-700">Location</label>
+                    <div className="relative">
+                      <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                      <input
+                        className={`${inputClassName(basicInfoErrors.location)} pl-11`}
+                        value={draft.profile.location}
+                        onChange={(event) => updateProfile("location", event.target.value)}
+                        placeholder="Lagos, Nigeria"
+                      />
+                    </div>
+                    {basicInfoErrors.location ? (
+                      <p className="mt-2 text-sm text-rose-700">Add the city or region you want shown on your profile.</p>
+                    ) : null}
                   </div>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="mb-2 block text-sm font-medium text-stone-700">Bio</label>
-                  <textarea
-                    className={`${inputClassName()} min-h-36 resize-none`}
-                    value={draft.profile.bio}
-                    onChange={(event) => updateProfile("bio", event.target.value)}
-                    placeholder="Share what you're building, learning, or looking for in this community."
-                  />
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-stone-700">Company (optional)</label>
+                    <div className="relative">
+                      <Briefcase className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                      <input
+                        className={`${inputClassName()} pl-11`}
+                        value={draft.profile.company}
+                        onChange={(event) => updateProfile("company", event.target.value)}
+                        placeholder="Where you work or build"
+                      />
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="mb-2 block text-sm font-medium text-stone-700">Bio</label>
+                    <textarea
+                      className={`${inputClassName(basicInfoErrors.bio)} min-h-36 resize-none`}
+                      value={draft.profile.bio}
+                      onChange={(event) => updateProfile("bio", event.target.value)}
+                      placeholder="Share what you're building, learning, or looking for in this community."
+                    />
+                    {basicInfoErrors.bio ? (
+                      <p className="mt-2 text-sm text-rose-700">Write a short bio so members understand what you are building or looking for.</p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -470,6 +606,9 @@ function OnboardingFlow({
 
             {draft.currentStep === 2 ? (
               <div className="space-y-4">
+                <div className="rounded-2xl bg-stone-50 px-4 py-4 text-sm leading-6 text-stone-600">
+                  This step is optional. Add whichever links you want people to use, or continue without them.
+                </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-stone-700">Website</label>
                   <input
@@ -537,6 +676,27 @@ function OnboardingFlow({
                   title="Open to work"
                   description="Show recruiters and mentors that you are currently open to roles or opportunities."
                 />
+                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-sm text-stone-700">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-stone-300 text-brand-700 focus:ring-brand-500"
+                    checked={draft.privacy.reviewConfirmed}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        privacy: { ...current.privacy, reviewConfirmed: event.target.checked },
+                      }))
+                    }
+                  />
+                  <span>
+                    I have reviewed these privacy settings and I am okay with continuing using the current choices.
+                  </span>
+                </label>
+                {!draft.privacy.reviewConfirmed ? (
+                  <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    Confirm this review to continue. Privacy is a required step.
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
@@ -610,21 +770,38 @@ function OnboardingFlow({
             {devPlanMode && <div />}
 
             <div className="flex items-center gap-3">
+              {!canContinue && draft.currentStep === 0 ? (
+                <p className="text-sm text-stone-500">
+                  Fill in the required basics to continue.
+                </p>
+              ) : null}
+              {!canContinue && draft.currentStep === 3 ? (
+                <p className="text-sm text-stone-500">
+                  Review and confirm your privacy settings to continue.
+                </p>
+              ) : null}
               {draft.currentStep === STEPS.length - 1 ? (
                 <>
+                  {!canFinishOnboarding ? (
+                    <p className="text-sm text-stone-500">
+                      Required onboarding steps must be completed before you can finish.
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     onClick={skipDevPlanAndFinish}
-                    className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-300 hover:text-stone-900"
+                    disabled={!canFinishOnboarding || isSubmitting}
+                    className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-300 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Skip for now
                   </button>
                   <button
                     type="button"
                     onClick={finishOnboarding}
-                    className="inline-flex items-center gap-2 rounded-full bg-brand-800 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-900"
+                    disabled={!canFinishOnboarding || isSubmitting}
+                    className="inline-flex items-center gap-2 rounded-full bg-brand-800 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-900 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Finish onboarding
+                    {isSubmitting ? "Finishing..." : "Finish onboarding"}
                     <Check className="h-4 w-4" />
                   </button>
                 </>

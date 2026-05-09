@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useCallback, useRef, useState, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
     useAuth as useClerkAuth,
@@ -8,6 +8,22 @@ import {
 } from "@clerk/nextjs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiClient } from "@/lib/api";
+import {
+    ONBOARDING_LOCAL_STATE_EVENT,
+    clearLocalOnboardingFallback,
+    loadLocalOnboardingStatus,
+    loadPendingOnboardingSync,
+    markOnboardingFallbackComplete,
+    markOnboardingSynced,
+    savePendingOnboardingSync,
+} from "@/lib/onboarding";
+import {
+    completeCurrentUserOnboarding,
+    getUsersErrorMessage,
+    updateCurrentUserProfile,
+    updateProfileVisibility,
+    uploadCurrentUserAvatar,
+} from "@/lib/users";
 
 /* ── Types ── */
 export type UserRole = "member" | "mentor" | "admin";
@@ -25,6 +41,8 @@ interface AuthContextType {
     isAuthenticated: boolean;
     isLoading: boolean;
     onboardingComplete: boolean | null;
+    onboardingPendingSync: boolean;
+    onboardingStatusSource: "api" | "fallback" | null;
     logout: () => void;
 }
 
@@ -76,11 +94,33 @@ function normalizeRole(role: string | undefined, email?: string): UserRole {
 
 /* ── Provider ── */
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const { isSignedIn, isLoaded: clerkLoaded, signOut, getToken } = useClerkAuth();
+    const { isSignedIn, isLoaded: clerkLoaded, signOut, getToken, userId } = useClerkAuth();
     const { user: clerkUser } = useClerkUser();
-    const { user: apiUser, isLoading: apiLoading } = useCurrentUser();
+    const { user: apiUser, isLoading: apiLoading, mutate: mutateCurrentUser } = useCurrentUser();
+    const [localStateVersion, setLocalStateVersion] = useState(0);
+    const syncInFlightRef = useRef<string | null>(null);
 
     const isLoading = !clerkLoaded || (isSignedIn && apiLoading);
+    const localOnboardingStatus = userId ? loadLocalOnboardingStatus(userId) : {
+        completed: false,
+        source: "fallback" as const,
+        completedAt: null,
+        pendingSync: false,
+        lastSyncError: null,
+    };
+
+    useEffect(() => {
+        const handleStateChange = () => {
+            setLocalStateVersion((current) => current + 1);
+        };
+
+        window.addEventListener(ONBOARDING_LOCAL_STATE_EVENT, handleStateChange);
+        return () => window.removeEventListener(ONBOARDING_LOCAL_STATE_EVENT, handleStateChange);
+    }, []);
+
+    useEffect(() => {
+        void localStateVersion;
+    }, [localStateVersion]);
 
     // Build AuthUser from Clerk + API data
     const user: AuthUser | null = isSignedIn
@@ -106,20 +146,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signOut();
     }, [getToken, signOut]);
 
-    // null = still loading; true/false = definitive
-    // If the API returned a user, use their flag.
-    // If API finished loading but returned no user (error/no profile),
-    // check localStorage for local onboarding completion flag.
-    const localOnboardingDone = typeof window !== "undefined"
-        && localStorage.getItem("bgg_onboarding_complete") === "true";
-
     const onboardingComplete = apiLoading
         ? null
         : apiUser
-          ? apiUser.onboardingComplete
+          ? (apiUser.onboardingComplete || localOnboardingStatus.completed)
           : isSignedIn
-            ? localOnboardingDone || false
+            ? localOnboardingStatus.completed
             : null;
+    const onboardingPendingSync = localOnboardingStatus.pendingSync;
+    const onboardingStatusSource = onboardingComplete
+        ? (apiUser?.onboardingComplete ? "api" : localOnboardingStatus.source)
+        : null;
+
+    useEffect(() => {
+        if (!userId || !isSignedIn || apiLoading) {
+            return;
+        }
+
+        if (apiUser?.onboardingComplete) {
+            const pendingSync = loadPendingOnboardingSync(userId);
+            clearLocalOnboardingFallback(userId);
+            if (pendingSync) {
+                markOnboardingSynced(userId, pendingSync.draft);
+            }
+            return;
+        }
+
+        const pendingSync = loadPendingOnboardingSync(userId);
+        if (!localOnboardingStatus.pendingSync || !pendingSync || syncInFlightRef.current === userId) {
+            return;
+        }
+
+        let cancelled = false;
+        syncInFlightRef.current = userId;
+
+        const syncPendingOnboarding = async () => {
+            try {
+                await updateCurrentUserProfile({
+                    occupation: pendingSync.draft.profile.occupation,
+                    industry: pendingSync.draft.profile.industry,
+                    location: pendingSync.draft.profile.location,
+                    bio: pendingSync.draft.profile.bio,
+                    website: pendingSync.draft.profile.website,
+                    linkedin: pendingSync.draft.profile.linkedin,
+                    twitter: pendingSync.draft.profile.twitter,
+                    company: pendingSync.draft.profile.company,
+                    isOpenToWork: pendingSync.draft.privacy.openToWork,
+                }, getToken);
+                await updateProfileVisibility(pendingSync.draft.privacy.profileVisible, getToken);
+
+                if (pendingSync.draft.avatarSrc.startsWith("data:")) {
+                    const avatarResponse = await fetch(pendingSync.draft.avatarSrc);
+                    const avatarBlob = await avatarResponse.blob();
+                    const avatarFile = new File([avatarBlob], "onboarding-avatar", { type: avatarBlob.type || "image/png" });
+                    await uploadCurrentUserAvatar(avatarFile, getToken);
+                }
+
+                await completeCurrentUserOnboarding(getToken);
+                markOnboardingSynced(userId, pendingSync.draft);
+                await mutateCurrentUser();
+            } catch (error) {
+                const message = getUsersErrorMessage(error);
+                savePendingOnboardingSync(userId, pendingSync.draft, message);
+                markOnboardingFallbackComplete(userId, pendingSync.draft, message);
+            } finally {
+                if (!cancelled) {
+                    syncInFlightRef.current = null;
+                    setLocalStateVersion((current) => current + 1);
+                }
+            }
+        };
+
+        void syncPendingOnboarding();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [apiLoading, apiUser?.onboardingComplete, getToken, isSignedIn, localOnboardingStatus.pendingSync, mutateCurrentUser, userId, localStateVersion]);
 
     return (
         <AuthContext.Provider
@@ -128,6 +231,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 isAuthenticated: !!isSignedIn,
                 isLoading,
                 onboardingComplete,
+                onboardingPendingSync,
+                onboardingStatusSource,
                 logout,
             }}
         >

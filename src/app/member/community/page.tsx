@@ -157,6 +157,16 @@ export default function MemberCommunityPage() {
 
     const { group: groupDetail, isLoading: loadingDetail } = useCommunityGroup(effectiveGroupId);
     const channels = groupDetail?.channels ?? [];
+    const resolvedGroups = groups.map((group) => {
+        if (group.id !== effectiveGroupId || !groupDetail) {
+            return group;
+        }
+
+        return {
+            ...group,
+            isJoined: groupDetail.isMember,
+        };
+    });
     const effectiveChannelId =
         selectedChannelId && channels.some(c => c.id === selectedChannelId)
             ? selectedChannelId
@@ -214,7 +224,7 @@ export default function MemberCommunityPage() {
                         ) : groups.length === 0 ? (
                             <EmptyState icon={Users} heading="No groups found" description="Community groups will appear here." variant="plain" />
                         ) : (
-                            groups.map(group => (
+                            resolvedGroups.map(group => (
                                 <GroupItem
                                     key={group.id}
                                     group={group}

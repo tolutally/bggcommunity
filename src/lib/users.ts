@@ -121,6 +121,13 @@ export async function uploadCurrentUserAvatar(file: File, getToken: TokenProvide
     return avatarUrl;
 }
 
+export async function completeCurrentUserOnboarding(getToken: TokenProvider) {
+        return apiRequest<{ success: boolean; data?: unknown } | { success: boolean; message?: string }>("/users/me/onboarding-complete", {
+                method: "POST",
+                getToken,
+        });
+}
+
 export async function deleteOwnAccount(getToken: TokenProvider) {
     await apiRequest("/auth/account", {
         method: "DELETE",

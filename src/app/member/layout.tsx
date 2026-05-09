@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { UserProvider } from "@/context/UserContext";
+import { useAuth } from "@/context/AuthContext";
 import FloatingNav from "@/components/layout/FloatingNav";
-import { isOnboardingComplete } from "@/lib/onboarding";
 import { useCohorts } from "@/hooks/use-cohorts";
 import {
     LayoutDashboard,
@@ -18,7 +17,7 @@ import {
     GraduationCap,
 } from "lucide-react";
 
-function MemberLayoutInner({ children }: { children: React.ReactNode }) {
+function MemberLayoutInner({ children, onboardingPendingSync }: { children: React.ReactNode; onboardingPendingSync: boolean }) {
     const { cohorts } = useCohorts();
 
     const navGroups = useMemo(() => {
@@ -63,6 +62,13 @@ function MemberLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="min-h-screen bg-stone-50">
             <FloatingNav navGroups={navGroups} moduleType="member" />
             <main className="pt-20 pb-6 md:pl-24 lg:pl-28">
+                {onboardingPendingSync ? (
+                    <div className="mx-auto mb-4 max-w-6xl px-4 md:px-6">
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+                            Your onboarding is saved locally and we are still syncing it to the server.
+                        </div>
+                    </div>
+                ) : null}
                 {children}
             </main>
         </div>
@@ -74,17 +80,16 @@ export default function MemberLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { isLoaded, userId } = useAuth();
+    const { isLoading, onboardingComplete, onboardingPendingSync } = useAuth();
     const router = useRouter();
-    const onboardingComplete = userId ? isOnboardingComplete(userId) : true;
 
     useEffect(() => {
-        if (isLoaded && userId && !onboardingComplete) {
+        if (!isLoading && onboardingComplete === false) {
             router.replace("/onboarding");
         }
-    }, [isLoaded, onboardingComplete, router, userId]);
+    }, [isLoading, onboardingComplete, router]);
 
-    const canRender = isLoaded && (!userId || onboardingComplete);
+    const canRender = !isLoading && onboardingComplete !== false;
 
     if (!canRender) {
         return (
@@ -100,7 +105,7 @@ export default function MemberLayout({
     return (
         <SidebarProvider>
             <UserProvider>
-                <MemberLayoutInner>{children}</MemberLayoutInner>
+                <MemberLayoutInner onboardingPendingSync={onboardingPendingSync}>{children}</MemberLayoutInner>
             </UserProvider>
         </SidebarProvider>
     );

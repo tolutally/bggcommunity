@@ -16,6 +16,7 @@ export interface OnboardingDraft {
     profileVisible: boolean;
     socialsVisible: boolean;
     openToWork: boolean;
+    reviewConfirmed: boolean;
   };
   devPlan: {
     goal: string;
@@ -24,6 +25,22 @@ export interface OnboardingDraft {
   completed: boolean;
   completedAt: string | null;
 }
+
+export interface PendingOnboardingSync {
+  draft: OnboardingDraft;
+  updatedAt: string;
+  lastError: string | null;
+}
+
+export interface LocalOnboardingStatus {
+  completed: boolean;
+  source: "api" | "fallback";
+  completedAt: string | null;
+  pendingSync: boolean;
+  lastSyncError: string | null;
+}
+
+export const ONBOARDING_LOCAL_STATE_EVENT = "bgg:onboarding-local-state-changed";
 
 interface StoredOnboardingState {
   draft: OnboardingDraft;
@@ -46,6 +63,24 @@ interface StoredDevGoal {
 }
 
 const ONBOARDING_KEY_PREFIX = "bgg-onboarding";
+const ONBOARDING_STATUS_KEY_PREFIX = "bgg-onboarding-status";
+const ONBOARDING_PENDING_SYNC_KEY_PREFIX = "bgg-onboarding-pending-sync";
+
+function onboardingStatusKey(userId: string) {
+  return `${ONBOARDING_STATUS_KEY_PREFIX}:${userId}`;
+}
+
+function onboardingPendingSyncKey(userId: string) {
+  return `${ONBOARDING_PENDING_SYNC_KEY_PREFIX}:${userId}`;
+}
+
+function emitOnboardingLocalStateChange() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(ONBOARDING_LOCAL_STATE_EVENT));
+}
 
 export function defaultOnboardingDraft(): OnboardingDraft {
   return {
@@ -66,6 +101,7 @@ export function defaultOnboardingDraft(): OnboardingDraft {
       profileVisible: true,
       socialsVisible: true,
       openToWork: false,
+      reviewConfirmed: false,
     },
     devPlan: {
       goal: "",
@@ -125,10 +161,92 @@ export function saveOnboardingDraft(userId: string, draft: OnboardingDraft) {
 
   const payload: StoredOnboardingState = { draft };
   localStorage.setItem(onboardingStorageKey(userId), JSON.stringify(payload));
+  emitOnboardingLocalStateChange();
+}
+
+export function loadLocalOnboardingStatus(userId: string): LocalOnboardingStatus {
+  const fallback: LocalOnboardingStatus = {
+    completed: false,
+    source: "fallback",
+    completedAt: null,
+    pendingSync: false,
+    lastSyncError: null,
+  };
+
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const raw = localStorage.getItem(onboardingStatusKey(userId));
+    if (!raw) {
+      return fallback;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<LocalOnboardingStatus>;
+    return {
+      ...fallback,
+      ...parsed,
+      source: parsed.source === "api" ? "api" : "fallback",
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveLocalOnboardingStatus(userId: string, status: LocalOnboardingStatus) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(onboardingStatusKey(userId), JSON.stringify(status));
+  emitOnboardingLocalStateChange();
+}
+
+export function loadPendingOnboardingSync(userId: string): PendingOnboardingSync | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(onboardingPendingSyncKey(userId));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as PendingOnboardingSync;
+    return parsed?.draft ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function savePendingOnboardingSync(userId: string, draft: OnboardingDraft, lastError: string | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const pendingSync: PendingOnboardingSync = {
+    draft,
+    updatedAt: new Date().toISOString(),
+    lastError,
+  };
+
+  localStorage.setItem(onboardingPendingSyncKey(userId), JSON.stringify(pendingSync));
+  emitOnboardingLocalStateChange();
+}
+
+export function clearPendingOnboardingSync(userId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(onboardingPendingSyncKey(userId));
+  emitOnboardingLocalStateChange();
 }
 
 export function isOnboardingComplete(userId: string) {
-  return loadOnboardingDraft(userId).completed;
+  return loadLocalOnboardingStatus(userId).completed;
 }
 
 function buildDevGoals(draft: OnboardingDraft): StoredDevGoal[] {
@@ -152,16 +270,7 @@ function buildDevGoals(draft: OnboardingDraft): StoredDevGoal[] {
   }));
 }
 
-export function completeOnboarding(userId: string, draft: OnboardingDraft) {
-  const completedDraft: OnboardingDraft = {
-    ...draft,
-    currentStep: 4,
-    completed: true,
-    completedAt: new Date().toISOString(),
-  };
-
-  saveOnboardingDraft(userId, completedDraft);
-
+function persistCompletedOnboardingArtifacts(completedDraft: OnboardingDraft) {
   if (typeof window === "undefined") {
     return;
   }
@@ -177,4 +286,55 @@ export function completeOnboarding(userId: string, draft: OnboardingDraft) {
   if (completedDraft.avatarSrc) {
     localStorage.setItem("bgg-avatar", JSON.stringify(completedDraft.avatarSrc));
   }
+}
+
+export function completeOnboarding(
+  userId: string,
+  draft: OnboardingDraft,
+  options: { source?: "api" | "fallback"; pendingSync?: boolean; lastSyncError?: string | null } = {},
+) {
+  const completedDraft: OnboardingDraft = {
+    ...draft,
+    currentStep: 4,
+    completed: true,
+    completedAt: new Date().toISOString(),
+  };
+
+  saveOnboardingDraft(userId, completedDraft);
+
+  const source = options.source ?? "fallback";
+  const pendingSync = options.pendingSync ?? source === "fallback";
+  saveLocalOnboardingStatus(userId, {
+    completed: true,
+    source,
+    completedAt: completedDraft.completedAt,
+    pendingSync,
+    lastSyncError: options.lastSyncError ?? null,
+  });
+
+  if (pendingSync) {
+    savePendingOnboardingSync(userId, completedDraft, options.lastSyncError ?? null);
+  } else {
+    clearPendingOnboardingSync(userId);
+  }
+
+  persistCompletedOnboardingArtifacts(completedDraft);
+}
+
+export function markOnboardingSynced(userId: string, draft: OnboardingDraft) {
+  completeOnboarding(userId, draft, { source: "api", pendingSync: false, lastSyncError: null });
+}
+
+export function markOnboardingFallbackComplete(userId: string, draft: OnboardingDraft, lastSyncError: string | null) {
+  completeOnboarding(userId, draft, { source: "fallback", pendingSync: true, lastSyncError });
+}
+
+export function clearLocalOnboardingFallback(userId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(onboardingStatusKey(userId));
+  clearPendingOnboardingSync(userId);
+  emitOnboardingLocalStateChange();
 }
