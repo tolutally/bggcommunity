@@ -17,7 +17,7 @@ import {
     GraduationCap,
 } from "lucide-react";
 
-function MemberLayoutInner({ children, onboardingPendingSync }: { children: React.ReactNode; onboardingPendingSync: boolean }) {
+function MemberLayoutInner({ children }: { children: React.ReactNode }) {
     const { cohorts } = useCohorts();
 
     const navGroups = useMemo(() => {
@@ -62,13 +62,6 @@ function MemberLayoutInner({ children, onboardingPendingSync }: { children: Reac
         <div className="min-h-screen bg-stone-50">
             <FloatingNav navGroups={navGroups} moduleType="member" />
             <main className="pt-20 pb-6 md:pl-24 lg:pl-28">
-                {onboardingPendingSync ? (
-                    <div className="mx-auto mb-4 max-w-6xl px-4 md:px-6">
-                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
-                            Your onboarding is saved locally and we are still syncing it to the server.
-                        </div>
-                    </div>
-                ) : null}
                 {children}
             </main>
         </div>
@@ -80,7 +73,7 @@ export default function MemberLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { isLoading, onboardingComplete, onboardingPendingSync } = useAuth();
+    const { isLoading, onboardingComplete } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
@@ -105,7 +98,7 @@ export default function MemberLayout({
     return (
         <SidebarProvider>
             <UserProvider>
-                <MemberLayoutInner onboardingPendingSync={onboardingPendingSync}>{children}</MemberLayoutInner>
+                <MemberLayoutInner>{children}</MemberLayoutInner>
             </UserProvider>
         </SidebarProvider>
     );
