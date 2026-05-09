@@ -113,18 +113,28 @@ function ToggleCard({
 function OnboardingPageInner() {
   const router = useRouter();
   const { userId, isLoaded } = useClerkAuth();
-  const { onboardingComplete } = useResolvedAuth();
+  const { onboardingComplete, user: authUser } = useResolvedAuth();
   const { user } = useUser();
   const searchParams = useSearchParams();
   const devPlanMode = searchParams.get("devplan") === "1";
 
   useEffect(() => {
-    if (isLoaded && userId && onboardingComplete && !devPlanMode) {
+    if (!isLoaded || !userId || devPlanMode) {
+      return;
+    }
+
+    if (authUser?.role === "admin") {
+      router.replace("/admin");
+    }
+  }, [authUser?.role, devPlanMode, isLoaded, router, userId]);
+
+  useEffect(() => {
+    if (isLoaded && userId && onboardingComplete && !devPlanMode && authUser?.role !== "admin") {
       router.replace("/member");
     }
-  }, [isLoaded, router, userId, devPlanMode, onboardingComplete]);
+  }, [authUser?.role, isLoaded, router, userId, devPlanMode, onboardingComplete]);
 
-  if (!isLoaded || !userId || (onboardingComplete && !devPlanMode)) {
+  if (!isLoaded || !userId || authUser?.role === "admin" || (onboardingComplete && !devPlanMode)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-50">
         <div className="flex items-center gap-3 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm text-stone-500 shadow-sm">

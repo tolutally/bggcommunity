@@ -7,7 +7,7 @@ import {
     useUser as useClerkUser,
 } from "@clerk/nextjs";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { apiClient } from "@/lib/api";
+import { ApiError, apiClient } from "@/lib/api";
 import {
     ONBOARDING_LOCAL_STATE_EVENT,
     clearLocalOnboardingFallback,
@@ -47,6 +47,8 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_INTENT_STORAGE_KEY = "bgg_auth_intent";
+const MEMBER_REQUIRED_REDIRECT = "/sign-in?memberRequired=1";
 
 /* ── Validation helpers (kept for any remaining consumers) ── */
 export function validateEmail(email: string): string | null {
@@ -96,9 +98,10 @@ function normalizeRole(role: string | undefined, email?: string): UserRole {
 export function AuthProvider({ children }: { children: ReactNode }) {
     const { isSignedIn, isLoaded: clerkLoaded, signOut, getToken, userId } = useClerkAuth();
     const { user: clerkUser } = useClerkUser();
-    const { user: apiUser, isLoading: apiLoading, mutate: mutateCurrentUser } = useCurrentUser();
+    const { user: apiUser, error: apiUserError, isLoading: apiLoading, mutate: mutateCurrentUser } = useCurrentUser();
     const [localStateVersion, setLocalStateVersion] = useState(0);
     const syncInFlightRef = useRef<string | null>(null);
+    const memberRedirectInFlightRef = useRef(false);
 
     const isLoading = !clerkLoaded || (isSignedIn && apiLoading);
     const localOnboardingStatus = userId ? loadLocalOnboardingStatus(userId) : {
@@ -157,6 +160,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onboardingStatusSource = onboardingComplete
         ? (apiUser?.onboardingComplete ? "api" : localOnboardingStatus.source)
         : null;
+
+    useEffect(() => {
+        if (!clerkLoaded || apiLoading) {
+            return;
+        }
+
+        if (!isSignedIn) {
+            memberRedirectInFlightRef.current = false;
+            return;
+        }
+
+        if (apiUser || !(apiUserError instanceof ApiError) || apiUserError.status !== 401) {
+            return;
+        }
+
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const authIntent = window.sessionStorage.getItem(AUTH_INTENT_STORAGE_KEY);
+        if (authIntent !== "sign-in" || memberRedirectInFlightRef.current) {
+            return;
+        }
+
+        memberRedirectInFlightRef.current = true;
+        window.sessionStorage.removeItem(AUTH_INTENT_STORAGE_KEY);
+
+        void signOut({ redirectUrl: MEMBER_REQUIRED_REDIRECT });
+    }, [apiLoading, apiUser, apiUserError, clerkLoaded, isSignedIn, signOut]);
 
     useEffect(() => {
         if (!userId || !isSignedIn || apiLoading) {
@@ -272,8 +304,8 @@ export function RouteGuard({ children, allowedRoles, redirectTo = "/sign-in" }: 
             return;
         }
 
-        // Redirect to onboarding if not completed (skip if already on /onboarding)
-        if (onboardingComplete === false && !pathname.startsWith("/onboarding")) {
+        // Onboarding is only required for members.
+        if (user?.role === "member" && onboardingComplete === false && !pathname.startsWith("/onboarding")) {
             router.replace("/onboarding");
             return;
         }
