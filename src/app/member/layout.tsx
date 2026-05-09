@@ -73,16 +73,25 @@ export default function MemberLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { isLoading, onboardingComplete } = useAuth();
+    const { isLoading, onboardingComplete, user } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-        if (!isLoading && onboardingComplete === false) {
+        if (isLoading) {
+            return;
+        }
+
+        if (user?.role === "admin") {
+            router.replace("/admin");
+            return;
+        }
+
+        if (onboardingComplete === false) {
             router.replace("/onboarding");
         }
-    }, [isLoading, onboardingComplete, router]);
+    }, [isLoading, onboardingComplete, router, user?.role]);
 
-    const canRender = !isLoading && onboardingComplete !== false;
+    const canRender = !isLoading && (user?.role === "admin" || onboardingComplete !== false);
 
     if (!canRender) {
         return (

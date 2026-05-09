@@ -22,6 +22,16 @@ type OAuthStrategy = "oauth_google";
 
 const AUTH_INTENT_STORAGE_KEY = "bgg_auth_intent";
 const MEMBER_REQUIRED_MESSAGE = "No member account was found for this sign-in. Please sign up first.";
+const ADMIN_EMAIL_WHITELIST = new Set(
+  (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+function getPostSignInDestination(emailAddress: string) {
+  return ADMIN_EMAIL_WHITELIST.has(emailAddress.trim().toLowerCase()) ? "/admin" : "/member";
+}
 
 export default function SignInPage() {
   const { signIn } = useSignIn();
@@ -71,7 +81,7 @@ export default function SignInPage() {
         } else {
           await signIn.finalize();
         }
-        router.replace("/member");
+        router.replace(getPostSignInDestination(email));
       }
     } catch (err: unknown) {
       const e = err as { message?: string };
