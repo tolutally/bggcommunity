@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
-import { useSignIn } from "@clerk/nextjs";
+import { useSignIn, useClerk } from "@clerk/nextjs";
 import { useToast } from "@/components/ui/toast";
 
 function GoogleIcon() {
@@ -43,6 +43,7 @@ export default function SignInPage() {
 
 function SignInPageInner() {
   const { signIn } = useSignIn();
+  const { setActive } = useClerk();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -77,12 +78,16 @@ function SignInPageInner() {
     }
 
     try {
+      // Use Clerk v7 future password API — signIn resource is mutated in-place on success
       const { error: signInError } = await signIn.password({ identifier: email, password });
       if (signInError) {
         setError(signInError.message ?? "Sign in failed. Please try again.");
         return;
       }
-      // No error = sign-in complete; navigate to destination
+      // Activate the session on the client before navigating
+      if (signIn.createdSessionId) {
+        await setActive({ session: signIn.createdSessionId });
+      }
       router.replace(getPostSignInDestination(email));
     } catch (err: unknown) {
       const clerkErr = err as { errors?: Array<{ message: string }>; message?: string };
