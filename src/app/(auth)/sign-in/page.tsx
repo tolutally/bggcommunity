@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
-import { useClerk, useSignIn } from "@clerk/nextjs";
+import { useSignIn } from "@clerk/nextjs";
 import { useToast } from "@/components/ui/toast";
 
 function GoogleIcon() {
@@ -34,8 +34,15 @@ function getPostSignInDestination(emailAddress: string) {
 }
 
 export default function SignInPage() {
+  return (
+    <Suspense fallback={<div className="w-full" />}>
+      <SignInPageInner />
+    </Suspense>
+  );
+}
+
+function SignInPageInner() {
   const { signIn } = useSignIn();
-  const { setActive } = useClerk();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -75,17 +82,12 @@ export default function SignInPage() {
         setError(signInError.message ?? "Sign in failed. Please try again.");
         return;
       }
-      if (signIn.status === "complete") {
-        if (signIn.createdSessionId) {
-          await setActive({ session: signIn.createdSessionId });
-        } else {
-          await signIn.finalize();
-        }
-        router.replace(getPostSignInDestination(email));
-      }
+      // No error = sign-in complete; navigate to destination
+      router.replace(getPostSignInDestination(email));
     } catch (err: unknown) {
-      const e = err as { message?: string };
-      setError(e.message ?? "Sign in failed. Please try again.");
+      const clerkErr = err as { errors?: Array<{ message: string }>; message?: string };
+      const message = clerkErr.errors?.[0]?.message ?? clerkErr.message ?? "Sign in failed. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }
