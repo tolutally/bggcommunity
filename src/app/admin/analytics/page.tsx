@@ -1,130 +1,37 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Users, Calendar, TrendingUp, Activity, Download, Check, ChevronDown, X, Eye, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Users, Calendar, TrendingUp, Activity, Download, Check, X, Eye, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
-import { DatePicker } from "@/components/ui/date-picker";
 import { exportCSV, exportXLSX, exportPDF } from "@/lib/export";
 import { useAnalyticsOverview, useAnalyticsCohorts } from "@/hooks/use-analytics";
 
-// Demo data for platform growth
-const GROWTH_DATA = {
-    "7days": {
-        labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        members: [1180, 1195, 1210, 1218, 1230, 1242, 1248],
-        active: [780, 810, 825, 840, 830, 850, 856],
-    },
-    "30days": {
-        labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-        members: [1050, 1120, 1185, 1248],
-        active: [720, 780, 820, 856],
-    },
-    "quarter": {
-        labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-        members: [540, 624, 735, 820, 890, 965, 1020, 1095, 1140, 1180, 1215, 1248],
-        active: [380, 420, 510, 580, 640, 700, 750, 800, 820, 840, 850, 856],
-    },
-    "custom": {
-        labels: [] as string[],
-        members: [] as number[],
-        active: [] as number[],
-    },
-};
-
-// Drill-down data per cohort
-const COHORT_DRILL_DOWN: Record<string, { labels: string[]; members: number[]; active: number[]; retention: number; avgSession: string; topActivity: string }> = {
-    "Cohort Alpha": {
-        labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-        members: [42, 42, 42, 42],
-        active: [40, 39, 41, 40],
-        retention: 95,
-        avgSession: "2h 15m",
-        topActivity: "Code Reviews",
-    },
-    "Cohort Beta": {
-        labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-        members: [28, 28, 28, 28],
-        active: [25, 23, 24, 23],
-        retention: 82,
-        avgSession: "1h 45m",
-        topActivity: "Design Critiques",
-    },
-    "Cohort Pioneer": {
-        labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-        members: [35, 35, 35, 35],
-        active: [32, 30, 28, 25],
-        retention: 71,
-        avgSession: "1h 30m",
-        topActivity: "Product Roadmaps",
-    },
-};
-
-type TimeRange = "7days" | "30days" | "quarter" | "custom";
 
 export default function AdminAnalyticsPage() {
-    const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
-    const [customStart, setCustomStart] = useState("");
-    const [customEnd, setCustomEnd] = useState("");
-    const [showCustomPicker, setShowCustomPicker] = useState(false);
     const [exportSuccess, setExportSuccess] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
-    const [drillDownCohort, setDrillDownCohort] = useState<string | null>(null);
+    const [drillDownCohortId, setDrillDownCohortId] = useState<string | null>(null);
 
     const { overview, isLoading: loadingOverview } = useAnalyticsOverview();
     const { cohorts: apiCohorts, isLoading: loadingCohorts } = useAnalyticsCohorts();
 
-    // Generate custom range data
-    const getCustomData = () => {
-        if (!customStart || !customEnd) return GROWTH_DATA["30days"];
-        const start = new Date(customStart);
-        const end = new Date(customEnd);
-        const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-        const points = Math.min(Math.max(days, 2), 12);
-        const labels: string[] = [];
-        const members: number[] = [];
-        const active: number[] = [];
-        for (let i = 0; i < points; i++) {
-            const d = new Date(start.getTime() + (i / (points - 1)) * (end.getTime() - start.getTime()));
-            labels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
-            members.push(Math.round(1000 + i * 20));
-            active.push(Math.round(700 + i * 12));
-        }
-        return { labels, members, active };
-    };
-
-    const data = timeRange === "custom" ? getCustomData() : GROWTH_DATA[timeRange];
+    const drillCohort = apiCohorts.find(c => c.id === drillDownCohortId) ?? null;
 
     const getExportData = () => {
-        const headers = ["Period", "Total Members", "Active Users"];
-        const rows = data.labels.map((label, i) => [label, data.members[i], data.active[i]] as (string | number)[]);
+        const headers = ["Cohort", "Members", "Active Rate (%)", "Sessions Done"];
+        const rows = apiCohorts.map(c => [c.name, c.memberCount, Math.round(c.activeRate * 100), c.sessionsDone] as (string | number)[]);
         return { headers, rows };
     };
 
     const handleExport = (format: "csv" | "xlsx" | "pdf" = "csv") => {
         const { headers, rows } = getExportData();
-        const basename = `analytics-report-${timeRange}-${new Date().toISOString().split("T")[0]}`;
+        const basename = `analytics-report-${new Date().toISOString().split("T")[0]}`;
         if (format === "csv") exportCSV(headers, rows, basename);
         else if (format === "xlsx") exportXLSX(headers, rows, basename);
-        else exportPDF(headers, rows, basename, { title: "Platform Analytics Report", subtitle: `Time range: ${timeRange}` });
+        else exportPDF(headers, rows, basename, { title: "Platform Analytics Report" });
         setExportSuccess(true);
         setShowExportMenu(false);
         setTimeout(() => setExportSuccess(false), 3000);
-    };
-
-    const handleTimeRangeChange = (value: string) => {
-        if (value === "custom") {
-            setShowCustomPicker(true);
-        } else {
-            setTimeRange(value as TimeRange);
-            setShowCustomPicker(false);
-        }
-    };
-
-    const applyCustomRange = () => {
-        if (customStart && customEnd) {
-            setTimeRange("custom");
-            setShowCustomPicker(false);
-        }
     };
 
     return (
@@ -136,27 +43,6 @@ export default function AdminAnalyticsPage() {
                     <p className="text-stone-500 mt-2">Overview of community growth and engagement.</p>
                 </div>
                 <div className="flex gap-2 items-center flex-wrap">
-                    <div className="relative">
-                        <select
-                            value={timeRange === "custom" ? "custom" : timeRange}
-                            onChange={(e) => handleTimeRangeChange(e.target.value)}
-                            className="bg-white border border-stone-200 rounded-lg px-4 py-2 text-sm font-medium text-stone-600 focus:outline-none focus:ring-2 focus:ring-brand-100 appearance-none pr-8"
-                        >
-                            <option value="7days">Last 7 Days</option>
-                            <option value="30days">Last 30 Days</option>
-                            <option value="quarter">This Year</option>
-                            <option value="custom">Custom Range</option>
-                        </select>
-                        <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                    </div>
-
-                    {timeRange === "custom" && (
-                        <div className="flex items-center gap-1 text-xs text-stone-500 bg-brand-50 px-2 py-1 rounded-lg">
-                            {customStart} &mdash; {customEnd}
-                            <button onClick={() => setShowCustomPicker(true)} className="text-brand-600 hover:text-brand-800 font-bold ml-1">Edit</button>
-                        </div>
-                    )}
-
                     <div className="relative">
                         <button
                             onClick={() => setShowExportMenu(m => !m)}
@@ -181,17 +67,7 @@ export default function AdminAnalyticsPage() {
                 </div>
             </div>
 
-            {/* Custom Date Picker */}
-            {showCustomPicker && (
-                <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-lg flex flex-col sm:flex-row items-end gap-4">
-                    <DatePicker value={customStart} onChange={setCustomStart} label="Start Date" max={customEnd || undefined} className="flex-1" />
-                    <DatePicker value={customEnd} onChange={setCustomEnd} label="End Date" min={customStart || undefined} className="flex-1" />
-                    <div className="flex gap-2">
-                        <button onClick={() => setShowCustomPicker(false)} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-stone-50 transition-colors">Cancel</button>
-                        <button onClick={applyCustomRange} disabled={!customStart || !customEnd} className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Apply</button>
-                    </div>
-                </div>
-            )}
+
 
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -210,17 +86,15 @@ export default function AdminAnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Chart Area */}
                 <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-stone-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h3 className="font-bold text-stone-900">Platform Growth</h3>
-                            <p className="text-sm text-stone-500 mt-1">Member acquisition and active users over time</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-brand-600"></span><span className="text-xs text-stone-500">Total Members</span></div>
-                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-accent-500"></span><span className="text-xs text-stone-500">Active Users</span></div>
-                        </div>
+                    <div className="mb-6">
+                        <h3 className="font-bold text-stone-900">Platform Growth</h3>
+                        <p className="text-sm text-stone-500 mt-1">Member acquisition and active users over time</p>
                     </div>
-                    <GrowthChart data={data} />
+                    <div className="flex flex-col items-center justify-center h-48 rounded-xl bg-stone-50 border border-dashed border-stone-200 gap-2">
+                        <TrendingUp size={24} className="text-stone-300" />
+                        <p className="text-sm font-semibold text-stone-400">Historical trend data unavailable</p>
+                        <p className="text-xs text-stone-400">A time-series API endpoint is needed to display growth charts.</p>
+                    </div>
                 </div>
 
                 {/* Side Stats */}
@@ -238,21 +112,14 @@ export default function AdminAnalyticsPage() {
                                             value={`${Math.round(cohort.activeRate * 100)}%`}
                                             color={i === 0 ? "bg-brand-600" : i === 1 ? "bg-accent-500" : "bg-stone-500"}
                                         />
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            // Fallback to demo data if API cohorts not available
-                            <div className="space-y-4">
-                                {Object.entries(COHORT_DRILL_DOWN).map(([name, cohortData]) => (
-                                    <div key={name} className="group">
-                                        <ProgramBar label={name} value={`${cohortData.retention}%`} color={name.includes("Alpha") ? "bg-brand-600" : name.includes("Beta") ? "bg-accent-500" : "bg-stone-500"} />
-                                        <button onClick={() => setDrillDownCohort(name)} className="text-[10px] text-brand-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 hover:underline">
+                                        <button onClick={() => setDrillDownCohortId(cohort.id)} className="text-[10px] text-brand-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 hover:underline">
                                             <Eye size={10} /> View Details
                                         </button>
                                     </div>
                                 ))}
                             </div>
+                        ) : (
+                            <p className="text-sm text-stone-400">No cohort data available.</p>
                         )}
                     </div>
 
@@ -274,38 +141,34 @@ export default function AdminAnalyticsPage() {
             </div>
 
             {/* Drill-Down Modal */}
-            {drillDownCohort && COHORT_DRILL_DOWN[drillDownCohort] && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDrillDownCohort(null)}>
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+            {drillCohort && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDrillDownCohortId(null)}>
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between p-6 border-b border-stone-100">
                             <div>
-                                <h2 className="text-xl font-bold text-stone-900">{drillDownCohort} Analytics</h2>
-                                <p className="text-sm text-stone-500">Detailed engagement breakdown</p>
+                                <h2 className="text-xl font-bold text-stone-900">{drillCohort.name}</h2>
+                                <p className="text-sm text-stone-500">Cohort engagement breakdown</p>
                             </div>
-                            <button onClick={() => setDrillDownCohort(null)} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
+                            <button onClick={() => setDrillDownCohortId(null)} aria-label="Close" className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
                         </div>
                         <div className="p-6">
-                            <div className="grid grid-cols-3 gap-4 mb-6">
+                            <div className="grid grid-cols-3 gap-4">
                                 <div className="bg-stone-50 rounded-xl p-4 text-center">
-                                    <p className="text-2xl font-bold text-stone-900">{COHORT_DRILL_DOWN[drillDownCohort].retention}%</p>
-                                    <p className="text-xs text-stone-500 font-medium">Retention Rate</p>
+                                    <p className="text-2xl font-bold text-stone-900">{drillCohort.memberCount}</p>
+                                    <p className="text-xs text-stone-500 font-medium">Members</p>
                                 </div>
                                 <div className="bg-stone-50 rounded-xl p-4 text-center">
-                                    <p className="text-2xl font-bold text-stone-900">{COHORT_DRILL_DOWN[drillDownCohort].avgSession}</p>
-                                    <p className="text-xs text-stone-500 font-medium">Avg Session</p>
+                                    <p className="text-2xl font-bold text-stone-900">{Math.round(drillCohort.activeRate * 100)}%</p>
+                                    <p className="text-xs text-stone-500 font-medium">Active Rate</p>
                                 </div>
                                 <div className="bg-stone-50 rounded-xl p-4 text-center">
-                                    <p className="text-2xl font-bold text-stone-900">{COHORT_DRILL_DOWN[drillDownCohort].topActivity}</p>
-                                    <p className="text-xs text-stone-500 font-medium">Top Activity</p>
+                                    <p className="text-2xl font-bold text-stone-900">{drillCohort.sessionsDone}</p>
+                                    <p className="text-xs text-stone-500 font-medium">Sessions Done</p>
                                 </div>
-                            </div>
-                            <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
-                                <h4 className="text-sm font-bold text-stone-700 mb-3">Weekly Active Members</h4>
-                                <GrowthChart data={COHORT_DRILL_DOWN[drillDownCohort]} />
                             </div>
                         </div>
                         <div className="p-6 border-t border-stone-100 bg-stone-50 flex justify-end">
-                            <button onClick={() => { setDrillDownCohort(null); handleExport("xlsx"); }} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-bold hover:bg-stone-800 transition-colors">
+                            <button onClick={() => { setDrillDownCohortId(null); handleExport("xlsx"); }} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-bold hover:bg-stone-800 transition-colors">
                                 <Download size={14} /> Export Cohort Data
                             </button>
                         </div>

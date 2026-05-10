@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from "@/context/UserContext";
-import { Users, Activity, AlertTriangle, Calendar, X, UserPlus, ChevronDown, Loader2, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { Users, Activity, AlertTriangle, Calendar, X, UserPlus, Loader2, TrendingUp, TrendingDown, Info } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -12,23 +12,17 @@ import { useEvents } from "@/hooks/use-events";
 import { useCohorts, cohortStatusLabel } from "@/hooks/use-cohorts";
 import { useCommunityGroups } from "@/hooks/use-community";
 import { useReportQueue } from "@/hooks/use-admin-moderation";
+import { useAnalyticsOverview } from "@/hooks/use-analytics";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
-type DateRange = "thisYear" | "30days" | "7days";
 
-const CHART_DATA: Record<DateRange, { bars: number[]; labels: string[] }> = {
-    thisYear: { bars: [35, 42, 38, 55, 62, 58, 75, 82, 90, 85, 94, 100], labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] },
-    "30days": { bars: [65, 72, 68, 80], labels: ["Week 1", "Week 2", "Week 3", "Week 4"] },
-    "7days": { bars: [78, 82, 75, 90, 88, 95, 92], labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] },
-};
 
 export default function AdminDashboard() {
     const { user } = useUser();
     const [showAddUser, setShowAddUser] = useState(false);
     const [showNewEvent, setShowNewEvent] = useState(false);
-    const [dateRange, setDateRange] = useState<DateRange>("thisYear");
     const [recentUsers, setRecentUsers] = useState<{ name: string; email: string; role: string }[]>([]);
     const [recentEvents, setRecentEvents] = useState<{ title: string; date: string; type: string }[]>([]);
 
@@ -37,13 +31,12 @@ export default function AdminDashboard() {
     const { cohorts } = useCohorts();
     const { groups } = useCommunityGroups();
     const { reports: openReports, isLoading: reportsLoading } = useReportQueue();
+    const { overview, isLoading: overviewLoading } = useAnalyticsOverview();
 
     const totalMembers = members.length;
     const upcomingEvents = events.filter(e => new Date(e.scheduledAt) > new Date()).length;
     const activeCohorts = cohorts.filter(c => cohortStatusLabel(c.status) === "Active");
     const totalGroups = groups.length;
-
-    const chartData = CHART_DATA[dateRange];
 
     return (
         <motion.div initial="hidden" animate="show" variants={container} className="p-6 md:p-10 space-y-8 max-w-7xl mx-auto">
@@ -61,33 +54,23 @@ export default function AdminDashboard() {
                     <AdminStatCard title="Upcoming Events" value={upcomingEvents.toString()} change={`${events.length} total`} icon={Calendar} trend="neutral" tooltip="Events scheduled in the future" />
                     <AdminStatCard title="Community Groups" value={totalGroups.toString()} change="Active" icon={Activity} isHealth trend="up" tooltip="Number of active community groups" />
 
-                    {/* Growth Chart */}
+                    {/* Member Snapshot */}
                     <div className="md:col-span-2 bg-white rounded-3xl p-6 border border-stone-100 shadow-sm flex flex-col">
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h3 className="font-bold text-stone-900">Member Growth</h3>
-                                <p className="text-sm text-stone-500">New vs Returning Users</p>
+                        <div className="mb-6">
+                            <h3 className="font-bold text-stone-900">Member Snapshot</h3>
+                            <p className="text-sm text-stone-500">Current engagement at a glance</p>
+                        </div>
+                        {overviewLoading ? (
+                            <div className="flex items-center gap-2 text-stone-400 text-sm flex-1"><Loader2 size={16} className="animate-spin" /> Loading...</div>
+                        ) : overview ? (
+                            <div className="flex-1 space-y-5">
+                                <SnapshotBar label="Total Members" count={overview.totalMembers} max={overview.totalMembers} color="bg-brand-600" />
+                                <SnapshotBar label="Active This Month" count={overview.activeThisMonth} max={overview.totalMembers} color="bg-accent-500" />
+                                <SnapshotBar label="New This Month" count={overview.newThisMonth} max={overview.totalMembers} color="bg-emerald-500" />
                             </div>
-                            <div className="relative">
-                                <select value={dateRange} onChange={e => setDateRange(e.target.value as DateRange)} className="bg-stone-50 border border-stone-200 rounded-lg px-3 py-1 text-xs font-medium text-stone-600 outline-none appearance-none pr-7">
-                                    <option value="thisYear">This Year</option>
-                                    <option value="30days">Last 30 Days</option>
-                                    <option value="7days">Last 7 Days</option>
-                                </select>
-                                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
-                            </div>
-                        </div>
-                        <div className="flex-1 flex items-end justify-between gap-2 h-48 px-2">
-                            {chartData.bars.map((h, i) => (
-                                <div key={i} className="w-full h-full bg-stone-100 rounded-t-md relative group" title={`${chartData.labels[i]}: ${h}%`}>
-                                    <div className="absolute bottom-0 left-0 right-0 bg-brand-600 rounded-t-md transition-all duration-500 hover:bg-brand-700" style={{ height: `${h}%` }}></div>
-                                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-stone-900 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap">{h}%</div>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="flex justify-between mt-3 text-[10px] text-stone-400 font-bold uppercase tracking-wider px-2">
-                            {chartData.labels.map((l, i) => <span key={i}>{l}</span>)}
-                        </div>
+                        ) : (
+                            <p className="text-sm text-stone-400 flex-1">No data available.</p>
+                        )}
                     </div>
 
                     {/* Quick Actions & Reports */}
@@ -353,6 +336,21 @@ function CohortStatusCard({ name, phase, health, stats }: { name: string; phase:
             </div>
             <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${health === "High" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{health} Health</span>
         </Link>
+    );
+}
+
+function SnapshotBar({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
+    const pct = max > 0 ? Math.round((count / max) * 100) : 0;
+    return (
+        <div>
+            <div className="flex justify-between text-sm font-semibold text-stone-700 mb-2">
+                <span>{label}</span>
+                <span className="text-stone-900">{count.toLocaleString()}</span>
+            </div>
+            <div className="w-full bg-stone-100 rounded-full h-2.5">
+                <div className={`${color} h-2.5 rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+            </div>
+        </div>
     );
 }
 
