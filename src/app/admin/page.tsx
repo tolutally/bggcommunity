@@ -22,9 +22,7 @@ const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 export default function AdminDashboard() {
     const { user } = useUser();
     const [showAddUser, setShowAddUser] = useState(false);
-    const [showNewEvent, setShowNewEvent] = useState(false);
     const [recentUsers, setRecentUsers] = useState<{ name: string; email: string; role: string }[]>([]);
-    const [recentEvents, setRecentEvents] = useState<{ title: string; date: string; type: string }[]>([]);
 
     const { members, isLoading: membersLoading } = useMembers();
     const { events } = useEvents();
@@ -82,10 +80,10 @@ export default function AdminDashboard() {
                                     <UserPlus size={20} />
                                     <span className="text-xs font-semibold">Add User</span>
                                 </button>
-                                <button onClick={() => setShowNewEvent(true)} className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-stone-50 text-stone-700 hover:bg-stone-100 transition-colors">
+                                <Link href="/admin/events?create=true" className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-stone-50 text-stone-700 hover:bg-stone-100 transition-colors">
                                     <Calendar size={20} />
                                     <span className="text-xs font-semibold">New Event</span>
-                                </button>
+                                </Link>
                             </div>
                         </div>
 
@@ -130,24 +128,6 @@ export default function AdminDashboard() {
                         </div>
                     )}
 
-                    {/* Recently Created Events */}
-                    {recentEvents.length > 0 && (
-                        <div className="md:col-span-3 bg-white rounded-3xl p-6 border border-stone-100 shadow-sm">
-                            <h3 className="font-bold text-stone-900 mb-4">Recently Created Events</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                {recentEvents.slice(0, 3).map((e, i) => (
-                                    <div key={i} className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-xl">
-                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700"><Calendar size={16} /></div>
-                                        <div>
-                                            <p className="text-sm font-bold text-stone-900">{e.title}</p>
-                                            <p className="text-xs text-stone-500">{e.date} &middot; {e.type}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
                     {/* Active Cohorts */}
                     <div className="md:col-span-3 bg-white rounded-3xl p-6 border border-stone-100 shadow-sm">
                         <div className="flex items-center justify-between mb-6">
@@ -168,8 +148,6 @@ export default function AdminDashboard() {
             {/* Add User Modal */}
             {showAddUser && <AddUserModal onClose={() => setShowAddUser(false)} onAdd={(u) => { setRecentUsers(prev => [u, ...prev]); setShowAddUser(false); }} />}
 
-            {/* New Event Modal */}
-            {showNewEvent && <NewEventModal onClose={() => setShowNewEvent(false)} onCreate={(e) => { setRecentEvents(prev => [e, ...prev]); setShowNewEvent(false); }} />}
         </motion.div>
     );
 }
@@ -223,69 +201,6 @@ function AddUserModal({ onClose, onAdd }: { onClose: () => void; onAdd: (u: { na
                 <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
                     <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors">Cancel</button>
                     <button onClick={handleSubmit} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors">Add User</button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-/* ── New Event Modal ── */
-function NewEventModal({ onClose, onCreate }: { onClose: () => void; onCreate: (e: { title: string; date: string; type: string }) => void }) {
-    const [title, setTitle] = useState("");
-    const [date, setDate] = useState("");
-    const [time, setTime] = useState("");
-    const [type, setType] = useState("Workshop");
-    const [errors, setErrors] = useState<Record<string, string>>({});
-
-    const handleSubmit = () => {
-        const e: Record<string, string> = {};
-        if (!title.trim()) e.title = "Title is required";
-        if (!date) e.date = "Date is required";
-        if (!time) e.time = "Time is required";
-        setErrors(e);
-        if (Object.keys(e).length === 0) onCreate({ title: title.trim(), date, type });
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between p-6 border-b border-stone-100">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-50 rounded-xl text-blue-600"><Calendar size={20} /></div>
-                        <h2 className="text-lg font-bold text-stone-900">Create Event</h2>
-                    </div>
-                    <button onClick={onClose} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
-                </div>
-                <div className="p-6 space-y-4">
-                    <div>
-                        <label className="block text-sm font-semibold text-stone-700 mb-1">Event Title</label>
-                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Portfolio Review Session" className={`w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.title ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                        {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-sm font-semibold text-stone-700 mb-1">Date</label>
-                            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={`w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.date ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                            {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold text-stone-700 mb-1">Time</label>
-                            <input type="time" value={time} onChange={e => setTime(e.target.value)} className={`w-full px-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.time ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                            {errors.time && <p className="text-red-500 text-xs mt-1">{errors.time}</p>}
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-stone-700 mb-1">Type</label>
-                        <div className="flex gap-2 flex-wrap">
-                            {["Workshop", "Q&A", "Speaker Series", "Social", "Hackathon"].map(t => (
-                                <button key={t} type="button" onClick={() => setType(t)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${type === t ? "bg-brand-800 text-white" : "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{t}</button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-                <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
-                    <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-600 border border-stone-200 hover:bg-white transition-colors">Cancel</button>
-                    <button onClick={handleSubmit} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors">Create Event</button>
                 </div>
             </div>
         </div>

@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { Calendar, CalendarDays, Check, Clock, Copy, ExternalLink, Link2, List, Loader2, Pencil, Plus, RefreshCw, Trash2, UserCheck, Users, Video, X, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -127,6 +128,16 @@ export default function AdminEventsPage() {
     const [filterStatus, setFilterStatus] = useState<"all" | "upcoming" | "past">("all");
     const [modal, setModal] = useState<null | "create" | (EventUpsertInput & { id: string })>(null);
     const [detailEventId, setDetailEventId] = useState<string | null>(null);
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    // Auto-open create modal when navigated from dashboard with ?create=true
+    useEffect(() => {
+        if (searchParams.get("create") === "true") {
+            setModal("create");
+            router.replace("/admin/events");
+        }
+    }, [searchParams, router]);
     const [deleteTarget, setDeleteTarget] = useState<EventRecord | null>(null);
     const [eventDetails, setEventDetails] = useState<Record<string, EventDetailRecord>>({});
     const [eventRsvps, setEventRsvps] = useState<Record<string, EventRsvpRecord[]>>({});
