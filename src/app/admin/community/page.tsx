@@ -1,11 +1,15 @@
 "use client";
 
-import { Users, Plus, Search, Edit2, Trash2, Hash, Loader2, X, Megaphone } from "lucide-react";
+import { Users, Plus, Search, Edit2, Trash2, Hash, Loader2, X, Megaphone, UserPlus, Check, ChevronRight, ChevronLeft } from "lucide-react";
 import { useState, useMemo } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useCommunityGroups } from "@/hooks/use-community";
 import { useCreateGroup, useUpdateGroup, useDeleteGroup, useAddChannel, useAnnounce } from "@/hooks/use-admin-community";
+import { useAdminUsers } from "@/hooks/use-admin-users";
+import { useCohorts } from "@/hooks/use-cohorts";
+import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
 import type { CommunityGroup } from "@/lib/types";
 
@@ -20,6 +24,7 @@ export default function AdminCommunityPage() {
     const [editingGroup, setEditingGroup] = useState<CommunityGroup | null>(null);
     const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
     const [channelGroupId, setChannelGroupId] = useState<string | null>(null);
+    const [manageMembersGroup, setManageMembersGroup] = useState<CommunityGroup | null>(null);
 
     const filtered = useMemo(() => {
         return groups.filter(g => {
@@ -62,7 +67,7 @@ export default function AdminCommunityPage() {
 
                     <div className="space-y-3">
                         {filtered.map(g => (
-                            <GroupRow key={g.id} group={g} onEdit={() => { setEditingGroup(g); setShowGroupForm(true); }} onDelete={() => setDeletingGroupId(g.id)} onAddChannel={() => setChannelGroupId(g.id)} />
+                            <GroupRow key={g.id} group={g} onEdit={() => { setEditingGroup(g); setShowGroupForm(true); }} onDelete={() => setDeletingGroupId(g.id)} onAddChannel={() => setChannelGroupId(g.id)} onManageMembers={() => setManageMembersGroup(g)} />
                         ))}
                     </div>
 
@@ -85,13 +90,17 @@ export default function AdminCommunityPage() {
             {channelGroupId && (
                 <AddChannelModal groupId={channelGroupId} onClose={() => setChannelGroupId(null)} onSuccess={() => { setChannelGroupId(null); toast("Channel added", "success"); }} onError={(msg) => toast(msg, "error")} />
             )}
+
+            {manageMembersGroup && (
+                <ManageMembersModal group={manageMembersGroup} onClose={() => setManageMembersGroup(null)} onSuccess={() => { setManageMembersGroup(null); mutate(); toast("Members updated", "success"); }} onError={(msg) => toast(msg, "error")} />
+            )}
         </div>
         </ErrorBoundary>
     );
 }
 
 /* ── Group Row ── */
-function GroupRow({ group, onEdit, onDelete, onAddChannel }: { group: CommunityGroup; onEdit: () => void; onDelete: () => void; onAddChannel: () => void }) {
+function GroupRow({ group, onEdit, onDelete, onAddChannel, onManageMembers }: { group: CommunityGroup; onEdit: () => void; onDelete: () => void; onAddChannel: () => void; onManageMembers: () => void }) {
     return (
         <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col md:flex-row md:items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center text-brand-700 flex-shrink-0">
@@ -103,6 +112,7 @@ function GroupRow({ group, onEdit, onDelete, onAddChannel }: { group: CommunityG
                 <p className="text-xs text-stone-400 mt-1">{group.memberCount} members · {group.newPostCount} new posts</p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+                <button onClick={onManageMembers} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors" title="Manage members"><UserPlus size={16} /></button>
                 <button onClick={onAddChannel} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors" title="Add channel"><Hash size={16} /></button>
                 <button onClick={onEdit} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors" title="Edit"><Edit2 size={16} /></button>
                 <button onClick={onDelete} className="p-2 rounded-lg border border-stone-200 text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={16} /></button>
@@ -111,47 +121,276 @@ function GroupRow({ group, onEdit, onDelete, onAddChannel }: { group: CommunityG
     );
 }
 
-/* ── Group Form Modal ── */
+/* ── Group Form Modal (2-step for create, 1-step for edit) ── */
 function GroupFormModal({ group, onClose, onSuccess, onError }: { group: CommunityGroup | null; onClose: () => void; onSuccess: () => void; onError: (msg: string) => void }) {
+    const { getToken } = useAuth();
     const create = useCreateGroup();
     const update = useUpdateGroup(group?.id ?? "");
     const isEdit = !!group;
     const mutation = isEdit ? update : create;
+    const [step, setStep] = useState<1 | 2>(1);
     const [name, setName] = useState(group?.name ?? "");
     const [description, setDescription] = useState(group?.description ?? "");
+    const [nameError, setNameError] = useState("");
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [selectedCohortIds, setSelectedCohortIds] = useState<string[]>([]);
+    const [submitting, setSubmitting] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!name.trim()) { onError("Name is required."); return; }
+    const handleNext = () => {
+        if (!name.trim()) { setNameError("Name is required."); return; }
+        setNameError("");
+        setStep(2);
+    };
+
+    const handleSubmit = async () => {
+        if (isEdit) {
+            if (!name.trim()) { onError("Name is required."); return; }
+            try { await update.trigger({ name: name.trim(), description: description.trim() || undefined }); onSuccess(); } catch { onError("Failed to update group."); }
+            return;
+        }
+        setSubmitting(true);
         try {
-            await mutation.trigger({ name: name.trim(), description: description.trim() || undefined });
+            const result = await create.trigger({ name: name.trim(), description: description.trim() || undefined });
+            const groupId = (result as { data?: { id?: string } })?.data?.id;
+            if (groupId) {
+                const token = await getToken();
+                const getT = () => Promise.resolve(token);
+                if (selectedUserIds.length > 0) {
+                    await apiRequest(`/admin/community/groups/${groupId}/members`, { method: "POST", body: { userIds: selectedUserIds }, getToken: getT });
+                }
+                for (const cohortId of selectedCohortIds) {
+                    await apiRequest(`/admin/community/groups/${groupId}/cohorts`, { method: "POST", body: { cohortId }, getToken: getT });
+                }
+            }
             onSuccess();
-        } catch { onError(`Failed to ${isEdit ? "update" : "create"} group.`); }
+        } catch { onError("Failed to create group."); setSubmitting(false); }
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-stone-900">{isEdit ? "Edit Group" : "New Group"}</h2>
-                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-stone-100"><X size={18} /></button>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-stone-100">
+                    <div>
+                        <h2 className="text-lg font-bold text-stone-900">{isEdit ? "Edit Group" : step === 1 ? "New Group" : "Add Members"}</h2>
+                        {!isEdit && <p className="text-xs text-stone-400 mt-0.5">Step {step} of 2</p>}
+                    </div>
+                    <button onClick={onClose} aria-label="Close" className="p-2 rounded-lg hover:bg-stone-100"><X size={18} /></button>
                 </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="text-sm font-semibold text-stone-700 mb-1 block">Name *</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+
+                {/* Step indicators (create only) */}
+                {!isEdit && (
+                    <div className="flex px-6 pt-4 gap-2">
+                        {[1, 2].map(s => (
+                            <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${step >= s ? "bg-brand-800" : "bg-stone-100"}`} />
+                        ))}
                     </div>
-                    <div>
-                        <label className="text-sm font-semibold text-stone-700 mb-1 block">Description</label>
-                        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none resize-none" />
+                )}
+
+                {/* Step 1: Name + Description */}
+                {step === 1 && (
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label className="text-sm font-semibold text-stone-700 mb-1 block">Name *</label>
+                            <input type="text" value={name} onChange={e => { setName(e.target.value); setNameError(""); }} className={`w-full px-4 py-3 bg-stone-50 border rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none ${nameError ? "border-red-300 bg-red-50" : "border-stone-200"}`} placeholder="e.g. Alumni Network" />
+                            {nameError && <p className="text-red-500 text-xs mt-1">{nameError}</p>}
+                        </div>
+                        <div>
+                            <label className="text-sm font-semibold text-stone-700 mb-1 block">Description</label>
+                            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none resize-none" placeholder="What is this group for?" />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Cancel</button>
+                            {isEdit ? (
+                                <button onClick={handleSubmit} disabled={mutation.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                                    {mutation.isLoading && <Loader2 size={14} className="animate-spin" />} Update
+                                </button>
+                            ) : (
+                                <button onClick={handleNext} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2">
+                                    Next <ChevronRight size={16} />
+                                </button>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex justify-end gap-3">
-                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Cancel</button>
-                        <button type="submit" disabled={mutation.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
-                            {mutation.isLoading && <Loader2 size={14} className="animate-spin" />} {isEdit ? "Update" : "Create"}
+                )}
+
+                {/* Step 2: Member / Cohort picker */}
+                {step === 2 && !isEdit && (
+                    <div className="p-6 space-y-4">
+                        <MemberPickerPanel
+                            selectedUserIds={selectedUserIds}
+                            selectedCohortIds={selectedCohortIds}
+                            onToggleUser={id => setSelectedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                            onToggleCohort={id => setSelectedCohortIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                        />
+                        <div className="flex justify-between gap-3 pt-2">
+                            <button onClick={() => setStep(1)} className="px-4 py-2.5 text-sm font-semibold text-stone-600 flex items-center gap-1.5 hover:bg-stone-100 rounded-xl transition-colors">
+                                <ChevronLeft size={16} /> Back
+                            </button>
+                            <button onClick={handleSubmit} disabled={submitting} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                                {submitting && <Loader2 size={14} className="animate-spin" />} Create Group
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ── Member Picker Panel (shared between create flow and manage modal) ── */
+function MemberPickerPanel({
+    selectedUserIds, selectedCohortIds, onToggleUser, onToggleCohort,
+}: {
+    selectedUserIds: string[];
+    selectedCohortIds: string[];
+    onToggleUser: (id: string) => void;
+    onToggleCohort: (id: string) => void;
+}) {
+    const [pickerTab, setPickerTab] = useState<"members" | "cohorts">("members");
+    const [search, setSearch] = useState("");
+    const { users, isLoading: usersLoading } = useAdminUsers();
+    const { cohorts, isLoading: cohortsLoading } = useCohorts();
+
+    const filteredUsers = useMemo(() => {
+        const q = search.toLowerCase();
+        return users.filter(u => {
+            const name = `${u.profile?.firstName ?? ""} ${u.profile?.lastName ?? ""}`.toLowerCase();
+            return name.includes(q) || u.email.toLowerCase().includes(q);
+        });
+    }, [users, search]);
+
+    const filteredCohorts = useMemo(() => {
+        const q = search.toLowerCase();
+        return cohorts.filter(c => c.name.toLowerCase().includes(q));
+    }, [cohorts, search]);
+
+    const totalSelected = selectedUserIds.length + selectedCohortIds.length;
+
+    return (
+        <div className="space-y-3">
+            {/* Tab switcher */}
+            <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
+                {(["members", "cohorts"] as const).map(t => (
+                    <button key={t} onClick={() => { setPickerTab(t); setSearch(""); }} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors capitalize ${pickerTab === t ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}>{t}</button>
+                ))}
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={15} />
+                <input type="text" placeholder={pickerTab === "members" ? "Search by name or email..." : "Search cohorts..."} value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+            </div>
+
+            {/* List */}
+            <div className="max-h-52 overflow-y-auto space-y-1 rounded-xl border border-stone-100 bg-stone-50 p-1">
+                {pickerTab === "members" && (
+                    usersLoading ? (
+                        <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-stone-400" /></div>
+                    ) : filteredUsers.length === 0 ? (
+                        <p className="text-center text-xs text-stone-400 py-6">No members found</p>
+                    ) : filteredUsers.map(u => {
+                        const checked = selectedUserIds.includes(u.id);
+                        const displayName = u.profile ? `${u.profile.firstName} ${u.profile.lastName}` : u.email;
+                        return (
+                            <button key={u.id} onClick={() => onToggleUser(u.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${checked ? "bg-brand-50 text-brand-900" : "hover:bg-white text-stone-700"}`}>
+                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${checked ? "bg-brand-800 border-brand-800" : "border-stone-300"}`}>
+                                    {checked && <Check size={12} className="text-white" />}
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold truncate">{displayName}</p>
+                                    <p className="text-xs text-stone-400 truncate">{u.email}</p>
+                                </div>
+                            </button>
+                        );
+                    })
+                )}
+                {pickerTab === "cohorts" && (
+                    cohortsLoading ? (
+                        <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-stone-400" /></div>
+                    ) : filteredCohorts.length === 0 ? (
+                        <p className="text-center text-xs text-stone-400 py-6">No cohorts found</p>
+                    ) : filteredCohorts.map(c => {
+                        const checked = selectedCohortIds.includes(c.id);
+                        return (
+                            <button key={c.id} onClick={() => onToggleCohort(c.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${checked ? "bg-brand-50 text-brand-900" : "hover:bg-white text-stone-700"}`}>
+                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${checked ? "bg-brand-800 border-brand-800" : "border-stone-300"}`}>
+                                    {checked && <Check size={12} className="text-white" />}
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold truncate">{c.name}</p>
+                                    <p className="text-xs text-stone-400">{c._count.members} members · {c.status}</p>
+                                </div>
+                            </button>
+                        );
+                    })
+                )}
+            </div>
+
+            {/* Selection summary */}
+            {totalSelected > 0 && (
+                <p className="text-xs font-semibold text-brand-700 bg-brand-50 rounded-lg px-3 py-2">
+                    {selectedUserIds.length > 0 && `${selectedUserIds.length} member${selectedUserIds.length > 1 ? "s" : ""}`}
+                    {selectedUserIds.length > 0 && selectedCohortIds.length > 0 && " · "}
+                    {selectedCohortIds.length > 0 && `${selectedCohortIds.length} cohort${selectedCohortIds.length > 1 ? "s" : ""}`} selected
+                </p>
+            )}
+        </div>
+    );
+}
+
+/* ── Manage Members Modal (post-creation) ── */
+function ManageMembersModal({ group, onClose, onSuccess, onError }: { group: CommunityGroup; onClose: () => void; onSuccess: () => void; onError: (msg: string) => void }) {
+    const { getToken } = useAuth();
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+    const [selectedCohortIds, setSelectedCohortIds] = useState<string[]>([]);
+    const [submitting, setSubmitting] = useState(false);
+
+    const handleSave = async () => {
+        if (selectedUserIds.length === 0 && selectedCohortIds.length === 0) { onClose(); return; }
+        setSubmitting(true);
+        try {
+            const token = await getToken();
+            const getT = () => Promise.resolve(token);
+            if (selectedUserIds.length > 0) {
+                await apiRequest(`/admin/community/groups/${group.id}/members`, { method: "POST", body: { userIds: selectedUserIds }, getToken: getT });
+            }
+            for (const cohortId of selectedCohortIds) {
+                await apiRequest(`/admin/community/groups/${group.id}/cohorts`, { method: "POST", body: { cohortId }, getToken: getT });
+            }
+            onSuccess();
+        } catch { onError("Failed to update members."); setSubmitting(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-6 border-b border-stone-100">
+                    <div>
+                        <h2 className="text-lg font-bold text-stone-900">Manage Members</h2>
+                        <p className="text-xs text-stone-400 mt-0.5">{group.name}</p>
+                    </div>
+                    <button onClick={onClose} aria-label="Close" className="p-2 rounded-lg hover:bg-stone-100"><X size={18} /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                        <Users size={14} className="text-amber-600 flex-shrink-0" />
+                        <p className="text-xs text-amber-700 font-medium">This is a gated group. Only admins can add members or cohorts.</p>
+                    </div>
+                    <MemberPickerPanel
+                        selectedUserIds={selectedUserIds}
+                        selectedCohortIds={selectedCohortIds}
+                        onToggleUser={id => setSelectedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                        onToggleCohort={id => setSelectedCohortIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                    />
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Cancel</button>
+                        <button onClick={handleSave} disabled={submitting} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                            {submitting && <Loader2 size={14} className="animate-spin" />}
+                            <UserPlus size={14} /> Add to Group
                         </button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     );

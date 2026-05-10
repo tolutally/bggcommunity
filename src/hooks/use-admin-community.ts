@@ -37,3 +37,24 @@ export function useAnnounce() {
     { method: "POST" },
   );
 }
+
+export function useAddGroupMembers(groupId: string) {
+  return useApiMutation<ApiResponse<{ added: number }>, { userIds: string[] }>(
+    `/admin/community/groups/${groupId}/members`,
+    { method: "POST", revalidate: ["/community/groups", `/community/groups/${groupId}`] },
+  );
+}
+
+export function useAddGroupCohort(groupId: string) {
+  return useApiMutation<ApiResponse<{ added: number }>, { cohortId: string }>(
+    `/admin/community/groups/${groupId}/cohorts`,
+    { method: "POST", revalidate: ["/community/groups", `/community/groups/${groupId}`] },
+  );
+}
+
+export function useRemoveGroupMember(groupId: string, userId: string) {
+  return useApiMutation(
+    `/admin/community/groups/${groupId}/members/${userId}`,
+    { method: "DELETE", revalidate: ["/community/groups", `/community/groups/${groupId}`] },
+  );
+}
