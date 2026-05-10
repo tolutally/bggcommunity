@@ -292,9 +292,7 @@ function JobRow({
                     <span className="flex items-center gap-1"><Clock size={14} /> {getJobTypeLabel(job.jobType)}</span>
                     <span className="inline-flex items-center rounded-full border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-semibold text-stone-600">{getWorkModeLabel(job.workMode)}</span>
                 </div>
-                {job.referralContact ? (
-                    <p className="mt-2 text-xs font-semibold text-brand-700">Referral contact: {job.referralContact}</p>
-                ) : null}
+
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -334,9 +332,8 @@ function JobFormModal({
     const [jobType, setJobType] = useState<JobType>(initial?.jobType ?? "FULL_TIME");
     const [workMode, setWorkMode] = useState<WorkMode>(initial?.workMode ?? "REMOTE");
     const [externalUrl, setExternalUrl] = useState(initial?.externalUrl ?? "");
-    const [referralContact, setReferralContact] = useState(initial?.referralContact ?? "");
     const [isFeatured, setIsFeatured] = useState(initial?.isFeatured ?? true);
-    const [referralAvailable, setReferralAvailable] = useState(initial?.referralAvailable ?? Boolean(initial?.referralContact));
+    const [referralAvailable, setReferralAvailable] = useState(initial?.referralAvailable ?? false);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     const handleSubmit = async () => {
@@ -346,7 +343,6 @@ function JobFormModal({
         if (!company.trim()) nextErrors.company = "Required";
         if (!location.trim()) nextErrors.location = "Required";
         if (externalUrl && !/^https?:\/\/.+/i.test(externalUrl)) nextErrors.externalUrl = "Enter a valid URL";
-        if (referralAvailable && !referralContact.trim()) nextErrors.referralContact = "Referral contact is required when referrals are enabled";
 
         setErrors(nextErrors);
 
@@ -361,7 +357,7 @@ function JobFormModal({
             jobType,
             workMode,
             externalUrl: externalUrl.trim() || null,
-            referralContact: referralAvailable ? referralContact.trim() : null,
+            referralContact: null,
             isFeatured,
             referralAvailable,
         });
@@ -410,13 +406,11 @@ function JobFormModal({
                         <button type="button" onClick={() => setReferralAvailable(!referralAvailable)} className={`w-10 h-6 rounded-full transition-colors relative ${referralAvailable ? "bg-brand-600" : "bg-stone-300"}`}>
                             <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${referralAvailable ? "left-[18px]" : "left-0.5"}`} />
                         </button>
-                        <span className="text-sm font-semibold text-stone-700">Referral available</span>
+                        <div>
+                            <span className="text-sm font-semibold text-stone-700">Referral available</span>
+                            {referralAvailable && <p className="text-xs text-stone-400 mt-0.5">Members can click &quot;Seek Referral&quot; — requests will appear in your admin dashboard.</p>}
+                        </div>
                     </label>
-                    {referralAvailable ? (
-                        <Field label="Referral Contact" error={errors.referralContact}>
-                            <input type="text" value={referralContact} onChange={(event) => setReferralContact(event.target.value)} placeholder="e.g. Amara Okafor" className={inputClass(errors.referralContact)} />
-                        </Field>
-                    ) : null}
                     <label className="flex items-center gap-3 cursor-pointer">
                         <button type="button" onClick={() => setIsFeatured(!isFeatured)} className={`w-10 h-6 rounded-full transition-colors relative ${isFeatured ? "bg-brand-600" : "bg-stone-300"}`}>
                             <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${isFeatured ? "left-[18px]" : "left-0.5"}`} />

@@ -253,9 +253,6 @@ export default function MemberJobsPage() {
                                                 {job.description ? (
                                                     <p className="text-sm leading-6 text-stone-500 line-clamp-3">{job.description}</p>
                                                 ) : null}
-                                                {job.referralContact ? (
-                                                    <p className="text-xs font-semibold text-brand-700 mt-3">Referral contact: {job.referralContact}</p>
-                                                ) : null}
                                             </div>
 
                                             <div className="flex-shrink-0 flex flex-col sm:flex-row gap-2">
@@ -267,16 +264,21 @@ export default function MemberJobsPage() {
                                                 >
                                                     {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                                                 </button>
-                                                {job.referralAvailable ? (
-                                                    <button
-                                                        onClick={() => void handleReferralRequest(job)}
-                                                        disabled={referralSent || isReferralPending}
-                                                        className={`px-5 py-2.5 font-bold rounded-xl transition-colors text-sm flex items-center justify-center gap-2 ${referralSent ? "bg-brand-50 text-brand-700 border border-brand-200" : "bg-white text-brand-700 border border-brand-200 hover:bg-brand-50"} disabled:cursor-not-allowed disabled:opacity-70`}
-                                                    >
-                                                        {isReferralPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                                                        {referralSent ? "Referral requested" : "Seek referral"}
-                                                    </button>
-                                                ) : null}
+                                                <button
+                                                    onClick={() => job.referralAvailable ? void handleReferralRequest(job) : undefined}
+                                                    disabled={!job.referralAvailable || referralSent || isReferralPending}
+                                                    title={!job.referralAvailable ? "No referral available for this job" : referralSent ? "Referral already requested" : "Seek a referral"}
+                                                    className={`px-5 py-2.5 font-bold rounded-xl transition-colors text-sm flex items-center justify-center gap-2 border ${
+                                                        !job.referralAvailable
+                                                            ? "bg-stone-50 text-stone-300 border-stone-200 cursor-not-allowed"
+                                                            : referralSent
+                                                            ? "bg-brand-50 text-brand-700 border-brand-200 cursor-default"
+                                                            : "bg-white text-brand-700 border-brand-200 hover:bg-brand-50"
+                                                    }`}
+                                                >
+                                                    {isReferralPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                                                    {referralSent ? "Referral requested" : "Seek referral"}
+                                                </button>
                                                 {job.externalUrl ? (
                                                     <a href={job.externalUrl} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2">
                                                         Apply <ExternalLink size={14} />
