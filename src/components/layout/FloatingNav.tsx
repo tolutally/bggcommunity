@@ -137,15 +137,17 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
                                             <p className="font-bold text-stone-900">{user.name}</p>
                                             <p className="text-sm text-stone-500">{user.email}</p>
                                         </div>
-                                        <div className="py-2">
-                                            <Link href={`/${moduleType}/profile`} onClick={() => setShowProfileMenu(false)} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">View Profile</Link>
-                                            {settingsItem && (
-                                                <Link href={settingsItem.href} onClick={() => setShowProfileMenu(false)} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
-                                                    Settings
-                                                </Link>
-                                            )}
-                                            <button className="w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Help & Support</button>
-                                        </div>
+                                        {moduleType !== "admin" && (
+                                            <div className="py-2">
+                                                <Link href={`/${moduleType}/profile`} onClick={() => setShowProfileMenu(false)} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">View Profile</Link>
+                                                {settingsItem && (
+                                                    <Link href={settingsItem.href} onClick={() => setShowProfileMenu(false)} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
+                                                        Settings
+                                                    </Link>
+                                                )}
+                                                <button className="w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Help & Support</button>
+                                            </div>
+                                        )}
                                         <div className="border-t border-stone-100 pt-2">
                                             <button
                                                 type="button"
