@@ -76,12 +76,13 @@ export default function SignInPage() {
         return;
       }
       if (signIn.status === "complete") {
+        const destination = getPostSignInDestination(email);
         if (signIn.createdSessionId) {
-          await setActive({ session: signIn.createdSessionId });
+          await setActive({ session: signIn.createdSessionId, redirectUrl: destination });
         } else {
           await signIn.finalize();
+          router.replace(destination);
         }
-        router.replace(getPostSignInDestination(email));
       }
     } catch (err: unknown) {
       const e = err as { message?: string };
