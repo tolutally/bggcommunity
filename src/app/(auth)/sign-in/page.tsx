@@ -4,7 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
-import { useSignIn, useClerk } from "@clerk/nextjs";
+import { useClerk } from "@clerk/nextjs";
+import { useSignIn } from "@clerk/nextjs/legacy";
 import { useToast } from "@/components/ui/toast";
 
 function GoogleIcon() {
@@ -78,17 +79,19 @@ function SignInPageInner() {
     }
 
     try {
-      // Use Clerk v7 future password API — signIn resource is mutated in-place on success
-      const { error: signInError } = await signIn.password({ identifier: email, password });
-      if (signInError) {
-        setError(signInError.message ?? "Sign in failed. Please try again.");
-        return;
+      // Use Clerk's classic API: create with password strategy returns a result with createdSessionId
+      const result = await signIn.create({
+        strategy: "password",
+        identifier: email,
+        password,
+      });
+
+      if (result.status === "complete" && result.createdSessionId) {
+        await setActive({ session: result.createdSessionId });
+        router.replace(getPostSignInDestination(email));
+      } else {
+        setError("Sign in could not be completed. Please try again.");
       }
-      // Activate the session on the client before navigating
-      if (signIn.createdSessionId) {
-        await setActive({ session: signIn.createdSessionId });
-      }
-      router.replace(getPostSignInDestination(email));
     } catch (err: unknown) {
       const clerkErr = err as { errors?: Array<{ message: string }>; message?: string };
       const message = clerkErr.errors?.[0]?.message ?? clerkErr.message ?? "Sign in failed. Please try again.";
@@ -105,10 +108,10 @@ function SignInPageInner() {
       window.sessionStorage.setItem(AUTH_INTENT_STORAGE_KEY, "sign-in");
     }
 
-    await signIn.sso({
+    await signIn.authenticateWithRedirect({
       strategy,
       redirectUrl: `${window.location.origin}/sso-callback`,
-      redirectCallbackUrl: `${window.location.origin}/member`,
+      redirectUrlComplete: `${window.location.origin}/member`,
     });
   };
 
