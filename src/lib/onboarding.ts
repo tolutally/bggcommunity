@@ -325,8 +325,13 @@ export function markOnboardingSynced(userId: string, draft: OnboardingDraft) {
   completeOnboarding(userId, draft, { source: "api", pendingSync: false, lastSyncError: null });
 }
 
-export function markOnboardingFallbackComplete(userId: string, draft: OnboardingDraft, lastSyncError: string | null) {
-  completeOnboarding(userId, draft, { source: "fallback", pendingSync: true, lastSyncError });
+export function markOnboardingFallbackComplete(
+  userId: string,
+  draft: OnboardingDraft,
+  lastSyncError: string | null,
+  pendingSync = true,
+) {
+  completeOnboarding(userId, draft, { source: "fallback", pendingSync, lastSyncError });
 }
 
 export function clearLocalOnboardingFallback(userId: string) {

@@ -4,6 +4,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
 import { Bell, ChevronDown, Search, Menu, X, type LucideIcon } from "lucide-react";
@@ -29,6 +30,7 @@ type FloatingNavProps = {
 export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps) {
     const pathname = usePathname();
     const { user } = useUser();
+    const { logout } = useAuth();
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [mobileMenuState, setMobileMenuState] = useState({ pathname, open: false });
     const mobileMenuOpen = mobileMenuState.open && mobileMenuState.pathname === pathname;
@@ -39,6 +41,12 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
     // Separate settings from main nav
     const mainNavItems = allNavItems.filter(item => item.name !== "Settings");
     const settingsItem = allNavItems.find(item => item.name === "Settings");
+
+    const handleLogout = async () => {
+        setShowProfileMenu(false);
+        setMobileMenuState({ pathname, open: false });
+        await logout();
+    };
 
     const moduleLabels = {
         member: "Member",
@@ -139,7 +147,13 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
                                             <button className="w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">Help & Support</button>
                                         </div>
                                         <div className="border-t border-stone-100 pt-2">
-                                            <button className="w-full px-4 py-2.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors">Sign Out</button>
+                                            <button
+                                                type="button"
+                                                onClick={handleLogout}
+                                                className="w-full px-4 py-2.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors"
+                                            >
+                                                Sign Out
+                                            </button>
                                         </div>
                                     </div>
                                 </>
@@ -266,7 +280,11 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-stone-100 bg-white">
-                    <button className="w-full py-3 text-rose-600 font-semibold hover:bg-rose-50 rounded-xl transition-colors">
+                    <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full py-3 text-rose-600 font-semibold hover:bg-rose-50 rounded-xl transition-colors"
+                    >
                         Sign Out
                     </button>
                 </div>

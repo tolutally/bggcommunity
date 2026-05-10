@@ -51,6 +51,18 @@ const AUTH_INTENT_STORAGE_KEY = "bgg_auth_intent";
 const MEMBER_REQUIRED_REDIRECT = "/sign-in?memberRequired=1";
 const LOGOUT_REDIRECT = "/sign-in";
 
+function shouldRetryPendingOnboardingSync(error: unknown) {
+    if (!(error instanceof ApiError)) {
+        return true;
+    }
+
+    if (error.status >= 500 || error.status === 408 || error.status === 429) {
+        return true;
+    }
+
+    return error.status < 400;
+}
+
 /* ── Validation helpers (kept for any remaining consumers) ── */
 export function validateEmail(email: string): string | null {
     if (!email.trim()) return "Email is required";
@@ -243,8 +255,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await mutateCurrentUser();
             } catch (error) {
                 const message = getUsersErrorMessage(error);
-                savePendingOnboardingSync(userId, pendingSync.draft, message);
-                markOnboardingFallbackComplete(userId, pendingSync.draft, message);
+                const shouldRetry = shouldRetryPendingOnboardingSync(error);
+
+                if (shouldRetry) {
+                    savePendingOnboardingSync(userId, pendingSync.draft, message);
+                }
+
+                markOnboardingFallbackComplete(userId, pendingSync.draft, message, shouldRetry);
             } finally {
                 if (!cancelled) {
                     syncInFlightRef.current = null;
