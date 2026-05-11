@@ -279,7 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => {
             cancelled = true;
         };
-    }, [apiLoading, apiUser?.onboardingComplete, getToken, isSignedIn, localOnboardingStatus.pendingSync, mutateCurrentUser, userId, localStateVersion]);
+    }, [apiLoading, apiUser?.onboardingComplete, getToken, isSignedIn, localOnboardingStatus.pendingSync, mutateCurrentUser, userId]);
 
     // ── Debug logging ──
     useEffect(() => {
