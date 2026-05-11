@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
 import { Bell, ChevronDown, Search, Menu, X, type LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type NavItem = {
     name: string;
@@ -34,6 +34,11 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [mobileMenuState, setMobileMenuState] = useState({ pathname, open: false });
     const mobileMenuOpen = mobileMenuState.open && mobileMenuState.pathname === pathname;
+
+    // Close profile menu on navigation so the fixed inset-0 overlay never blocks the new page
+    useEffect(() => {
+        setShowProfileMenu(false);
+    }, [pathname]);
 
     // Flatten nav items for the main nav bar
     const allNavItems = navGroups.flatMap(group => group.items);
