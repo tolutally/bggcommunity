@@ -169,9 +169,10 @@ function normalizeAdminStats(value: unknown): AdminCohortStatsRecord {
     };
 }
 
-export async function fetchCohorts(cursor?: string | null) {
+export async function fetchCohorts(cursor?: string | null, getToken?: TokenProvider) {
     const response = await apiRequest<CursorResponse<unknown>>(
         `/cohorts${buildQueryString({ cursor: cursor ?? undefined, limit: 50 })}`,
+        getToken ? { getToken } : undefined,
     );
 
     return {
@@ -180,18 +181,18 @@ export async function fetchCohorts(cursor?: string | null) {
     };
 }
 
-export async function resolveCohortIdFromSlug(slug: string) {
-    const response = await fetchCohorts();
+export async function resolveCohortIdFromSlug(slug: string, getToken?: TokenProvider) {
+    const response = await fetchCohorts(undefined, getToken);
     return response.items.find((cohort) => cohort.slug === slug) ?? null;
 }
 
-export async function fetchCohortDetail(cohortId: string) {
-    const response = await apiRequest<SuccessResponse<unknown>>(`/cohorts/${cohortId}`);
+export async function fetchCohortDetail(cohortId: string, getToken?: TokenProvider) {
+    const response = await apiRequest<SuccessResponse<unknown>>(`/cohorts/${cohortId}`, getToken ? { getToken } : undefined);
     return normalizeCohort(response.data);
 }
 
-export async function fetchCohortMembers(cohortId: string) {
-    const response = await apiRequest<SuccessResponse<unknown[]>>(`/cohorts/${cohortId}/members`);
+export async function fetchCohortMembers(cohortId: string, getToken?: TokenProvider) {
+    const response = await apiRequest<SuccessResponse<unknown[]>>(`/cohorts/${cohortId}/members`, getToken ? { getToken } : undefined);
     return Array.isArray(response.data) ? response.data.map(normalizeMember) : [];
 }
 
@@ -203,8 +204,8 @@ export async function fetchCohortSessions(cohortId: string, getToken?: TokenProv
     return Array.isArray(response.data) ? response.data.map(normalizeSession) : [];
 }
 
-export async function fetchCohortResources(cohortId: string) {
-    const response = await apiRequest<SuccessResponse<unknown[]>>(`/cohorts/${cohortId}/resources`);
+export async function fetchCohortResources(cohortId: string, getToken?: TokenProvider) {
+    const response = await apiRequest<SuccessResponse<unknown[]>>(`/cohorts/${cohortId}/resources`, getToken ? { getToken } : undefined);
     return Array.isArray(response.data) ? response.data.map(normalizeResource) : [];
 }
 

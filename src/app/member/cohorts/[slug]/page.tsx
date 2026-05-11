@@ -75,14 +75,14 @@ export default function MemberCohortPage() {
             setError(null);
 
             try {
-                const resolved = await resolveCohortIdFromSlug(slug);
+                const resolved = await resolveCohortIdFromSlug(slug, getToken);
                 const cohortId = resolved?.id ?? slug;
 
                 const [cohortDetail, cohortMembers, cohortSessions, cohortResources] = await Promise.all([
-                    fetchCohortDetail(cohortId),
-                    fetchCohortMembers(cohortId),
+                    fetchCohortDetail(cohortId, getToken),
+                    fetchCohortMembers(cohortId, getToken),
                     fetchCohortSessions(cohortId, getToken),
-                    fetchCohortResources(cohortId),
+                    fetchCohortResources(cohortId, getToken),
                 ]);
 
                 if (cancelled) {
