@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Image from "next/image";
 import { Search, MapPin, Briefcase, Linkedin, X, MessageSquare, BadgeCheck, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,15 +9,21 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { useCursorPagination } from "@/hooks/useCursorPagination";
+import { useAuth } from "@clerk/nextjs";
 import { fetchMembers, getMembersErrorMessage, type MemberRecord } from "@/lib/members";
 
 export default function MembersPage() {
+    const { getToken } = useAuth();
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
     const paginationQuery = useMemo(() => ({ limit: 24 }), []);
+    const loadMembersPage = useCallback(
+        (q: typeof paginationQuery & { cursor?: string | null }) => fetchMembers(q, getToken),
+        [getToken],
+    );
     const { items, isLoading, isLoadingMore, error, hasMore, loadMore } = useCursorPagination({
         query: paginationQuery,
-        loadPage: fetchMembers,
+        loadPage: loadMembersPage,
         getErrorMessage: getMembersErrorMessage,
     });
 

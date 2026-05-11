@@ -203,7 +203,8 @@ export function getApiErrorMessage(error: unknown, fallback: string) {
     return fallback;
 }
 
-export async function fetchJobs(query: JobsQuery = {}) {
+export async function fetchJobs(query: JobsQuery = {}, getToken?: TokenProvider) {
+    const token = getToken ? await getToken() : undefined;
     const response = await apiRequest<CursorResponse<unknown>>(
         `/jobs${buildQueryString({
             jobType: query.jobType,
@@ -212,6 +213,7 @@ export async function fetchJobs(query: JobsQuery = {}) {
             cursor: query.cursor,
             limit: query.limit ?? 20,
         })}`,
+        token ? { headers: { Authorization: `Bearer ${token}` } } : {},
     );
 
     return {

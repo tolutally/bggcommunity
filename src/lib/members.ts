@@ -1,4 +1,4 @@
-import { apiRequest, buildQueryString } from "@/lib/api";
+import { apiRequest, buildQueryString, type TokenProvider } from "@/lib/api";
 import { getApiErrorMessage as getSharedApiErrorMessage } from "@/lib/jobs";
 import type { CursorPageResult } from "@/hooks/useCursorPagination";
 
@@ -85,8 +85,12 @@ function normalizeMember(value: unknown): MemberRecord {
     };
 }
 
-export async function fetchMembers(query: MembersQuery = {}): Promise<CursorPageResult<MemberRecord>> {
-    const response = await apiRequest<CursorResponse<unknown>>(`/members${buildQueryString({ cursor: query.cursor, limit: query.limit ?? 20 })}`);
+export async function fetchMembers(query: MembersQuery = {}, getToken?: TokenProvider): Promise<CursorPageResult<MemberRecord>> {
+    const token = getToken ? await getToken() : undefined;
+    const response = await apiRequest<CursorResponse<unknown>>(
+        `/members${buildQueryString({ cursor: query.cursor, limit: query.limit ?? 20 })}`,
+        token ? { headers: { Authorization: `Bearer ${token}` } } : {},
+    );
 
     return {
         items: Array.isArray(response.data) ? response.data.map(normalizeMember) : [],

@@ -47,7 +47,7 @@ export default function MemberJobsPage() {
             setError(null);
 
             try {
-                const page = await fetchJobs({ isFeatured: true, limit: 20 });
+                const page = await fetchJobs({ isFeatured: true, limit: 20 }, getToken);
 
                 if (cancelled) {
                     return;
