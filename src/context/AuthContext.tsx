@@ -112,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { isSignedIn, isLoaded: clerkLoaded, signOut, getToken, userId } = useClerkAuth();
     const { user: clerkUser } = useClerkUser();
     const { user: apiUser, error: apiUserError, isLoading: apiLoading, mutate: mutateCurrentUser } = useCurrentUser();
-    const [localStateVersion, setLocalStateVersion] = useState(0);
+    const [, setLocalStateVersion] = useState(0);
     const syncInFlightRef = useRef<string | null>(null);
     const memberRedirectInFlightRef = useRef(false);
 
@@ -133,10 +133,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.addEventListener(ONBOARDING_LOCAL_STATE_EVENT, handleStateChange);
         return () => window.removeEventListener(ONBOARDING_LOCAL_STATE_EVENT, handleStateChange);
     }, []);
-
-    useEffect(() => {
-        void localStateVersion;
-    }, [localStateVersion]);
 
     // Build AuthUser from Clerk + API data
     const user: AuthUser | null = isSignedIn
