@@ -281,6 +281,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, [apiLoading, apiUser?.onboardingComplete, getToken, isSignedIn, localOnboardingStatus.pendingSync, mutateCurrentUser, userId, localStateVersion]);
 
+    // ── Debug logging ──
+    useEffect(() => {
+        console.log("[BGG:AUTH] state snapshot", {
+            clerkLoaded,
+            isSignedIn,
+            userId,
+            apiLoading,
+            apiUser: apiUser ? { id: apiUser.id, role: apiUser.role, onboardingComplete: apiUser.onboardingComplete } : null,
+            apiUserError: apiUserError ? String(apiUserError) : null,
+            isTokenError,
+            isLoading,
+            onboardingComplete,
+            user: user ? { id: user.id, role: user.role } : null,
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [clerkLoaded, isSignedIn, userId, apiLoading, apiUser, apiUserError, isLoading, onboardingComplete]);
+
     return (
         <AuthContext.Provider
             value={{

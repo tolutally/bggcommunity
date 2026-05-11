@@ -69,7 +69,10 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
     const isJsonBody = body !== undefined && !isFormData;
 
-    const response = await fetch(buildUrl(path), {
+    const url = buildUrl(path);
+    console.log(`[BGG:API] ${method} ${url} | auth=${token ? "✅ token present" : "❌ NO TOKEN"}`);
+
+    const response = await fetch(url, {
         method,
         headers: {
             ...(isJsonBody ? { "Content-Type": "application/json" } : {}),
@@ -89,9 +92,11 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
             (typeof payload === "string" && payload) ||
             `Request failed with status ${response.status}`;
 
+        console.error(`[BGG:API] ❌ ${method} ${url} → ${response.status} ${message}`, payload);
         throw new ApiRequestError(message, response.status, payload);
     }
 
+    console.log(`[BGG:API] ✅ ${method} ${url} → ${response.status}`);
     return payload as T;
 }
 

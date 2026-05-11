@@ -19,12 +19,14 @@ export function useAuthSWR<T = unknown>(
 
   const fetcher = async (key: string): Promise<T> => {
     let token = await getToken();
+    console.log(`[BGG:SWR] fetcher called for "${key}" | token=${token ? "✅" : "❌ null (will retry)"}`);
 
     // getToken() can return null momentarily while Clerk refreshes the session token.
     // Retry once with skipCache before giving up so we don't abort before the token is ready.
     if (!token) {
       await new Promise((r) => setTimeout(r, 500));
       token = await getToken({ skipCache: true });
+      console.log(`[BGG:SWR] retry result for "${key}" | token=${token ? "✅ got token" : "❌ still null — throwing"}`);
     }
 
     if (!token) {
@@ -35,6 +37,7 @@ export function useAuthSWR<T = unknown>(
   };
 
   const swrKey = isLoaded && isSignedIn ? path : null;
+  console.log(`[BGG:SWR] key="${path}" | isLoaded=${isLoaded} isSignedIn=${isSignedIn} → swrKey=${swrKey}`);
 
   return useSWR<T>(swrKey, fetcher, config);
 }
