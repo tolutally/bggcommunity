@@ -18,7 +18,14 @@ export function useAuthSWR<T = unknown>(
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const fetcher = async (key: string): Promise<T> => {
-    const token = await getToken();
+    let token = await getToken();
+
+    // getToken() can return null momentarily while Clerk refreshes the session token.
+    // Retry once with skipCache before giving up so we don't abort before the token is ready.
+    if (!token) {
+      await new Promise((r) => setTimeout(r, 500));
+      token = await getToken({ skipCache: true });
+    }
 
     if (!token) {
       throw new Error("Missing auth token");

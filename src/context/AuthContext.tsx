@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const syncInFlightRef = useRef<string | null>(null);
     const memberRedirectInFlightRef = useRef(false);
 
-    const isLoading = !clerkLoaded || (isSignedIn && apiLoading);
+    const isLoading = !clerkLoaded || (isSignedIn && (apiLoading || (apiUserError instanceof Error && apiUserError.message === "Missing auth token")));
     const localOnboardingStatus = userId ? loadLocalOnboardingStatus(userId) : {
         completed: false,
         source: "fallback" as const,
@@ -165,7 +165,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signOut({ redirectUrl: LOGOUT_REDIRECT });
     }, [getToken, signOut]);
 
-    const onboardingComplete = apiLoading
+    // "Missing auth token" means Clerk's token refresh is still in progress — not a real API failure.
+    // Treat it the same as still-loading so we don't prematurely redirect to onboarding.
+    const isTokenError = apiUserError instanceof Error && apiUserError.message === "Missing auth token";
+
+    const onboardingComplete = (apiLoading || isTokenError)
         ? null
         : apiUser
           ? (apiUser.onboardingComplete || localOnboardingStatus.completed)
