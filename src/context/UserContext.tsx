@@ -1,8 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, ReactNode } from "react";
-import { useUser as useClerkUser } from "@clerk/nextjs";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { useAuth } from "@/context/AuthContext";
 import type { User as ApiUser } from "@/lib/types";
 
 export type UserRole = "member" | "mentor" | "admin";
@@ -44,19 +43,18 @@ function displayName(apiUser: ApiUser | null): string {
 }
 
 export function UserProvider({ children }: { children: ReactNode }) {
-    const { user: clerkUser } = useClerkUser();
-    const { user: apiUser, isLoading, mutate } = useCurrentUser();
+    const { user: authUser, apiUser, isLoading, refetchUser } = useAuth();
 
-    const role = normalizeRole(apiUser?.role);
+    const role = authUser?.role ?? normalizeRole(apiUser?.role);
 
     const user: User = {
-        name: displayName(apiUser) || clerkUser?.fullName || clerkUser?.primaryEmailAddress?.emailAddress || "User",
-        avatar: apiUser?.profile?.avatarUrl || clerkUser?.imageUrl || "",
-        email: apiUser?.email || clerkUser?.primaryEmailAddress?.emailAddress || "",
+        name: authUser?.name || displayName(apiUser) || "User",
+        avatar: authUser?.avatar || apiUser?.profile?.avatarUrl || "",
+        email: authUser?.email || apiUser?.email || "",
     };
 
     return (
-        <UserContext.Provider value={{ role, user, apiUser, isLoading, refetchUser: mutate }}>
+        <UserContext.Provider value={{ role, user, apiUser, isLoading, refetchUser }}>
             {children}
         </UserContext.Provider>
     );

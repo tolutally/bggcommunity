@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useCallback, useRef, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useCallback, useRef, useState, useMemo, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
     useAuth as useClerkAuth,
@@ -8,6 +8,7 @@ import {
 } from "@clerk/nextjs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { ApiError, apiClient } from "@/lib/api";
+import type { User as ApiUser } from "@/lib/types";
 import {
     ONBOARDING_LOCAL_STATE_EVENT,
     clearLocalOnboardingFallback,
@@ -38,11 +39,13 @@ export interface AuthUser {
 
 interface AuthContextType {
     user: AuthUser | null;
+    apiUser: ApiUser | null;
     isAuthenticated: boolean;
     isLoading: boolean;
     onboardingComplete: boolean | null;
     onboardingPendingSync: boolean;
     onboardingStatusSource: "api" | "fallback" | null;
+    refetchUser: () => void;
     logout: () => void;
 }
 
@@ -50,6 +53,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_INTENT_STORAGE_KEY = "bgg_auth_intent";
 const MEMBER_REQUIRED_REDIRECT = "/sign-in?memberRequired=1";
 const LOGOUT_REDIRECT = "/sign-in";
+const AUTH_DEBUG = process.env.NODE_ENV !== "production";
 
 function shouldRetryPendingOnboardingSync(error: unknown) {
     if (!(error instanceof ApiError)) {
@@ -114,7 +118,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { user: apiUser, error: apiUserError, isLoading: apiLoading, mutate: mutateCurrentUser } = useCurrentUser();
     const [, setLocalStateVersion] = useState(0);
     const syncInFlightRef = useRef<string | null>(null);
+    const lastSyncAttemptRef = useRef<string | null>(null);
     const memberRedirectInFlightRef = useRef(false);
+    const getTokenRef = useRef(getToken);
+    const mutateCurrentUserRef = useRef(mutateCurrentUser);
+
+    useEffect(() => {
+        getTokenRef.current = getToken;
+    }, [getToken]);
+
+    useEffect(() => {
+        mutateCurrentUserRef.current = mutateCurrentUser;
+    }, [mutateCurrentUser]);
 
     const isLoading = !clerkLoaded || (isSignedIn && (apiLoading || (apiUserError instanceof Error && apiUserError.message === "Missing auth token")));
     const localOnboardingStatus = userId ? loadLocalOnboardingStatus(userId) : {
@@ -135,18 +150,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     // Build AuthUser from Clerk + API data
-    const user: AuthUser | null = isSignedIn
-        ? {
-              id: apiUser?.id ?? clerkUser?.id ?? "",
-              name: apiUser?.profile
-                  ? (apiUser.profile.displayName ??
-                    `${apiUser.profile.firstName ?? ""} ${apiUser.profile.lastName ?? ""}`.trim())
-                  : clerkUser?.fullName ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
-              email: apiUser?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
-              avatar: apiUser?.profile?.avatarUrl ?? clerkUser?.imageUrl ?? "",
-              role: normalizeRole(apiUser?.role, apiUser?.email ?? clerkUser?.primaryEmailAddress?.emailAddress),
-          }
-        : null;
+    const user = useMemo<AuthUser | null>(() => (
+        isSignedIn
+            ? {
+                id: apiUser?.id ?? clerkUser?.id ?? "",
+                name: apiUser?.profile
+                    ? (apiUser.profile.displayName ??
+                        `${apiUser.profile.firstName ?? ""} ${apiUser.profile.lastName ?? ""}`.trim())
+                    : clerkUser?.fullName ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
+                email: apiUser?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
+                avatar: apiUser?.profile?.avatarUrl ?? clerkUser?.imageUrl ?? "",
+                role: normalizeRole(apiUser?.role, apiUser?.email ?? clerkUser?.primaryEmailAddress?.emailAddress),
+            }
+            : null
+    ), [
+        isSignedIn,
+        apiUser?.id,
+        apiUser?.profile,
+        apiUser?.email,
+        apiUser?.role,
+        clerkUser?.id,
+        clerkUser?.fullName,
+        clerkUser?.primaryEmailAddress?.emailAddress,
+        clerkUser?.imageUrl,
+    ]);
 
     const logout = useCallback(async () => {
         try {
@@ -160,6 +187,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         await signOut({ redirectUrl: LOGOUT_REDIRECT });
     }, [getToken, signOut]);
+
+    const refetchUser = useCallback(() => {
+        void mutateCurrentUserRef.current();
+    }, []);
 
     // "Missing auth token" means Clerk's token refresh is still in progress — not a real API failure.
     // Treat it the same as still-loading so we don't prematurely redirect to onboarding.
@@ -217,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (pendingSync) {
                 markOnboardingSynced(userId, pendingSync.draft);
             }
+            lastSyncAttemptRef.current = null;
             return;
         }
 
@@ -225,8 +257,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
         }
 
+        const syncAttemptKey = `${userId}:${pendingSync.updatedAt}`;
+        if (lastSyncAttemptRef.current === syncAttemptKey) {
+            return;
+        }
+
         let cancelled = false;
         syncInFlightRef.current = userId;
+        lastSyncAttemptRef.current = syncAttemptKey;
 
         const syncPendingOnboarding = async () => {
             try {
@@ -240,32 +278,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     twitter: pendingSync.draft.profile.twitter,
                     company: pendingSync.draft.profile.company,
                     isOpenToWork: pendingSync.draft.privacy.openToWork,
-                }, getToken);
-                await updateProfileVisibility(pendingSync.draft.privacy.profileVisible, getToken);
+                }, getTokenRef.current);
+                await updateProfileVisibility(pendingSync.draft.privacy.profileVisible, getTokenRef.current);
 
                 if (pendingSync.draft.avatarSrc.startsWith("data:")) {
                     const avatarResponse = await fetch(pendingSync.draft.avatarSrc);
                     const avatarBlob = await avatarResponse.blob();
                     const avatarFile = new File([avatarBlob], "onboarding-avatar", { type: avatarBlob.type || "image/png" });
-                    await uploadCurrentUserAvatar(avatarFile, getToken);
+                    await uploadCurrentUserAvatar(avatarFile, getTokenRef.current);
                 }
 
-                await completeCurrentUserOnboarding(getToken);
+                await completeCurrentUserOnboarding(getTokenRef.current);
                 markOnboardingSynced(userId, pendingSync.draft);
-                await mutateCurrentUser();
+                await mutateCurrentUserRef.current();
             } catch (error) {
                 const message = getUsersErrorMessage(error);
                 const shouldRetry = shouldRetryPendingOnboardingSync(error);
 
                 if (shouldRetry) {
                     savePendingOnboardingSync(userId, pendingSync.draft, message);
+                } else {
+                    lastSyncAttemptRef.current = null;
                 }
 
                 markOnboardingFallbackComplete(userId, pendingSync.draft, message, shouldRetry);
             } finally {
                 if (!cancelled) {
                     syncInFlightRef.current = null;
-                    setLocalStateVersion((current) => current + 1);
                 }
             }
         };
@@ -275,10 +314,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => {
             cancelled = true;
         };
-    }, [apiLoading, apiUser?.onboardingComplete, getToken, isSignedIn, localOnboardingStatus.pendingSync, mutateCurrentUser, userId]);
+    }, [apiLoading, apiUser?.onboardingComplete, isSignedIn, localOnboardingStatus.pendingSync, userId]);
 
     // ── Debug logging ──
     useEffect(() => {
+        if (!AUTH_DEBUG) {
+            return;
+        }
+
         console.log("[BGG:AUTH] state snapshot", {
             clerkLoaded,
             isSignedIn,
@@ -294,17 +337,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [clerkLoaded, isSignedIn, userId, apiLoading, apiUser, apiUserError, isLoading, onboardingComplete]);
 
+    const authContextValue = useMemo<AuthContextType>(() => ({
+        user,
+        apiUser,
+        isAuthenticated: !!isSignedIn,
+        isLoading,
+        onboardingComplete,
+        onboardingPendingSync,
+        onboardingStatusSource,
+        refetchUser,
+        logout,
+    }), [user, apiUser, isSignedIn, isLoading, onboardingComplete, onboardingPendingSync, onboardingStatusSource, refetchUser, logout]);
+
     return (
         <AuthContext.Provider
-            value={{
-                user,
-                isAuthenticated: !!isSignedIn,
-                isLoading,
-                onboardingComplete,
-                onboardingPendingSync,
-                onboardingStatusSource,
-                logout,
-            }}
+            value={authContextValue}
         >
             {children}
         </AuthContext.Provider>

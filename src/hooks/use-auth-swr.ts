@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR, { type SWRConfiguration } from "swr";
+import { useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { apiClient } from "@/lib/api";
 
@@ -16,17 +17,22 @@ export function useAuthSWR<T = unknown>(
   config?: SWRConfiguration<T>,
 ) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const SWR_DEBUG = process.env.NODE_ENV !== "production";
 
   const fetcher = async (key: string): Promise<T> => {
     let token = await getToken();
-    console.log(`[BGG:SWR] fetcher called for "${key}" | token=${token ? "✅" : "❌ null (will retry)"}`);
+    if (SWR_DEBUG) {
+      console.log(`[BGG:SWR] fetcher called for "${key}" | token=${token ? "✅" : "❌ null (will retry)"}`);
+    }
 
     // getToken() can return null momentarily while Clerk refreshes the session token.
     // Retry once with skipCache before giving up so we don't abort before the token is ready.
     if (!token) {
       await new Promise((r) => setTimeout(r, 500));
       token = await getToken({ skipCache: true });
-      console.log(`[BGG:SWR] retry result for "${key}" | token=${token ? "✅ got token" : "❌ still null — throwing"}`);
+      if (SWR_DEBUG) {
+        console.log(`[BGG:SWR] retry result for "${key}" | token=${token ? "✅ got token" : "❌ still null - throwing"}`);
+      }
     }
 
     if (!token) {
@@ -37,7 +43,14 @@ export function useAuthSWR<T = unknown>(
   };
 
   const swrKey = isLoaded && isSignedIn ? path : null;
-  console.log(`[BGG:SWR] key="${path}" | isLoaded=${isLoaded} isSignedIn=${isSignedIn} → swrKey=${swrKey}`);
+
+  useEffect(() => {
+    if (!SWR_DEBUG) {
+      return;
+    }
+
+    console.log(`[BGG:SWR] key="${path}" | isLoaded=${isLoaded} isSignedIn=${isSignedIn} -> swrKey=${swrKey}`);
+  }, [SWR_DEBUG, path, isLoaded, isSignedIn, swrKey]);
 
   return useSWR<T>(swrKey, fetcher, config);
 }

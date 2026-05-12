@@ -12,6 +12,7 @@ function normalizeApiBaseUrl(value?: string) {
 
 export const API_BASE_URL =
     normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL);
+const API_DEBUG = process.env.NODE_ENV !== "production";
 
 export type TokenProvider = () => Promise<string | null>;
 
@@ -70,7 +71,9 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     const isJsonBody = body !== undefined && !isFormData;
 
     const url = buildUrl(path);
-    console.log(`[BGG:API] ${method} ${url} | auth=${token ? "✅ token present" : "❌ NO TOKEN"}`);
+    if (API_DEBUG) {
+        console.log(`[BGG:API] ${method} ${url} | auth=${token ? "✅ token present" : "❌ NO TOKEN"}`);
+    }
 
     const response = await fetch(url, {
         method,
@@ -96,7 +99,9 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
         throw new ApiRequestError(message, response.status, payload);
     }
 
-    console.log(`[BGG:API] ✅ ${method} ${url} → ${response.status}`);
+    if (API_DEBUG) {
+        console.log(`[BGG:API] ✅ ${method} ${url} -> ${response.status}`);
+    }
     return payload as T;
 }
 
