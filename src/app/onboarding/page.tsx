@@ -37,6 +37,7 @@ import {
   updateProfileVisibility,
   uploadCurrentUserAvatar,
 } from "@/lib/users";
+import { syncDraftDevPlanToCurrentUserPlan } from "@/lib/developer-plan";
 
 const STEPS = [
   { title: "Basic info", description: "Tell us what you do and where you are headed.", icon: UserRound, required: true },
@@ -347,8 +348,10 @@ function OnboardingFlow({
       }, getToken);
       await updateProfileVisibility(nextDraft.privacy.profileVisible, getToken);
       await completeCurrentUserOnboarding(getToken);
+      await syncDraftDevPlanToCurrentUserPlan(nextDraft, getToken);
       markOnboardingSynced(userId, nextDraft);
       await mutate("/users/me");
+      await mutate("/users/me/plan");
     } catch (error) {
       const message = getUsersErrorMessage(error);
       markOnboardingFallbackComplete(userId, nextDraft, message);

@@ -27,6 +27,34 @@ export function useToggleMilestone(milestoneId: string) {
   );
 }
 
+export function useCreateMyPlan() {
+  return useApiMutation<ApiResponse<DeveloperPlan> | { success: boolean; message?: string }>(
+    "/users/me/plan",
+    { method: "POST", revalidate: ["/users/me/plan"] },
+  );
+}
+
+export function useAddMyMilestone() {
+  return useApiMutation<ApiResponse<Milestone>, AddMilestoneInput>(
+    "/users/me/plan/milestones",
+    { method: "POST", revalidate: ["/users/me/plan"] },
+  );
+}
+
+export function useEditMyMilestone(milestoneId: string) {
+  return useApiMutation<ApiResponse<Milestone>, EditMilestoneInput>(
+    `/users/me/plan/milestones/${milestoneId}`,
+    { method: "PATCH", revalidate: ["/users/me/plan"] },
+  );
+}
+
+export function useDeleteMyMilestone(milestoneId: string) {
+  return useApiMutation(
+    `/users/me/plan/milestones/${milestoneId}`,
+    { method: "DELETE", revalidate: ["/users/me/plan"] },
+  );
+}
+
 // ── Admin plan management ────────────────────────────────────────────────
 
 export function useCreateMemberPlan(userId: string) {

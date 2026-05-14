@@ -491,7 +491,7 @@ export default function MemberProfilePage() {
                         </div>
 
                         {goals.length === 0 ? (
-                            <Link href="/onboarding?devplan=1" className="flex items-center justify-center gap-2 w-full py-3 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-sm rounded-xl transition-colors border border-brand-100">
+                            <Link href="/member/devplan" className="flex items-center justify-center gap-2 w-full py-3 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-sm rounded-xl transition-colors border border-brand-100">
                                 <Target size={15} /> Set Up Your Plan
                             </Link>
                         ) : (

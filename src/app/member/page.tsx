@@ -184,7 +184,7 @@ export default function MemberDashboard() {
                             </div>
                         </div>
                         <Link
-                            href={devPlanMeta.total === 0 ? "/onboarding?devplan=1" : "/member/devplan"}
+                            href="/member/devplan"
                             className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800"
                         >
                             {devPlanMeta.total === 0 ? "Set Up Dev Plan" : "Open Dev Plan"} <ArrowRight size={14} />

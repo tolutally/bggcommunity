@@ -25,6 +25,8 @@ import {
     updateProfileVisibility,
     uploadCurrentUserAvatar,
 } from "@/lib/users";
+import { syncDraftDevPlanToCurrentUserPlan } from "@/lib/developer-plan";
+import { useSWRConfig } from "swr";
 
 /* ── Types ── */
 export type UserRole = "member" | "mentor" | "admin";
@@ -116,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { isSignedIn, isLoaded: clerkLoaded, signOut, getToken, userId } = useClerkAuth();
     const { user: clerkUser } = useClerkUser();
     const { user: apiUser, error: apiUserError, isLoading: apiLoading, mutate: mutateCurrentUser } = useCurrentUser();
+    const { mutate } = useSWRConfig();
     const [, setLocalStateVersion] = useState(0);
     const syncInFlightRef = useRef<string | null>(null);
     const lastSyncAttemptRef = useRef<string | null>(null);
@@ -289,8 +292,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
 
                 await completeCurrentUserOnboarding(getTokenRef.current);
+                await syncDraftDevPlanToCurrentUserPlan(pendingSync.draft, getTokenRef.current);
                 markOnboardingSynced(userId, pendingSync.draft);
                 await mutateCurrentUserRef.current();
+                await mutate("/users/me/plan");
             } catch (error) {
                 const message = getUsersErrorMessage(error);
                 const shouldRetry = shouldRetryPendingOnboardingSync(error);
