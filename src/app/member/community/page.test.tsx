@@ -160,8 +160,10 @@ describe("member community page smoke", () => {
 
         render(<MemberCommunityPage />);
 
-        await screen.findByText("Backend Guild");
         await screen.findByText("Welcome everyone");
+
+        await user.click(screen.getByRole("button", { name: /My Groups/i }));
+        await screen.findAllByText("Backend Guild");
 
         const replyInput = await screen.findByPlaceholderText("Write a reply...");
         await user.type(replyInput, "Looks good");
@@ -171,8 +173,8 @@ describe("member community page smoke", () => {
         });
         await screen.findByText("Looks good");
 
-        await user.type(screen.getByPlaceholderText("Optional title"), "Question");
-        await user.type(screen.getByPlaceholderText("Share an update with your group..."), "How does RSVP sync?");
+        await user.type(screen.getByPlaceholderText("Title (optional)"), "Question");
+        await user.type(screen.getByPlaceholderText("Share something with the group..."), "How does RSVP sync?");
         await user.click(screen.getByRole("button", { name: "Post" }));
         await waitFor(() => {
             expect(createPostTriggerMock).toHaveBeenCalledTimes(1);

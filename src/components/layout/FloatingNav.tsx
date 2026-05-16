@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
 import { Bell, ChevronDown, Search, Menu, X, type LucideIcon } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 type NavItem = {
     name: string;
@@ -31,14 +31,10 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
     const pathname = usePathname();
     const { user } = useUser();
     const { logout } = useAuth();
-    const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const [profileMenuState, setProfileMenuState] = useState({ pathname, open: false });
     const [mobileMenuState, setMobileMenuState] = useState({ pathname, open: false });
+    const showProfileMenu = profileMenuState.open && profileMenuState.pathname === pathname;
     const mobileMenuOpen = mobileMenuState.open && mobileMenuState.pathname === pathname;
-
-    // Close profile menu on navigation so the fixed inset-0 overlay never blocks the new page
-    useEffect(() => {
-        setShowProfileMenu(false);
-    }, [pathname]);
 
     // Flatten nav items for the main nav bar
     const allNavItems = navGroups.flatMap(group => group.items);
@@ -48,7 +44,7 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
     const settingsItem = allNavItems.find(item => item.name === "Settings");
 
     const handleLogout = async () => {
-        setShowProfileMenu(false);
+        setProfileMenuState({ pathname, open: false });
         setMobileMenuState({ pathname, open: false });
         await logout();
     };
@@ -123,7 +119,7 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
                         {/* Profile Dropdown */}
                         <div className="relative">
                             <button
-                                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                                onClick={() => setProfileMenuState({ pathname, open: !showProfileMenu })}
                                 className="flex items-center gap-2 p-1.5 rounded-full hover:bg-stone-100 transition-all"
                             >
                                 <img
@@ -136,7 +132,7 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
 
                             {showProfileMenu && (
                                 <>
-                                    <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)} />
+                                    <div className="fixed inset-0 z-40" onClick={() => setProfileMenuState({ pathname, open: false })} />
                                     <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-stone-100 py-2 z-50">
                                         <div className="px-4 py-3 border-b border-stone-100">
                                             <p className="font-bold text-stone-900">{user.name}</p>
@@ -144,9 +140,9 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
                                         </div>
                                         {moduleType !== "admin" && (
                                             <div className="py-2">
-                                                <Link href={`/${moduleType}/profile`} onClick={() => setShowProfileMenu(false)} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">View Profile</Link>
+                                                <Link href={`/${moduleType}/profile`} onClick={() => setProfileMenuState({ pathname, open: false })} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">View Profile</Link>
                                                 {settingsItem && (
-                                                    <Link href={settingsItem.href} onClick={() => setShowProfileMenu(false)} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
+                                                    <Link href={settingsItem.href} onClick={() => setProfileMenuState({ pathname, open: false })} className="block w-full px-4 py-2.5 text-left text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors">
                                                         Settings
                                                     </Link>
                                                 )}

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff } from "lucide-react";
 import { useClerk, useSignIn } from "@clerk/nextjs";
 
-type Step = "email" | "reset" | "done";
+type Step = "email" | "reset" | "verifySignIn" | "done";
 
 export default function ForgotPasswordPage() {
   const { signIn } = useSignIn();
@@ -23,6 +23,65 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
+  const [signInVerificationCode, setSignInVerificationCode] = useState("");
+  const [signInVerificationHint, setSignInVerificationHint] = useState(
+    "Enter the verification code sent to your email to finish signing in.",
+  );
+
+  const getEmailCodeHint = (attempt: unknown) => {
+    const signInAttempt = attempt as {
+      supportedSecondFactors?: Array<{ strategy?: string; safeIdentifier?: string }>;
+    };
+    const factor = signInAttempt.supportedSecondFactors?.find((item) => item.strategy === "email_code");
+    if (factor?.safeIdentifier) {
+      return `Enter the verification code sent to ${factor.safeIdentifier}.`;
+    }
+    return "Enter the verification code sent to your email to finish signing in.";
+  };
+
+  const sendEmailCodeForPendingSignIn = async (attempt: unknown) => {
+    const signInAttempt = attempt as {
+      supportedSecondFactors?: Array<{ strategy?: string }>;
+      prepareSecondFactor?: (params: { strategy: "email_code" }) => Promise<unknown>;
+      mfa?: {
+        sendEmailCode?: () => Promise<unknown>;
+      };
+    };
+
+    const supportsEmailCode = signInAttempt.supportedSecondFactors?.some((factor) => factor.strategy === "email_code");
+    if (!supportsEmailCode) {
+      throw new Error("This account does not have email code verification enabled.");
+    }
+
+    if (typeof signInAttempt.prepareSecondFactor === "function") {
+      await signInAttempt.prepareSecondFactor({ strategy: "email_code" });
+      return;
+    }
+
+    if (typeof signInAttempt.mfa?.sendEmailCode === "function") {
+      await signInAttempt.mfa.sendEmailCode();
+      return;
+    }
+
+    throw new Error("Could not initiate email verification for this sign-in attempt.");
+  };
+
+  const completeSignInAndFinish = async () => {
+    if (!signIn) {
+      return;
+    }
+
+    if (signIn.createdSessionId) {
+      await setActive({ session: signIn.createdSessionId });
+    } else {
+      await signIn.finalize();
+    }
+
+    setStep("done");
+    setTimeout(() => {
+      router.replace("/member");
+    }, 600);
+  };
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,17 +150,19 @@ export default function ForgotPasswordPage() {
       }
 
       if (signIn.status === "complete") {
-        if (signIn.createdSessionId) {
-          await setActive({ session: signIn.createdSessionId });
-        } else {
-          await signIn.finalize();
-        }
+        await completeSignInAndFinish();
+        return;
       }
 
-      setStep("done");
-      setTimeout(() => {
-        router.replace("/member");
-      }, 600);
+      if (signIn.status === "needs_client_trust" || signIn.status === "needs_second_factor") {
+        await sendEmailCodeForPendingSignIn(signIn);
+        setSignInVerificationHint(getEmailCodeHint(signIn));
+        setSignInVerificationCode("");
+        setStep("verifySignIn");
+        return;
+      }
+
+      setError("Password was reset, but sign in is not complete yet. Please sign in again.");
     } catch (err: unknown) {
       const eErr = err as { message?: string };
       setError(eErr.message ?? "Could not reset password. Please try again.");
@@ -125,6 +186,66 @@ export default function ForgotPasswordPage() {
     } catch (err: unknown) {
       const eErr = err as { message?: string };
       setError(eErr.message ?? "Unable to resend code.");
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleVerifySignInCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signIn) return;
+
+    const trimmedCode = signInVerificationCode.trim();
+    if (!trimmedCode) {
+      setError("Enter the verification code sent to your email.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const attempt = signIn as {
+        attemptSecondFactor?: (params: { strategy: "email_code"; code: string }) => Promise<{ status: string }>;
+        mfa?: {
+          verifyEmailCode?: (params: { code: string }) => Promise<{ status: string }>;
+        };
+      };
+
+      if (typeof attempt.attemptSecondFactor === "function") {
+        await attempt.attemptSecondFactor({ strategy: "email_code", code: trimmedCode });
+      } else if (typeof attempt.mfa?.verifyEmailCode === "function") {
+        await attempt.mfa.verifyEmailCode({ code: trimmedCode });
+      } else {
+        setError("Verification is not available right now. Please sign in again.");
+        return;
+      }
+
+      if (signIn.status === "complete") {
+        await completeSignInAndFinish();
+        return;
+      }
+
+      setError("Verification did not complete. Request a new code and try again.");
+    } catch (err: unknown) {
+      const eErr = err as { message?: string; errors?: Array<{ message?: string }> };
+      setError(eErr.errors?.[0]?.message ?? eErr.message ?? "Verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendSignInCode = async () => {
+    if (!signIn) return;
+
+    setResending(true);
+    setError("");
+
+    try {
+      await sendEmailCodeForPendingSignIn(signIn);
+    } catch (err: unknown) {
+      const eErr = err as { message?: string; errors?: Array<{ message?: string }> };
+      setError(eErr.errors?.[0]?.message ?? eErr.message ?? "Unable to resend verification code.");
     } finally {
       setResending(false);
     }
@@ -269,6 +390,80 @@ export default function ForgotPasswordPage() {
           <button
             type="button"
             onClick={handleResendCode}
+            disabled={resending}
+            className="text-brand-700 hover:text-brand-900 font-semibold transition-colors disabled:opacity-60"
+          >
+            {resending ? "Resending..." : "Resend code"}
+          </button>
+        </p>
+      </div>
+    );
+  }
+
+  if (step === "verifySignIn") {
+    return (
+      <div className="w-full">
+        <button
+          type="button"
+          onClick={() => {
+            setStep("email");
+            setError("");
+          }}
+          className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors mb-8"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Start over
+        </button>
+
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-stone-900 mb-1">Verify your sign in</h1>
+          <p className="text-stone-500 text-sm leading-relaxed">{signInVerificationHint}</p>
+        </div>
+
+        <form onSubmit={handleVerifySignInCode} className="space-y-4">
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="signInVerificationCode" className="block text-sm font-medium text-stone-700 mb-1.5">
+              Verification code
+            </label>
+            <input
+              id="signInVerificationCode"
+              type="text"
+              required
+              maxLength={6}
+              value={signInVerificationCode}
+              onChange={(e) => setSignInVerificationCode(e.target.value)}
+              placeholder="000000"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-stone-200 bg-white text-stone-900 placeholder-stone-400 text-sm text-center tracking-[0.3em] font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-brand-800 hover:bg-brand-900 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+          >
+            {loading ? (
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                Verify and continue
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        <p className="mt-4 text-center text-sm text-stone-500">
+          Didn&apos;t get a code?{" "}
+          <button
+            type="button"
+            onClick={handleResendSignInCode}
             disabled={resending}
             className="text-brand-700 hover:text-brand-900 font-semibold transition-colors disabled:opacity-60"
           >

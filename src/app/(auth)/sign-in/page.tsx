@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useSignIn } from "@clerk/nextjs/legacy";
 import { useToast } from "@/components/ui/toast";
@@ -22,6 +22,7 @@ function GoogleIcon() {
 type OAuthStrategy = "oauth_google";
 
 const AUTH_INTENT_STORAGE_KEY = "bgg_auth_intent";
+const AUTH_INTENT_STARTED_AT_KEY = "bgg_auth_intent_started_at";
 const MEMBER_REQUIRED_MESSAGE = "No member account was found for this sign-in. Please sign up first.";
 const ADMIN_EMAIL_WHITELIST = new Set(
   (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
@@ -51,9 +52,79 @@ function SignInPageInner() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resendingCode, setResendingCode] = useState(false);
   const [error, setError] = useState("");
+  const [awaitingEmailCode, setAwaitingEmailCode] = useState(false);
+
+  const getEmailCodeHint = useCallback((attempt: unknown) => {
+    const signInAttempt = attempt as {
+      supportedSecondFactors?: Array<{ strategy?: string; safeIdentifier?: string }>;
+    };
+    const factor = signInAttempt.supportedSecondFactors?.find((item) => item.strategy === "email_code");
+
+    if (factor?.safeIdentifier) {
+      return `Enter the verification code sent to ${factor.safeIdentifier}.`;
+    }
+
+    return "Enter the verification code sent to your email to finish signing in.";
+  }, []);
+
+  const [verificationHint, setVerificationHint] = useState(
+    "Enter the verification code sent to your email to finish signing in.",
+  );
+
+  const finalizeSuccessfulSignIn = useCallback(async (createdSessionId: string | null | undefined) => {
+    if (!createdSessionId) {
+      setError("Sign in could not be completed. Please try again.");
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(AUTH_INTENT_STORAGE_KEY);
+      window.sessionStorage.removeItem(AUTH_INTENT_STARTED_AT_KEY);
+    }
+
+    await setActive({ session: createdSessionId });
+    router.replace(getPostSignInDestination(email));
+  }, [email, router, setActive]);
+
+  const sendEmailCodeForPendingSignIn = useCallback(async (attempt: unknown) => {
+    const signInAttempt = attempt as {
+      supportedSecondFactors?: Array<{ strategy?: string }>;
+      prepareSecondFactor?: (params: { strategy: "email_code" }) => Promise<unknown>;
+      mfa?: {
+        sendEmailCode?: () => Promise<unknown>;
+      };
+    };
+
+    const supportsEmailCode = signInAttempt.supportedSecondFactors?.some((factor) => factor.strategy === "email_code");
+
+    if (!supportsEmailCode) {
+      throw new Error("This account does not have email code verification enabled.");
+    }
+
+    if (typeof signInAttempt.prepareSecondFactor === "function") {
+      await signInAttempt.prepareSecondFactor({ strategy: "email_code" });
+      return;
+    }
+
+    if (typeof signInAttempt.mfa?.sendEmailCode === "function") {
+      await signInAttempt.mfa.sendEmailCode();
+      return;
+    }
+
+    throw new Error("Could not initiate email verification for this sign-in attempt.");
+  }, []);
+
+  const enterVerificationStep = useCallback(async (attempt: unknown) => {
+    await sendEmailCodeForPendingSignIn(attempt);
+    setVerificationHint(getEmailCodeHint(attempt));
+    setVerificationCode("");
+    setAwaitingEmailCode(true);
+  }, [getEmailCodeHint, sendEmailCodeForPendingSignIn]);
 
   useEffect(() => {
     if (searchParams.get("memberRequired") !== "1") {
@@ -65,8 +136,21 @@ function SignInPageInner() {
 
     if (typeof window !== "undefined") {
       window.sessionStorage.removeItem(AUTH_INTENT_STORAGE_KEY);
+      window.sessionStorage.removeItem(AUTH_INTENT_STARTED_AT_KEY);
     }
   }, [searchParams, toast]);
+
+  useEffect(() => {
+    if (!signIn || awaitingEmailCode) {
+      return;
+    }
+
+    if (signIn.status !== "needs_client_trust" && signIn.status !== "needs_second_factor") {
+      return;
+    }
+
+    void enterVerificationStep(signIn);
+  }, [awaitingEmailCode, enterVerificationStep, signIn]);
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +160,7 @@ function SignInPageInner() {
 
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(AUTH_INTENT_STORAGE_KEY, "sign-in");
+      window.sessionStorage.setItem(AUTH_INTENT_STARTED_AT_KEY, String(Date.now()));
     }
 
     try {
@@ -86,12 +171,17 @@ function SignInPageInner() {
         password,
       });
 
-      if (result.status === "complete" && result.createdSessionId) {
-        await setActive({ session: result.createdSessionId });
-        router.replace(getPostSignInDestination(email));
-      } else {
-        setError("Sign in could not be completed. Please try again.");
+      if (result.status === "complete") {
+        await finalizeSuccessfulSignIn(result.createdSessionId);
+        return;
       }
+
+      if (result.status === "needs_client_trust" || result.status === "needs_second_factor") {
+        await enterVerificationStep(result);
+        return;
+      }
+
+      setError("Sign in could not be completed. Please try again.");
     } catch (err: unknown) {
       const clerkErr = err as { errors?: Array<{ message: string }>; message?: string };
       const message = clerkErr.errors?.[0]?.message ?? clerkErr.message ?? "Sign in failed. Please try again.";
@@ -101,11 +191,97 @@ function SignInPageInner() {
     }
   };
 
+  const handleVerifyEmailCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signIn) return;
+
+    const trimmedCode = verificationCode.trim();
+    if (!trimmedCode) {
+      setError("Enter the verification code sent to your email.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const attempt = signIn as {
+        attemptSecondFactor?: (params: { strategy: "email_code"; code: string }) => Promise<{
+          status: string;
+          createdSessionId?: string | null;
+        }>;
+        mfa?: {
+          verifyEmailCode?: (params: { code: string }) => Promise<{
+            status: string;
+            createdSessionId?: string | null;
+          }>;
+        };
+      };
+
+      let verificationResult: { status: string; createdSessionId?: string | null } | null = null;
+
+      if (typeof attempt.attemptSecondFactor === "function") {
+        verificationResult = await attempt.attemptSecondFactor({
+          strategy: "email_code",
+          code: trimmedCode,
+        });
+      } else if (typeof attempt.mfa?.verifyEmailCode === "function") {
+        verificationResult = await attempt.mfa.verifyEmailCode({ code: trimmedCode });
+      } else {
+        setError("Verification is not available right now. Please restart sign in.");
+        return;
+      }
+
+      if (verificationResult?.status === "complete") {
+        await finalizeSuccessfulSignIn(verificationResult.createdSessionId);
+        return;
+      }
+
+      setError("Verification did not complete. Request a new code and try again.");
+    } catch (err: unknown) {
+      const clerkErr = err as { errors?: Array<{ message: string }>; message?: string };
+      const message = clerkErr.errors?.[0]?.message ?? clerkErr.message ?? "Verification failed. Please try again.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendEmailCode = async () => {
+    if (!signIn) return;
+
+    setResendingCode(true);
+    setError("");
+
+    try {
+      await sendEmailCodeForPendingSignIn(signIn);
+    } catch (err: unknown) {
+      const clerkErr = err as { errors?: Array<{ message: string }>; message?: string };
+      const message = clerkErr.errors?.[0]?.message ?? clerkErr.message ?? "Unable to resend code. Please try again.";
+      setError(message);
+    } finally {
+      setResendingCode(false);
+    }
+  };
+
+  const restartSignIn = async () => {
+    setError("");
+    setVerificationCode("");
+    setAwaitingEmailCode(false);
+    setVerificationHint("Enter the verification code sent to your email to finish signing in.");
+
+    const attempt = signIn as { reset?: () => Promise<unknown> | void } | undefined;
+    if (typeof attempt?.reset === "function") {
+      await attempt.reset();
+    }
+  };
+
   const handleSocialSignIn = async (strategy: OAuthStrategy) => {
     if (!signIn) return;
 
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(AUTH_INTENT_STORAGE_KEY, "sign-in");
+      window.sessionStorage.setItem(AUTH_INTENT_STARTED_AT_KEY, String(Date.now()));
     }
 
     await signIn.authenticateWithRedirect({
@@ -114,6 +290,79 @@ function SignInPageInner() {
       redirectUrlComplete: `${window.location.origin}/member`,
     });
   };
+
+  if (awaitingEmailCode) {
+    return (
+      <div className="w-full">
+        <button
+          type="button"
+          onClick={() => {
+            void restartSignIn();
+          }}
+          className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors mb-8"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Start over
+        </button>
+
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-stone-900 mb-1">Verify your sign in</h1>
+          <p className="text-stone-500 text-sm leading-relaxed">{verificationHint}</p>
+        </div>
+
+        <form onSubmit={handleVerifyEmailCode} className="space-y-4">
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="verificationCode" className="block text-sm font-medium text-stone-700 mb-1.5">
+              Verification code
+            </label>
+            <input
+              id="verificationCode"
+              type="text"
+              required
+              maxLength={6}
+              value={verificationCode}
+              onChange={(event) => setVerificationCode(event.target.value)}
+              placeholder="000000"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-stone-200 bg-white text-stone-900 placeholder-stone-400 text-sm text-center tracking-[0.3em] font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-shadow"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-brand-800 hover:bg-brand-900 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+          >
+            {loading ? (
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                Verify and continue
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        <p className="mt-4 text-center text-sm text-stone-500">
+          Didn&apos;t get a code?{" "}
+          <button
+            type="button"
+            onClick={handleResendEmailCode}
+            disabled={resendingCode}
+            className="text-brand-700 hover:text-brand-900 font-semibold transition-colors disabled:opacity-60"
+          >
+            {resendingCode ? "Resending..." : "Resend code"}
+          </button>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">

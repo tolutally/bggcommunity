@@ -73,7 +73,7 @@ export default function MemberJobsPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [getToken]);
 
     const filtered = useMemo(() => {
         return jobs.filter((job) => {

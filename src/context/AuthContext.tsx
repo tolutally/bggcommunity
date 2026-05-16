@@ -53,8 +53,10 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_INTENT_STORAGE_KEY = "bgg_auth_intent";
+const AUTH_INTENT_STARTED_AT_KEY = "bgg_auth_intent_started_at";
 const MEMBER_REQUIRED_REDIRECT = "/sign-in?memberRequired=1";
 const LOGOUT_REDIRECT = "/sign-in";
+const MEMBER_REQUIRED_GUARD_DELAY_MS = 8000;
 const AUTH_DEBUG = process.env.NODE_ENV !== "production";
 
 function shouldRetryPendingOnboardingSync(error: unknown) {
@@ -117,6 +119,7 @@ function normalizeRole(role: string | undefined, email?: string): UserRole {
 export function AuthProvider({ children }: { children: ReactNode }) {
     const { isSignedIn, isLoaded: clerkLoaded, signOut, getToken, userId } = useClerkAuth();
     const { user: clerkUser } = useClerkUser();
+    const pathname = usePathname();
     const { user: apiUser, error: apiUserError, isLoading: apiLoading, mutate: mutateCurrentUser } = useCurrentUser();
     const { mutate } = useSWRConfig();
     const [, setLocalStateVersion] = useState(0);
@@ -187,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (typeof window !== "undefined") {
             window.sessionStorage.removeItem(AUTH_INTENT_STORAGE_KEY);
+            window.sessionStorage.removeItem(AUTH_INTENT_STARTED_AT_KEY);
         }
         await signOut({ redirectUrl: LOGOUT_REDIRECT });
     }, [getToken, signOut]);
@@ -230,15 +234,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const authIntent = window.sessionStorage.getItem(AUTH_INTENT_STORAGE_KEY);
+        const authIntentStartedAtRaw = window.sessionStorage.getItem(AUTH_INTENT_STARTED_AT_KEY);
+
+        if (
+            pathname.startsWith("/sign-in") ||
+            pathname.startsWith("/sign-up") ||
+            pathname.startsWith("/forgot-password") ||
+            pathname.startsWith("/sso-callback")
+        ) {
+            return;
+        }
+
+        if (authIntentStartedAtRaw) {
+            const authIntentStartedAt = Number(authIntentStartedAtRaw);
+            if (Number.isFinite(authIntentStartedAt)) {
+                const elapsed = Date.now() - authIntentStartedAt;
+                if (elapsed < MEMBER_REQUIRED_GUARD_DELAY_MS) {
+                    return;
+                }
+            }
+        }
+
         if (authIntent !== "sign-in" || memberRedirectInFlightRef.current) {
             return;
         }
 
         memberRedirectInFlightRef.current = true;
         window.sessionStorage.removeItem(AUTH_INTENT_STORAGE_KEY);
+        window.sessionStorage.removeItem(AUTH_INTENT_STARTED_AT_KEY);
 
         void signOut({ redirectUrl: MEMBER_REQUIRED_REDIRECT });
-    }, [apiLoading, apiUser, apiUserError, clerkLoaded, isSignedIn, signOut]);
+    }, [apiLoading, apiUser, apiUserError, clerkLoaded, isSignedIn, pathname, signOut]);
 
     useEffect(() => {
         if (!userId || !isSignedIn || apiLoading) {
@@ -319,7 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => {
             cancelled = true;
         };
-    }, [apiLoading, apiUser?.onboardingComplete, isSignedIn, localOnboardingStatus.pendingSync, userId]);
+    }, [apiLoading, apiUser?.onboardingComplete, isSignedIn, localOnboardingStatus.pendingSync, mutate, userId]);
 
     // ── Debug logging ──
     useEffect(() => {
