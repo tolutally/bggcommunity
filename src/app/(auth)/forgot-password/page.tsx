@@ -205,17 +205,16 @@ export default function ForgotPasswordPage() {
     setError("");
 
     try {
-      const attempt = signIn as {
-        attemptSecondFactor?: (params: { strategy: "email_code"; code: string }) => Promise<{ status: string }>;
-        mfa?: {
-          verifyEmailCode?: (params: { code: string }) => Promise<{ status: string }>;
-        };
-      };
+      const attemptSecondFactor = (signIn as unknown as { attemptSecondFactor?: unknown }).attemptSecondFactor;
+      const verifyEmailCode = (signIn as unknown as { mfa?: { verifyEmailCode?: unknown } }).mfa?.verifyEmailCode;
 
-      if (typeof attempt.attemptSecondFactor === "function") {
-        await attempt.attemptSecondFactor({ strategy: "email_code", code: trimmedCode });
-      } else if (typeof attempt.mfa?.verifyEmailCode === "function") {
-        await attempt.mfa.verifyEmailCode({ code: trimmedCode });
+      if (typeof attemptSecondFactor === "function") {
+        await (attemptSecondFactor as (params: { strategy: "email_code"; code: string }) => Promise<unknown>)({
+          strategy: "email_code",
+          code: trimmedCode,
+        });
+      } else if (typeof verifyEmailCode === "function") {
+        await (verifyEmailCode as (params: { code: string }) => Promise<unknown>)({ code: trimmedCode });
       } else {
         setError("Verification is not available right now. Please sign in again.");
         return;
