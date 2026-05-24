@@ -28,6 +28,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useToast } from "@/components/ui/toast";
+import {
+    useAttachCohortSessionRecording,
+    useUpdateCohortSession,
+} from "@/hooks/use-admin-cohorts";
 import {
     buildCohortMembersLabel,
     fetchAdminCohortStats,
@@ -70,10 +75,16 @@ export default function AdminCohortDetailPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [cohort, setCohort] = useState<CohortRecord | null>(null);
+    const [resolvedCohortId, setResolvedCohortId] = useState<string | null>(null);
     const [members, setMembers] = useState<CohortMemberRecord[]>([]);
     const [sessions, setSessions] = useState<CohortSessionRecord[]>([]);
     const [resources, setResources] = useState<CohortResourceRecord[]>([]);
     const [stats, setStats] = useState<AdminCohortStatsRecord | null>(null);
+    const { toast } = useToast();
+
+    const cohortIdForMutations = resolvedCohortId ?? slug;
+    const { trigger: updateSession, isLoading: isUpdatingSession } = useUpdateCohortSession(cohortIdForMutations);
+    const { trigger: attachSessionRecording, isLoading: isAttachingRecording } = useAttachCohortSessionRecording(cohortIdForMutations);
 
     useEffect(() => {
         let cancelled = false;
@@ -105,6 +116,7 @@ export default function AdminCohortDetailPage() {
                 }
 
                 setCohort(cohortDetail);
+                setResolvedCohortId(cohortId);
                 setMembers(cohortMembers);
                 setSessions(cohortSessions);
                 setResources(cohortResources);
@@ -179,6 +191,43 @@ export default function AdminCohortDetailPage() {
     const activeRate = stats?.activeRate ?? cohort.activeRate ?? 0;
     const sessionsDone = stats?.sessionsDone ?? completedSessions.length;
     const memberCount = stats?.memberCount ?? cohort.memberCount ?? members.length;
+
+    const refreshSessions = async () => {
+        const latestSessions = await fetchCohortSessions(cohortIdForMutations, getToken);
+        setSessions(latestSessions);
+    };
+
+    const handleEditSession = async (session: CohortSessionRecord) => {
+        const title = window.prompt("Update session title", session.title);
+        if (title === null) return;
+
+        const meetingLink = window.prompt("Update meeting link (optional)", session.meetingLink ?? "");
+        if (meetingLink === null) return;
+
+        try {
+            const response = await updateSession(session.id, {
+                title: title.trim() || session.title,
+                meetingLink: meetingLink.trim() || undefined,
+            });
+            if (response?.data) await refreshSessions();
+            toast("Session updated");
+        } catch {
+            toast("Could not update session", "error");
+        }
+    };
+
+    const handleAttachRecording = async (session: CohortSessionRecord) => {
+        const recordingUrl = window.prompt("Paste the YouTube recording URL", session.recordingUrl ?? "");
+        if (!recordingUrl || !recordingUrl.trim()) return;
+
+        try {
+            const response = await attachSessionRecording(session.id, recordingUrl.trim());
+            if (response?.data) await refreshSessions();
+            toast("Recording attached");
+        } catch {
+            toast("Could not attach recording", "error");
+        }
+    };
 
     return (
         <ErrorBoundary>
@@ -451,7 +500,22 @@ export default function AdminCohortDetailPage() {
                                             <span className="text-xs font-bold px-2.5 py-1 rounded-full uppercase bg-blue-50 text-blue-700">
                                                 <StatusBadge label="Upcoming" preset="Upcoming" variant="tag" />
                                             </span>
-                                            <button title="Edit session" aria-label="Edit session" className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
+                                            <button
+                                                onClick={() => void handleAttachRecording(session)}
+                                                title="Attach recording"
+                                                aria-label="Attach recording"
+                                                disabled={isAttachingRecording}
+                                                className="p-1.5 text-stone-400 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors disabled:opacity-50"
+                                            >
+                                                {isAttachingRecording ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                                            </button>
+                                            <button
+                                                onClick={() => void handleEditSession(session)}
+                                                title="Edit session"
+                                                aria-label="Edit session"
+                                                disabled={isUpdatingSession}
+                                                className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors disabled:opacity-50"
+                                            >
                                                 <Pencil size={15} />
                                             </button>
                                         </div>
@@ -481,6 +545,15 @@ export default function AdminCohortDetailPage() {
                                             <span className="text-xs font-bold px-2.5 py-1 rounded-full uppercase bg-stone-100 text-stone-500">
                                                 <StatusBadge label="Completed" preset="Completed" variant="tag" />
                                             </span>
+                                            <button
+                                                onClick={() => void handleAttachRecording(session)}
+                                                title="Attach recording"
+                                                aria-label="Attach recording"
+                                                disabled={isAttachingRecording}
+                                                className="p-1.5 text-stone-400 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors disabled:opacity-50"
+                                            >
+                                                {isAttachingRecording ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                                            </button>
                                         </div>
                                     </div>
                                 ))}

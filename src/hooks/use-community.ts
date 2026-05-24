@@ -68,16 +68,21 @@ export function useDeletePost(postId: string) {
 /* ── Comments ── */
 
 export function usePostComments(postId: string | null) {
-  // Comments come as part of a separate fetch if needed;
-  // For now we don't have a dedicated list endpoint — comments load with post detail
-  // We'll use the post's comment endpoint for creating
-  return { postId };
+  const key = postId ? `/community/posts/${postId}/comments` : null;
+  const { data, error, isLoading, mutate } = useAuthSWR<PaginatedResponse<Comment>>(key);
+  return {
+    comments: data?.data ?? [],
+    nextCursor: data?.nextCursor ?? null,
+    isLoading,
+    error,
+    mutate,
+  };
 }
 
 export function useCreateComment(postId: string) {
   return useApiMutation<ApiResponse<Comment>, { body: string }>(
     `/community/posts/${postId}/comments`,
-    { method: "POST" },
+    { method: "POST", revalidate: [`/community/posts/${postId}/comments`] },
   );
 }
 

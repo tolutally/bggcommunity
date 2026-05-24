@@ -9,6 +9,7 @@ import {
     useCommunityGroups,
     useCommunityGroup,
     useChannelPosts,
+    usePostComments,
     useCreatePost,
     useCreateComment,
     fmtPostDate,
@@ -25,25 +26,31 @@ function authorName(post: Post | Comment): string {
 }
 
 /* ── Single post card with inline reply ── */
-function PostItem({
-    post,
-    localComments,
-    onCommentAdded,
-}: {
-    post: Post;
-    localComments: Comment[];
-    onCommentAdded: (postId: string, comment: Comment) => void;
-}) {
+function PostItem({ post }: { post: Post }) {
     const [draft, setDraft] = useState("");
+    const [optimisticComments, setOptimisticComments] = useState<Comment[]>([]);
+    const { comments: fetchedComments, mutate: mutateComments } = usePostComments(post.id);
     const { trigger, isLoading } = useCreateComment(post.id);
     const { toast } = useToast();
+
+    const comments = useMemo(() => {
+        const byId = new Map<string, Comment>();
+        fetchedComments.forEach((comment) => byId.set(comment.id, comment));
+        optimisticComments.forEach((comment) => byId.set(comment.id, comment));
+        return Array.from(byId.values()).sort((a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+    }, [fetchedComments, optimisticComments]);
 
     const handleReply = async () => {
         const body = draft.trim();
         if (!body || isLoading) return;
         try {
             const res = await trigger({ body });
-            if (res?.data) onCommentAdded(post.id, res.data);
+            if (res?.data) {
+                setOptimisticComments((prev) => [...prev, res.data]);
+                await mutateComments();
+            }
             setDraft("");
             toast("Reply posted");
         } catch {
@@ -63,9 +70,9 @@ function PostItem({
             {post.title && <h3 className="text-base font-bold text-stone-900 mb-1">{post.title}</h3>}
             <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-wrap">{post.body}</p>
 
-            {localComments.length > 0 && (
+            {comments.length > 0 && (
                 <div className="mt-4 space-y-2 pl-3 border-l-2 border-stone-100">
-                    {localComments.map((comment) => (
+                    {comments.map((comment) => (
                         <div key={comment.id}>
                             <span className="text-xs font-semibold text-stone-600">{authorName(comment)}</span>
                             <span className="text-xs text-stone-400"> &middot; {fmtPostDate(comment.createdAt)}</span>
@@ -74,7 +81,7 @@ function PostItem({
                     ))}
                 </div>
             )}
-            {post._count.comments > localComments.length && (
+            {post._count.comments > comments.length && (
                 <p className="text-xs text-stone-400 mt-3">{post._count.comments} comment{post._count.comments !== 1 ? "s" : ""}</p>
             )}
 
@@ -148,7 +155,7 @@ function PostComposer({ groupId, channelId, channelName, onPosted }: { groupId: 
 }
 
 /* ── Group panel (selected group — channels + posts) ── */
-function GroupPanel({ group, localComments, onCommentAdded }: { group: CommunityGroup; localComments: Record<string, Comment[]>; onCommentAdded: (postId: string, c: Comment) => void }) {
+function GroupPanel({ group }: { group: CommunityGroup }) {
     const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
     const { group: detail, isLoading: loadingDetail } = useCommunityGroup(group.id);
     const channels = detail?.channels ?? [];
@@ -192,7 +199,7 @@ function GroupPanel({ group, localComments, onCommentAdded }: { group: Community
             ) : (
                 <div className="space-y-3">
                     {posts.map(post => (
-                        <PostItem key={post.id} post={post} localComments={localComments[post.id] ?? []} onCommentAdded={onCommentAdded} />
+                        <PostItem key={post.id} post={post} />
                     ))}
                 </div>
             )}
@@ -204,7 +211,6 @@ function GroupPanel({ group, localComments, onCommentAdded }: { group: Community
 export default function MemberCommunityPage() {
     const [tab, setTab] = useState<Tab>("general");
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-    const [localComments, setLocalComments] = useState<Record<string, Comment[]>>({});
 
     const { groups, isLoading: loadingGroups } = useCommunityGroups();
 
@@ -221,10 +227,6 @@ export default function MemberCommunityPage() {
     // pointing at the first available group's general channel, or a dedicated general endpoint.
     // For now, general tab shows groups[0] if it exists (the admin-designated open board).
     const generalGroup = useMemo(() => groups.find(g => g.name.toLowerCase().includes("general")) ?? groups[0] ?? null, [groups]);
-
-    const handleCommentAdded = (postId: string, comment: Comment) => {
-        setLocalComments(prev => ({ ...prev, [postId]: [...(prev[postId] ?? []), comment] }));
-    };
 
     return (
         <ErrorBoundary>
@@ -259,7 +261,7 @@ export default function MemberCommunityPage() {
                         ) : !generalGroup ? (
                             <EmptyState icon={MessageSquare} heading="No general board yet" description="The admin hasn&apos;t set up the general discussion board yet." variant="plain" />
                         ) : (
-                            <GroupPanel group={generalGroup} localComments={localComments} onCommentAdded={handleCommentAdded} />
+                            <GroupPanel group={generalGroup} />
                         )}
                     </div>
                 )}
@@ -318,7 +320,7 @@ export default function MemberCommunityPage() {
                                             {activeGroup.description && <p className="text-sm text-stone-500">{activeGroup.description}</p>}
                                         </div>
                                     </div>
-                                    <GroupPanel group={activeGroup} localComments={localComments} onCommentAdded={handleCommentAdded} />
+                                        <GroupPanel group={activeGroup} />
                                 </div>
                             )}
                         </section>

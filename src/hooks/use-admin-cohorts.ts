@@ -126,6 +126,82 @@ export function useCreateCohortSession(cohortId: string) {
   });
 }
 
+/* ── Update session ── */
+
+export function useUpdateCohortSession(cohortId: string) {
+  const { getToken } = useAuth();
+  const { mutate } = useSWRConfig();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const trigger = useCallback(
+    async (
+      sessionId: string,
+      body: {
+        title?: string;
+        description?: string;
+        scheduledAt?: string;
+        durationMinutes?: number;
+        host?: string;
+        meetingLink?: string;
+      },
+    ) => {
+      setIsLoading(true);
+      try {
+        const token = await getToken();
+        const response = await apiClient<ApiResponse<CohortSession>>(
+          `/admin/cohorts/${cohortId}/sessions/${sessionId}`,
+          {
+            method: "PATCH",
+            body,
+            token,
+          },
+        );
+
+        await mutate(`/cohorts/${cohortId}/sessions`);
+        return response;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [cohortId, getToken, mutate],
+  );
+
+  return { trigger, isLoading };
+}
+
+/* ── Attach session recording ── */
+
+export function useAttachCohortSessionRecording(cohortId: string) {
+  const { getToken } = useAuth();
+  const { mutate } = useSWRConfig();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const trigger = useCallback(
+    async (sessionId: string, recordingUrl: string) => {
+      setIsLoading(true);
+      try {
+        const token = await getToken();
+        const response = await apiClient<ApiResponse<CohortSession>>(
+          `/admin/cohorts/${cohortId}/sessions/${sessionId}/recording`,
+          {
+            method: "PATCH",
+            body: { recordingUrl },
+            token,
+          },
+        );
+
+        await mutate(`/cohorts/${cohortId}/sessions`);
+        return response;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [cohortId, getToken, mutate],
+  );
+
+  return { trigger, isLoading };
+}
+
 /* ── Delete session ── */
 
 export function useDeleteCohortSession(cohortId: string, sessionId: string) {

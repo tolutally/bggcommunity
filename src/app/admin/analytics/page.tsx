@@ -3,17 +3,20 @@
 import { ArrowDown, ArrowUp, Users, Calendar, TrendingUp, Activity, Download, Check, X, Eye, FileSpreadsheet, FileText, Loader2, ChevronDown } from "lucide-react";
 import React, { useState } from "react";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useToast } from "@/components/ui/toast";
 import { exportCSV, exportXLSX, exportPDF } from "@/lib/export";
-import { useAnalyticsOverview, useAnalyticsCohorts } from "@/hooks/use-analytics";
+import { useAnalyticsOverview, useAnalyticsCohorts, useExportAnalyticsReport } from "@/hooks/use-analytics";
 
 
 export default function AdminAnalyticsPage() {
     const [exportSuccess, setExportSuccess] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
     const [drillDownCohortId, setDrillDownCohortId] = useState<string | null>(null);
+    const { toast } = useToast();
 
     const { overview, isLoading: loadingOverview } = useAnalyticsOverview();
     const { cohorts: apiCohorts, isLoading: loadingCohorts } = useAnalyticsCohorts();
+    const { trigger: exportAnalyticsReport, isLoading: isExportingReport } = useExportAnalyticsReport();
 
     const drillCohort = apiCohorts.find(c => c.id === drillDownCohortId) ?? null;
 
@@ -23,12 +26,32 @@ export default function AdminAnalyticsPage() {
         return { headers, rows };
     };
 
-    const handleExport = (format: "csv" | "xlsx" | "pdf" = "csv") => {
+    const handleExport = async (format: "csv" | "xlsx" | "pdf" = "csv") => {
         const { headers, rows } = getExportData();
         const basename = `analytics-report-${new Date().toISOString().split("T")[0]}`;
-        if (format === "csv") exportCSV(headers, rows, basename);
-        else if (format === "xlsx") exportXLSX(headers, rows, basename);
-        else exportPDF(headers, rows, basename, { title: "Platform Analytics Report" });
+        if (format === "csv") {
+            exportCSV(headers, rows, basename);
+            setExportSuccess(true);
+            setShowExportMenu(false);
+            setTimeout(() => setExportSuccess(false), 3000);
+            return;
+        }
+
+        try {
+            await exportAnalyticsReport({
+                format: format === "xlsx" ? "excel" : "pdf",
+                type: "overview",
+            });
+            toast("Report exported");
+        } catch {
+            if (format === "xlsx") {
+                exportXLSX(headers, rows, basename);
+            } else {
+                exportPDF(headers, rows, basename, { title: "Platform Analytics Report" });
+            }
+            toast("Backend export unavailable, used local export", "info");
+        }
+
         setExportSuccess(true);
         setShowExportMenu(false);
         setTimeout(() => setExportSuccess(false), 3000);
@@ -45,20 +68,21 @@ export default function AdminAnalyticsPage() {
                 <div className="flex gap-2 items-center flex-wrap">
                     <div className="relative">
                         <button
+                            disabled={isExportingReport}
                             onClick={() => setShowExportMenu(m => !m)}
-                            className="bg-stone-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors flex items-center gap-2"
+                            className="bg-stone-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors flex items-center gap-2 disabled:opacity-60"
                         >
-                            {exportSuccess ? <><Check size={16} /> Exported!</> : <><Download size={16} /> Export Report <ChevronDown size={14} /></>}
+                            {isExportingReport ? <><Loader2 size={16} className="animate-spin" /> Exporting...</> : exportSuccess ? <><Check size={16} /> Exported!</> : <><Download size={16} /> Export Report <ChevronDown size={14} /></>}
                         </button>
                         {showExportMenu && (
                             <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl border border-stone-200 shadow-xl z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                                <button onClick={() => handleExport("csv")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
+                                <button onClick={() => void handleExport("csv")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
                                     <Download size={15} className="text-stone-400" /> Export as CSV
                                 </button>
-                                <button onClick={() => handleExport("xlsx")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
+                                <button onClick={() => void handleExport("xlsx")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
                                     <FileSpreadsheet size={15} className="text-green-600" /> Export as Excel
                                 </button>
-                                <button onClick={() => handleExport("pdf")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
+                                <button onClick={() => void handleExport("pdf")} className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-3 transition-colors">
                                     <FileText size={15} className="text-red-500" /> Export as PDF
                                 </button>
                             </div>
@@ -168,7 +192,7 @@ export default function AdminAnalyticsPage() {
                             </div>
                         </div>
                         <div className="p-6 border-t border-stone-100 bg-stone-50 flex justify-end">
-                            <button onClick={() => { setDrillDownCohortId(null); handleExport("xlsx"); }} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-bold hover:bg-stone-800 transition-colors">
+                            <button onClick={() => { setDrillDownCohortId(null); void handleExport("xlsx"); }} className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl text-sm font-bold hover:bg-stone-800 transition-colors">
                                 <Download size={14} /> Export Cohort Data
                             </button>
                         </div>
@@ -200,10 +224,27 @@ function MetricCard({ title, value, change, trend, icon: Icon, inverse }: { titl
 }
 
 function ProgramBar({ label, value, color }: { label: string; value: string; color: string }) {
+    const parsed = Number.parseInt(value.replace("%", ""), 10);
+    const percentage = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 0;
+    const widthClass =
+        percentage >= 100 ? "w-full" :
+        percentage >= 90 ? "w-11/12" :
+        percentage >= 80 ? "w-10/12" :
+        percentage >= 75 ? "w-9/12" :
+        percentage >= 66 ? "w-8/12" :
+        percentage >= 58 ? "w-7/12" :
+        percentage >= 50 ? "w-6/12" :
+        percentage >= 42 ? "w-5/12" :
+        percentage >= 33 ? "w-4/12" :
+        percentage >= 25 ? "w-3/12" :
+        percentage >= 16 ? "w-2/12" :
+        percentage > 0 ? "w-1/12" :
+        "w-0";
+
     return (
         <div>
             <div className="flex justify-between text-sm font-medium text-stone-700 mb-1.5"><span>{label}</span><span>{value}</span></div>
-            <div className="w-full bg-stone-100 rounded-full h-2"><div className={`${color} h-2 rounded-full`} style={{ width: value }}></div></div>
+            <div className="w-full bg-stone-100 rounded-full h-2"><div className={`${color} h-2 rounded-full ${widthClass}`}></div></div>
         </div>
     );
 }
