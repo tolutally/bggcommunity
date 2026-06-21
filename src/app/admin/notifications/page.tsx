@@ -58,16 +58,15 @@ function getNotificationPresentation(type: NotificationType | string) {
 function resolveHref(referenceType: string | null, referenceId: string | null): string | null {
     if (!referenceType || !referenceId) return null;
     switch (referenceType) {
-        case "Cohort": return `/member/cohorts/${referenceId}`;
-        case "CohortSession": return `/member/cohorts`;
-        case "Event": return `/member/schedule`;
-        case "Job": return `/member/jobs`;
-        case "Group": return `/member/community`;
+        case "Cohort": return `/admin/cohorts/${referenceId}`;
+        case "Event": return `/admin/events/${referenceId}`;
+        case "Job": return `/admin/jobs`;
+        case "Group": return `/admin/community`;
         default: return null;
     }
 }
 
-export default function MemberNotificationsPage() {
+export default function AdminNotificationsPage() {
     const router = useRouter();
     const { toast } = useToast();
     const [filter, setFilter] = useState<Filter>("all");

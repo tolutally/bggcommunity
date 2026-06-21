@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Calendar, CalendarDays, Check, Clock, Copy, ExternalLink, Link2, List, Loader2, Pencil, Plus, RefreshCw, Trash2, UserCheck, Users, Video, X, type LucideIcon } from "lucide-react";
+import { Calendar, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Link2, List, Loader2, Pencil, Plus, RefreshCw, Trash2, UserCheck, Users, Video, X, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
@@ -126,7 +126,8 @@ export default function AdminEventsPage() {
     const [view, setView] = useState<"list" | "calendar">("list");
     const [filterType, setFilterType] = useState<"All" | EventType>("All");
     const [filterStatus, setFilterStatus] = useState<"all" | "upcoming" | "past">("all");
-    const [modal, setModal] = useState<null | "create" | (EventUpsertInput & { id: string })>(null);
+    const [modal, setModal] = useState<null | "create" | { prefillDate: string } | (EventUpsertInput & { id: string })>(null);
+    const [calViewOffset, setCalViewOffset] = useState(0);
     const [detailEventId, setDetailEventId] = useState<string | null>(null);
     const router = useRouter();
 
@@ -144,6 +145,7 @@ export default function AdminEventsPage() {
     const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
     const [loadingRsvpsId, setLoadingRsvpsId] = useState<string | null>(null);
     const [busyRsvpId, setBusyRsvpId] = useState<string | null>(null);
+    const [rsvpConfirmId, setRsvpConfirmId] = useState<string | null>(null);
     const [copied, setCopied] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -257,7 +259,7 @@ export default function AdminEventsPage() {
         setIsSaving(true);
 
         try {
-            if (modal && typeof modal === "object") {
+            if (modal && typeof modal === "object" && "id" in modal) {
                 await updateEvent(modal.id, data, getToken);
                 toast("Event updated");
                 setEventDetails((prev) => modal.id in prev ? { ...prev, [modal.id]: { ...prev[modal.id], ...data } } : prev);
@@ -322,11 +324,14 @@ export default function AdminEventsPage() {
                 loadEventDetail(eventId),
                 detailEventId === eventId ? loadEventRsvps(eventId) : Promise.resolve([]),
             ]);
+            // Re-apply after detail refresh — server may return stale hasRsvp
+            setEventDetails((prev) => prev[eventId] ? { ...prev, [eventId]: { ...prev[eventId], hasRsvp: rsvped } } : prev);
             toast(rsvped ? "RSVP confirmed" : "RSVP removed");
         } catch (toggleError) {
             toast(getEventsErrorMessage(toggleError), "error");
         } finally {
             setBusyRsvpId(null);
+            setRsvpConfirmId(null);
         }
     }, [busyRsvpId, detailEventId, getToken, loadEventDetail, loadEventRsvps, reload, toast]);
 
@@ -383,9 +388,11 @@ export default function AdminEventsPage() {
     const upcomingCount = useMemo(() => items.filter((event) => getStatus(event) === "upcoming").length, [items]);
     const pastCount = useMemo(() => items.filter((event) => getStatus(event) === "past").length, [items]);
 
-    const calendarMonth = new Date();
-    const year = calendarMonth.getFullYear();
-    const month = calendarMonth.getMonth();
+    const todayDate = new Date();
+    const calViewDate = new Date(todayDate.getFullYear(), todayDate.getMonth() + calViewOffset, 1);
+    const year = calViewDate.getFullYear();
+    const month = calViewDate.getMonth();
+    const isCurrentCalMonth = year === todayDate.getFullYear() && month === todayDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDay = new Date(year, month, 1).getDay();
     const calDays: Array<number | null> = [
@@ -452,18 +459,37 @@ export default function AdminEventsPage() {
                     <EmptyState icon={Calendar} heading="Events unavailable" description={error} variant="plain" />
                 ) : view === "calendar" ? (
                     <div className="bg-white rounded-3xl border border-stone-100 shadow-sm p-6">
-                        <h3 className="font-bold text-stone-900 mb-4">{new Date(year, month).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h3>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-bold text-stone-900">{new Date(year, month).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h3>
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => setCalViewOffset((o) => o - 1)} className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-500 transition-colors" aria-label="Previous month"><ChevronLeft size={16} /></button>
+                                {calViewOffset !== 0 && (
+                                    <button onClick={() => setCalViewOffset(0)} className="px-2.5 py-1 text-xs font-bold text-brand-700 hover:bg-brand-50 rounded-lg transition-colors">Today</button>
+                                )}
+                                <button onClick={() => setCalViewOffset((o) => o + 1)} className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-500 transition-colors" aria-label="Next month"><ChevronRight size={16} /></button>
+                            </div>
+                        </div>
                         <div className="grid grid-cols-7 gap-1 text-center">
                             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <div key={day} className="text-[10px] font-bold text-stone-400 uppercase tracking-wider py-2">{day}</div>)}
                             {calDays.map((day, index) => {
                                 const dateStr = day ? `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}` : "";
                                 const dayEvents = sortedItems.filter((event) => toDateInputValue(event.scheduledAt) === dateStr);
+                                const isToday = isCurrentCalMonth && day === todayDate.getDate();
 
                                 return (
-                                    <div key={`${dateStr}-${index}`} className={`min-h-[80px] border border-stone-50 rounded-xl p-1 ${day ? "bg-stone-50/50" : ""} ${day === new Date().getDate() && month === new Date().getMonth() ? "ring-2 ring-brand-300 bg-brand-50/30" : ""}`}>
-                                        {day ? <span className="text-xs font-bold text-stone-500">{day}</span> : null}
+                                    <div
+                                        key={`${dateStr}-${index}`}
+                                        onClick={() => day && setModal({ prefillDate: dateStr })}
+                                        className={`group min-h-[80px] border rounded-xl p-1 transition-colors ${day ? "cursor-pointer hover:border-brand-200 hover:bg-brand-50/30" : ""} ${isToday ? "ring-2 ring-brand-300 bg-brand-50/30 border-brand-100" : "border-stone-50"} ${day && !isToday ? "bg-stone-50/50" : ""}`}
+                                    >
+                                        {day ? (
+                                            <div className="flex items-center justify-between">
+                                                <span className={`text-xs font-bold ${isToday ? "text-brand-700" : "text-stone-500"}`}>{day}</span>
+                                                <Plus size={10} className="text-brand-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            </div>
+                                        ) : null}
                                         {dayEvents.map((event) => (
-                                            <button key={event.id} onClick={() => void openEventDetail(event.id)} className="block w-full text-left text-[10px] font-bold text-brand-700 bg-brand-50 rounded px-1 py-0.5 mt-0.5 truncate hover:bg-brand-100 transition-colors">{event.title}</button>
+                                            <button key={event.id} onClick={(e) => { e.stopPropagation(); void openEventDetail(event.id); }} className="block w-full text-left text-[10px] font-bold text-brand-700 bg-brand-50 rounded px-1 py-0.5 mt-0.5 truncate hover:bg-brand-100 transition-colors">{event.title}</button>
                                         ))}
                                     </div>
                                 );
@@ -509,11 +535,14 @@ export default function AdminEventsPage() {
                                                 </div>
                                                 <div className="flex items-center gap-2 flex-shrink-0">
                                                     {status === "upcoming" ? (
-                                                        <button onClick={() => void handleToggleRsvp(event.id)} disabled={busyRsvpId === event.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed ${hasRsvp ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-brand-50 text-brand-700 hover:bg-brand-100"}`}>
+                                                        <button onClick={() => setRsvpConfirmId(event.id)} disabled={busyRsvpId === event.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed ${hasRsvp ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-brand-50 text-brand-700 hover:bg-brand-100"}`}>
                                                             {busyRsvpId === event.id ? <Loader2 size={14} className="animate-spin" /> : hasRsvp ? <><Check size={14} /> RSVP&apos;d</> : <><UserCheck size={14} /> RSVP</>}
                                                         </button>
                                                     ) : null}
-                                                    <button onClick={() => setModal({ id: event.id, ...toFormValues(detail ?? event) })} className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors" aria-label="Edit event" title="Edit event"><Pencil size={16} /></button>
+                                                    <button onClick={async () => {
+                                                        const resolvedDetail = detail ?? await loadEventDetail(event.id).catch(() => null);
+                                                        setModal({ id: event.id, ...toFormValues(resolvedDetail ?? event) });
+                                                    }} className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors" aria-label="Edit event" title="Edit event"><Pencil size={16} /></button>
                                                     <button onClick={() => setDeleteTarget(event)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" aria-label="Delete event" title="Delete event"><Trash2 size={16} /></button>
                                                 </div>
                                             </div>
@@ -548,7 +577,8 @@ export default function AdminEventsPage() {
 
                 {modal !== null ? (
                     <EventFormModal
-                        initial={typeof modal === "object" ? modal : undefined}
+                        initial={typeof modal === "object" && "id" in modal ? modal : undefined}
+                        prefilledDate={typeof modal === "object" && "prefillDate" in modal ? modal.prefillDate : undefined}
                         onClose={() => !isSaving && setModal(null)}
                         onSave={handleSave}
                         saving={isSaving}
@@ -660,7 +690,7 @@ export default function AdminEventsPage() {
                                 </div>
                             </div>
                             <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">
-                                <button onClick={() => void handleToggleRsvp(detailEvent.id)} disabled={busyRsvpId === detailEvent.id || getStatus(detailEvent) === "past"} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-brand-800 hover:bg-brand-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                                <button onClick={() => setRsvpConfirmId(detailEvent.id)} disabled={busyRsvpId === detailEvent.id || getStatus(detailEvent) === "past"} className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${"hasRsvp" in detailEvent && detailEvent.hasRsvp ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-brand-800 text-white hover:bg-brand-700"}`}>
                                     {busyRsvpId === detailEvent.id ? <Loader2 size={16} className="animate-spin" /> : <UserCheck size={16} />}
                                     {"hasRsvp" in detailEvent && detailEvent.hasRsvp ? "Remove RSVP" : "RSVP as Admin"}
                                 </button>
@@ -683,6 +713,23 @@ export default function AdminEventsPage() {
                     description="This event will be soft-deleted from the backend."
                     icon={Trash2}
                 />
+
+                {(() => {
+                    const isAlreadyRsvped = rsvpConfirmId ? (eventDetails[rsvpConfirmId]?.hasRsvp ?? false) : false;
+                    return (
+                        <ConfirmModal
+                            open={rsvpConfirmId !== null}
+                            onClose={() => busyRsvpId !== rsvpConfirmId && setRsvpConfirmId(null)}
+                            onConfirm={() => rsvpConfirmId && void handleToggleRsvp(rsvpConfirmId)}
+                            loading={busyRsvpId === rsvpConfirmId}
+                            title={isAlreadyRsvped ? "Remove RSVP?" : "Confirm RSVP"}
+                            description={isAlreadyRsvped ? "Your RSVP will be removed from this event." : "You'll be added to the attendee list as an admin."}
+                            confirmLabel={isAlreadyRsvped ? "Remove" : "RSVP"}
+                            variant={isAlreadyRsvped ? "danger" : "primary"}
+                            icon={UserCheck}
+                        />
+                    );
+                })()}
             </div>
         </ErrorBoundary>
     );
@@ -703,18 +750,20 @@ function InfoRow({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
 
 function EventFormModal({
     initial,
+    prefilledDate,
     onClose,
     onSave,
     saving,
 }: {
     initial?: EventUpsertInput & { id: string };
+    prefilledDate?: string;
     onClose: () => void;
     onSave: (data: EventUpsertInput) => Promise<void>;
     saving: boolean;
 }) {
     const [title, setTitle] = useState(initial?.title ?? "");
     const [description, setDescription] = useState(initial?.description ?? "");
-    const [date, setDate] = useState(initial ? toDateInputValue(initial.scheduledAt) : "");
+    const [date, setDate] = useState(initial ? toDateInputValue(initial.scheduledAt) : (prefilledDate ?? ""));
     const [time, setTime] = useState(initial ? toTimeInputValue(initial.scheduledAt) : "");
     const [durationMinutes, setDurationMinutes] = useState(initial?.durationMinutes ?? 60);
     const [type, setType] = useState<EventType>(initial?.type ?? "WORKSHOP");
@@ -730,7 +779,8 @@ function EventFormModal({
         if (!date) nextErrors.date = "Required";
         if (!time) nextErrors.time = "Required";
         if (!host.trim()) nextErrors.host = "Required";
-        if (meetingLink && !/^https?:\/\/.+/i.test(meetingLink)) nextErrors.meetingLink = "Enter a valid URL (https://...)";
+        if (!meetingLink.trim()) nextErrors.meetingLink = "Required";
+        else if (!/^https?:\/\/.+/i.test(meetingLink)) nextErrors.meetingLink = "Enter a valid URL (https://...)";
 
         setErrors(nextErrors);
 
@@ -746,7 +796,7 @@ function EventFormModal({
             host: host.trim(),
             type,
             platform,
-            meetingLink: meetingLink.trim() || null,
+            meetingLink: meetingLink.trim(),
         });
     };
 
@@ -801,7 +851,7 @@ function EventFormModal({
                                 </button>
                             ))}
                         </div>
-                        <Field label="Meeting Link" optional error={errors.meetingLink}>
+                        <Field label="Meeting Link" error={errors.meetingLink}>
                             <div className="relative">
                                 <Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
                                 <input type="url" value={meetingLink} onChange={(event) => setMeetingLink(event.target.value)} placeholder="https://zoom.us/j/123456789" className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 font-mono ${errors.meetingLink ? "border-red-300 bg-red-50" : "border-stone-200"}`} />

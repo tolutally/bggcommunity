@@ -1,7 +1,15 @@
 "use client";
 
 import { useApiMutation } from "./use-api-mutation";
-import type { ApiResponse, CommunityGroup, Channel } from "@/lib/types";
+import { useAuthSWR } from "./use-auth-swr";
+import type { ApiResponse, AvailableUser, CommunityGroup, Channel, GroupMember } from "@/lib/types";
+
+export function useAvailableGroupUsers(groupId: string | null) {
+  const { data, error, isLoading } = useAuthSWR<ApiResponse<AvailableUser[]>>(
+    groupId ? `/admin/community/groups/${groupId}/available-users` : null,
+  );
+  return { users: data?.data ?? [], isLoading, error };
+}
 
 export function useCreateGroup() {
   return useApiMutation<ApiResponse<CommunityGroup>, { name: string; description?: string }>(
@@ -56,5 +64,26 @@ export function useRemoveGroupMember(groupId: string, userId: string) {
   return useApiMutation(
     `/admin/community/groups/${groupId}/members/${userId}`,
     { method: "DELETE", revalidate: ["/community/groups", `/community/groups/${groupId}`] },
+  );
+}
+
+export function useUnlinkGroupCohort(groupId: string) {
+  return useApiMutation(
+    `/admin/community/groups/${groupId}/cohorts`,
+    { method: "DELETE", revalidate: ["/community/groups", `/community/groups/${groupId}`] },
+  );
+}
+
+export function useGroupMembers(groupId: string | null) {
+  const { data, error, isLoading, mutate } = useAuthSWR<ApiResponse<GroupMember[]>>(
+    groupId ? `/admin/community/groups/${groupId}/members` : null,
+  );
+  return { members: data?.data ?? [], isLoading, error, mutate };
+}
+
+export function useDeleteChannel(groupId: string, channelId: string) {
+  return useApiMutation(
+    `/admin/community/groups/${groupId}/channels/${channelId}`,
+    { method: "DELETE", revalidate: [`/community/groups/${groupId}`, "/community/groups"] },
   );
 }

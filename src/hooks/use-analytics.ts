@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useAuthSWR } from "./use-auth-swr";
-import type { ApiResponse, AnalyticsOverview } from "@/lib/types";
+import type { ApiResponse, AnalyticsOverview, AnalyticsGrowthPoint } from "@/lib/types";
 import { API_BASE_URL, ApiRequestError } from "@/lib/api";
 
 export interface CohortEngagement {
@@ -33,6 +33,13 @@ export function useAnalyticsCohorts() {
     "/admin/analytics/cohorts",
   );
   return { cohorts: data?.data ?? [], isLoading, error };
+}
+
+export function useAnalyticsGrowth(months = 6) {
+  const { data, error, isLoading } = useAuthSWR<ApiResponse<AnalyticsGrowthPoint[]>>(
+    `/admin/analytics/growth?months=${months}`,
+  );
+  return { growth: data?.data ?? [], isLoading, error };
 }
 
 export function useInactiveMembers(days = 30) {

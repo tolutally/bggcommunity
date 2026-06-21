@@ -1,12 +1,14 @@
 "use client";
 
 import { Users, Plus, Search, Edit2, Trash2, Hash, Loader2, X, Megaphone, UserPlus, Check, ChevronRight, ChevronLeft } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useState, useMemo } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useCommunityGroups } from "@/hooks/use-community";
-import { useCreateGroup, useUpdateGroup, useDeleteGroup, useAddChannel, useAnnounce } from "@/hooks/use-admin-community";
+import { useCreateGroup, useUpdateGroup, useDeleteGroup, useAddChannel, useAnnounce, useAvailableGroupUsers, useGroupMembers, useRemoveGroupMember, useDeleteChannel } from "@/hooks/use-admin-community";
+import { useCommunityGroup } from "@/hooks/use-community";
 import { useAdminUsers } from "@/hooks/use-admin-users";
 import { useCohorts } from "@/hooks/use-cohorts";
 import { apiRequest } from "@/lib/api";
@@ -23,7 +25,7 @@ export default function AdminCommunityPage() {
     const [showGroupForm, setShowGroupForm] = useState(false);
     const [editingGroup, setEditingGroup] = useState<CommunityGroup | null>(null);
     const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
-    const [channelGroupId, setChannelGroupId] = useState<string | null>(null);
+    const [channelGroup, setChannelGroup] = useState<CommunityGroup | null>(null);
     const [manageMembersGroup, setManageMembersGroup] = useState<CommunityGroup | null>(null);
 
     const filtered = useMemo(() => {
@@ -67,7 +69,7 @@ export default function AdminCommunityPage() {
 
                     <div className="space-y-3">
                         {filtered.map(g => (
-                            <GroupRow key={g.id} group={g} onEdit={() => { setEditingGroup(g); setShowGroupForm(true); }} onDelete={() => setDeletingGroupId(g.id)} onAddChannel={() => setChannelGroupId(g.id)} onManageMembers={() => setManageMembersGroup(g)} />
+                            <GroupRow key={g.id} group={g} onEdit={() => { setEditingGroup(g); setShowGroupForm(true); }} onDelete={() => setDeletingGroupId(g.id)} onManageChannels={() => setChannelGroup(g)} onManageMembers={() => setManageMembersGroup(g)} />
                         ))}
                     </div>
 
@@ -87,8 +89,8 @@ export default function AdminCommunityPage() {
                 <DeleteGroupModal groupId={deletingGroupId} onClose={() => setDeletingGroupId(null)} onSuccess={() => { setDeletingGroupId(null); mutate(); toast("Group deleted", "success"); }} onError={(msg) => toast(msg, "error")} />
             )}
 
-            {channelGroupId && (
-                <AddChannelModal groupId={channelGroupId} onClose={() => setChannelGroupId(null)} onSuccess={() => { setChannelGroupId(null); toast("Channel added", "success"); }} onError={(msg) => toast(msg, "error")} />
+            {channelGroup && (
+                <ManageChannelsModal group={channelGroup} onClose={() => setChannelGroup(null)} onError={(msg) => toast(msg, "error")} />
             )}
 
             {manageMembersGroup && (
@@ -100,22 +102,35 @@ export default function AdminCommunityPage() {
 }
 
 /* ── Group Row ── */
-function GroupRow({ group, onEdit, onDelete, onAddChannel, onManageMembers }: { group: CommunityGroup; onEdit: () => void; onDelete: () => void; onAddChannel: () => void; onManageMembers: () => void }) {
+function GroupRow({ group, onEdit, onDelete, onManageChannels, onManageMembers }: { group: CommunityGroup; onEdit: () => void; onDelete: () => void; onManageChannels: () => void; onManageMembers: () => void }) {
     return (
         <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col md:flex-row md:items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center text-brand-700 flex-shrink-0">
                 <Users size={20} />
             </div>
             <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-stone-900">{group.name}</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-stone-900">{group.name}</h3>
+                    {group.cohortId && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">Cohort Private</span>
+                    )}
+                </div>
                 {group.description && <p className="text-sm text-stone-500 line-clamp-1">{group.description}</p>}
                 <p className="text-xs text-stone-400 mt-1">{group.memberCount} members · {group.newPostCount} new posts</p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-                <button onClick={onManageMembers} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors" title="Manage members"><UserPlus size={16} /></button>
-                <button onClick={onAddChannel} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors" title="Add channel"><Hash size={16} /></button>
-                <button onClick={onEdit} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors" title="Edit"><Edit2 size={16} /></button>
-                <button onClick={onDelete} className="p-2 rounded-lg border border-stone-200 text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                <Tooltip label="Manage Members">
+                    <button onClick={onManageMembers} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors"><UserPlus size={16} /></button>
+                </Tooltip>
+                <Tooltip label="Manage Channels">
+                    <button onClick={onManageChannels} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors"><Hash size={16} /></button>
+                </Tooltip>
+                <Tooltip label="Edit Group">
+                    <button onClick={onEdit} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors"><Edit2 size={16} /></button>
+                </Tooltip>
+                <Tooltip label="Delete Group">
+                    <button onClick={onDelete} className="p-2 rounded-lg border border-stone-200 text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
+                </Tooltip>
             </div>
         </div>
     );
@@ -133,7 +148,7 @@ function GroupFormModal({ group, onClose, onSuccess, onError }: { group: Communi
     const [description, setDescription] = useState(group?.description ?? "");
     const [nameError, setNameError] = useState("");
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-    const [selectedCohortIds, setSelectedCohortIds] = useState<string[]>([]);
+    const [selectedCohortId, setSelectedCohortId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     const handleNext = () => {
@@ -158,8 +173,8 @@ function GroupFormModal({ group, onClose, onSuccess, onError }: { group: Communi
                 if (selectedUserIds.length > 0) {
                     await apiRequest(`/admin/community/groups/${groupId}/members`, { method: "POST", body: { userIds: selectedUserIds }, getToken: getT });
                 }
-                for (const cohortId of selectedCohortIds) {
-                    await apiRequest(`/admin/community/groups/${groupId}/cohorts`, { method: "POST", body: { cohortId }, getToken: getT });
+                if (selectedCohortId) {
+                    await apiRequest(`/admin/community/groups/${groupId}/cohorts`, { method: "POST", body: { cohortId: selectedCohortId }, getToken: getT });
                 }
             }
             onSuccess();
@@ -219,9 +234,9 @@ function GroupFormModal({ group, onClose, onSuccess, onError }: { group: Communi
                     <div className="p-6 space-y-4">
                         <MemberPickerPanel
                             selectedUserIds={selectedUserIds}
-                            selectedCohortIds={selectedCohortIds}
+                            selectedCohortId={selectedCohortId}
                             onToggleUser={id => setSelectedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
-                            onToggleCohort={id => setSelectedCohortIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                            onSelectCohort={id => setSelectedCohortId(id)}
                         />
                         <div className="flex justify-between gap-3 pt-2">
                             <button onClick={() => setStep(1)} className="px-4 py-2.5 text-sm font-semibold text-stone-600 flex items-center gap-1.5 hover:bg-stone-100 rounded-xl transition-colors">
@@ -240,16 +255,20 @@ function GroupFormModal({ group, onClose, onSuccess, onError }: { group: Communi
 
 /* ── Member Picker Panel (shared between create flow and manage modal) ── */
 function MemberPickerPanel({
-    selectedUserIds, selectedCohortIds, onToggleUser, onToggleCohort,
+    groupId, selectedUserIds, selectedCohortId, onToggleUser, onSelectCohort,
 }: {
+    groupId?: string;
     selectedUserIds: string[];
-    selectedCohortIds: string[];
+    selectedCohortId: string | null;
     onToggleUser: (id: string) => void;
-    onToggleCohort: (id: string) => void;
+    onSelectCohort: (id: string | null) => void;
 }) {
     const [pickerTab, setPickerTab] = useState<"members" | "cohorts">("members");
     const [search, setSearch] = useState("");
-    const { users, isLoading: usersLoading } = useAdminUsers();
+    const { users: allUsers, isLoading: allUsersLoading } = useAdminUsers();
+    const { users: availableUsers, isLoading: availableLoading } = useAvailableGroupUsers(groupId ?? null);
+    const users = groupId ? availableUsers : allUsers;
+    const usersLoading = groupId ? availableLoading : allUsersLoading;
     const { cohorts, isLoading: cohortsLoading } = useCohorts();
 
     const filteredUsers = useMemo(() => {
@@ -265,7 +284,7 @@ function MemberPickerPanel({
         return cohorts.filter(c => c.name.toLowerCase().includes(q));
     }, [cohorts, search]);
 
-    const totalSelected = selectedUserIds.length + selectedCohortIds.length;
+    const totalSelected = selectedUserIds.length + (selectedCohortId ? 1 : 0);
 
     return (
         <div className="space-y-3">
@@ -311,11 +330,11 @@ function MemberPickerPanel({
                     ) : filteredCohorts.length === 0 ? (
                         <p className="text-center text-xs text-stone-400 py-6">No cohorts found</p>
                     ) : filteredCohorts.map(c => {
-                        const checked = selectedCohortIds.includes(c.id);
+                        const selected = selectedCohortId === c.id;
                         return (
-                            <button key={c.id} onClick={() => onToggleCohort(c.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${checked ? "bg-brand-50 text-brand-900" : "hover:bg-white text-stone-700"}`}>
-                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${checked ? "bg-brand-800 border-brand-800" : "border-stone-300"}`}>
-                                    {checked && <Check size={12} className="text-white" />}
+                            <button key={c.id} onClick={() => onSelectCohort(selected ? null : c.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${selected ? "bg-brand-50 text-brand-900" : "hover:bg-white text-stone-700"}`}>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${selected ? "bg-brand-800 border-brand-800" : "border-stone-300"}`}>
+                                    {selected && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
                                 <div className="min-w-0">
                                     <p className="text-sm font-semibold truncate">{c.name}</p>
@@ -331,23 +350,25 @@ function MemberPickerPanel({
             {totalSelected > 0 && (
                 <p className="text-xs font-semibold text-brand-700 bg-brand-50 rounded-lg px-3 py-2">
                     {selectedUserIds.length > 0 && `${selectedUserIds.length} member${selectedUserIds.length > 1 ? "s" : ""}`}
-                    {selectedUserIds.length > 0 && selectedCohortIds.length > 0 && " · "}
-                    {selectedCohortIds.length > 0 && `${selectedCohortIds.length} cohort${selectedCohortIds.length > 1 ? "s" : ""}`} selected
+                    {selectedUserIds.length > 0 && selectedCohortId && " · "}
+                    {selectedCohortId && "1 cohort"} selected
                 </p>
             )}
         </div>
     );
 }
 
-/* ── Manage Members Modal (post-creation) ── */
+/* ── Manage Members Modal (two-tab: current members + add members) ── */
 function ManageMembersModal({ group, onClose, onSuccess, onError }: { group: CommunityGroup; onClose: () => void; onSuccess: () => void; onError: (msg: string) => void }) {
     const { getToken } = useAuth();
+    const [activeTab, setActiveTab] = useState<"current" | "add">("current");
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-    const [selectedCohortIds, setSelectedCohortIds] = useState<string[]>([]);
+    const [selectedCohortId, setSelectedCohortId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const { members, isLoading: membersLoading, mutate: mutateMembers } = useGroupMembers(group.id);
 
     const handleSave = async () => {
-        if (selectedUserIds.length === 0 && selectedCohortIds.length === 0) { onClose(); return; }
+        if (selectedUserIds.length === 0 && !selectedCohortId) { onClose(); return; }
         setSubmitting(true);
         try {
             const token = await getToken();
@@ -355,8 +376,8 @@ function ManageMembersModal({ group, onClose, onSuccess, onError }: { group: Com
             if (selectedUserIds.length > 0) {
                 await apiRequest(`/admin/community/groups/${group.id}/members`, { method: "POST", body: { userIds: selectedUserIds }, getToken: getT });
             }
-            for (const cohortId of selectedCohortIds) {
-                await apiRequest(`/admin/community/groups/${group.id}/cohorts`, { method: "POST", body: { cohortId }, getToken: getT });
+            if (selectedCohortId) {
+                await apiRequest(`/admin/community/groups/${group.id}/cohorts`, { method: "POST", body: { cohortId: selectedCohortId }, getToken: getT });
             }
             onSuccess();
         } catch { onError("Failed to update members."); setSubmitting(false); }
@@ -368,30 +389,78 @@ function ManageMembersModal({ group, onClose, onSuccess, onError }: { group: Com
                 <div className="flex items-center justify-between p-6 border-b border-stone-100">
                     <div>
                         <h2 className="text-lg font-bold text-stone-900">Manage Members</h2>
-                        <p className="text-xs text-stone-400 mt-0.5">{group.name}</p>
+                        <p className="text-xs text-stone-400 mt-0.5">{group.name} · {group.memberCount ?? 0} members</p>
                     </div>
                     <button onClick={onClose} aria-label="Close" className="p-2 rounded-lg hover:bg-stone-100"><X size={18} /></button>
                 </div>
+
+                {/* Tab switcher */}
+                <div className="flex gap-1 bg-stone-100 p-1 mx-6 mt-4 rounded-xl">
+                    <button onClick={() => setActiveTab("current")} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${activeTab === "current" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}>Current Members</button>
+                    <button onClick={() => setActiveTab("add")} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${activeTab === "add" ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}>Add Members</button>
+                </div>
+
                 <div className="p-6 space-y-4">
-                    <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                        <Users size={14} className="text-amber-600 flex-shrink-0" />
-                        <p className="text-xs text-amber-700 font-medium">This is a gated group. Only admins can add members or cohorts.</p>
-                    </div>
-                    <MemberPickerPanel
-                        selectedUserIds={selectedUserIds}
-                        selectedCohortIds={selectedCohortIds}
-                        onToggleUser={id => setSelectedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
-                        onToggleCohort={id => setSelectedCohortIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
-                    />
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Cancel</button>
-                        <button onClick={handleSave} disabled={submitting} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
-                            {submitting && <Loader2 size={14} className="animate-spin" />}
-                            <UserPlus size={14} /> Add to Group
-                        </button>
-                    </div>
+                    {activeTab === "current" && (
+                        <>
+                            <div className="max-h-64 overflow-y-auto space-y-1 rounded-xl border border-stone-100 bg-stone-50 p-1">
+                                {membersLoading ? (
+                                    <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-stone-400" /></div>
+                                ) : members.length === 0 ? (
+                                    <p className="text-center text-xs text-stone-400 py-8">No members yet</p>
+                                ) : members.map(m => (
+                                    <MemberRow key={m.id} member={m} groupId={group.id} onRemoved={() => mutateMembers()} onError={onError} />
+                                ))}
+                            </div>
+                            <div className="flex justify-end">
+                                <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Close</button>
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === "add" && (
+                        <>
+                            <MemberPickerPanel
+                                groupId={group.id}
+                                selectedUserIds={selectedUserIds}
+                                selectedCohortId={selectedCohortId}
+                                onToggleUser={id => setSelectedUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                                onSelectCohort={id => setSelectedCohortId(id)}
+                            />
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Cancel</button>
+                                <button onClick={handleSave} disabled={submitting} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                                    {submitting && <Loader2 size={14} className="animate-spin" />}
+                                    <UserPlus size={14} /> Add to Group
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
+        </div>
+    );
+}
+
+function MemberRow({ member, groupId, onRemoved, onError }: { member: { id: string; email: string; profile: { firstName: string; lastName: string; avatarUrl: string | null } | null }; groupId: string; onRemoved: () => void; onError: (msg: string) => void }) {
+    const remove = useRemoveGroupMember(groupId, member.id);
+    const displayName = member.profile ? `${member.profile.firstName} ${member.profile.lastName}` : member.email;
+    const initials = member.profile ? `${member.profile.firstName[0] ?? ""}${member.profile.lastName[0] ?? ""}`.toUpperCase() : member.email[0]?.toUpperCase() ?? "?";
+
+    const handleRemove = async () => {
+        try { await remove.trigger(); onRemoved(); } catch { onError("Failed to remove member."); }
+    };
+
+    return (
+        <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white transition-colors">
+            <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{initials}</div>
+            <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-stone-800 truncate">{displayName}</p>
+                <p className="text-xs text-stone-400 truncate">{member.email}</p>
+            </div>
+            <button onClick={handleRemove} disabled={remove.isLoading} aria-label="Remove member" className="p-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 flex-shrink-0">
+                {remove.isLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            </button>
         </div>
     );
 }
@@ -417,43 +486,124 @@ function DeleteGroupModal({ groupId, onClose, onSuccess, onError }: { groupId: s
     );
 }
 
-/* ── Add Channel Modal ── */
-function AddChannelModal({ groupId, onClose, onSuccess, onError }: { groupId: string; onClose: () => void; onSuccess: () => void; onError: (msg: string) => void }) {
-    const addChannel = useAddChannel(groupId);
+/* ── Manage Channels Modal (list existing + add new) ── */
+function ManageChannelsModal({ group, onClose, onError }: { group: CommunityGroup; onClose: () => void; onError: (msg: string) => void }) {
+    const { group: groupDetail, mutate: mutateGroup } = useCommunityGroup(group.id);
+    const addChannel = useAddChannel(group.id);
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    const { toast } = useToast();
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleAddChannel = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) { onError("Channel name is required."); return; }
-        try { await addChannel.trigger({ name: name.trim(), description: description.trim() || undefined }); onSuccess(); } catch { onError("Failed to add channel."); }
+        try {
+            await addChannel.trigger({ name: name.trim(), description: description.trim() || undefined });
+            setName(""); setDescription("");
+            mutateGroup();
+            toast("Channel added", "success");
+        } catch { onError("Failed to add channel."); }
     };
+
+    const channels = groupDetail?.channels ?? [];
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-stone-900">Add Channel</h2>
-                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-stone-100"><X size={18} /></button>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-6 border-b border-stone-100">
+                    <div>
+                        <h2 className="text-lg font-bold text-stone-900">Manage Channels</h2>
+                        <p className="text-xs text-stone-400 mt-0.5">{group.name} · {channels.length} channel{channels.length !== 1 ? "s" : ""}</p>
+                    </div>
+                    <button onClick={onClose} aria-label="Close" className="p-2 rounded-lg hover:bg-stone-100"><X size={18} /></button>
                 </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
+
+                <div className="p-6 space-y-5">
+                    {/* Existing channels list */}
                     <div>
-                        <label className="text-sm font-semibold text-stone-700 mb-1 block">Name *</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. general" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+                        <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-2">Channels</p>
+                        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+                            {!groupDetail ? (
+                                <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-stone-400" /></div>
+                            ) : channels.length === 0 ? (
+                                <p className="text-center text-xs text-stone-400 py-6">No channels yet — add one below</p>
+                            ) : channels.map(ch => (
+                                <ChannelRow
+                                    key={ch.id}
+                                    channel={ch}
+                                    groupId={group.id}
+                                    confirmingDelete={confirmDeleteId === ch.id}
+                                    onRequestDelete={() => setConfirmDeleteId(ch.id)}
+                                    onCancelDelete={() => setConfirmDeleteId(null)}
+                                    onDeleted={() => { setConfirmDeleteId(null); mutateGroup(); }}
+                                    onError={onError}
+                                />
+                            ))}
+                        </div>
                     </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-stone-100" />
+
+                    {/* Add channel form */}
                     <div>
-                        <label className="text-sm font-semibold text-stone-700 mb-1 block">Description</label>
-                        <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+                        <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">Add Channel</p>
+                        <form onSubmit={handleAddChannel} className="space-y-3">
+                            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Channel name *" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+                            <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Description (optional)" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none" />
+                            <div className="flex justify-end gap-3">
+                                <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Close</button>
+                                <button type="submit" disabled={addChannel.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                                    {addChannel.isLoading && <Loader2 size={14} className="animate-spin" />}
+                                    <Plus size={14} /> Add Channel
+                                </button>
+                            </div>
+                        </form>
                     </div>
-                    <div className="flex justify-end gap-3">
-                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Cancel</button>
-                        <button type="submit" disabled={addChannel.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
-                            {addChannel.isLoading && <Loader2 size={14} className="animate-spin" />} Add Channel
-                        </button>
-                    </div>
-                </form>
+                </div>
             </div>
         </div>
+    );
+}
+
+function ChannelRow({ channel, groupId, confirmingDelete, onRequestDelete, onCancelDelete, onDeleted, onError }: { channel: { id: string; name: string; description: string | null }; groupId: string; confirmingDelete: boolean; onRequestDelete: () => void; onCancelDelete: () => void; onDeleted: () => void; onError: (msg: string) => void }) {
+    const del = useDeleteChannel(groupId, channel.id);
+
+    const handleDelete = async () => {
+        try { await del.trigger(); onDeleted(); } catch { onError("Failed to delete channel."); }
+    };
+
+    return (
+        <>
+            <div className="px-3 py-3.5 border-b border-stone-200 last:border-b-0">
+                <div className="flex items-center gap-2">
+                    <Hash size={14} className="text-stone-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-stone-800 truncate">{channel.name}</p>
+                        {channel.description && <p className="text-xs text-stone-400 truncate">{channel.description}</p>}
+                    </div>
+                    <button onClick={onRequestDelete} aria-label="Delete channel" className="p-1.5 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0">
+                        <Trash2 size={14} />
+                    </button>
+                </div>
+            </div>
+
+            {confirmingDelete && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onCancelDelete}>
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm mx-4 p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-lg font-bold text-stone-900">Delete Channel</h2>
+                        <p className="text-sm text-stone-500">Delete <span className="font-semibold text-stone-700">#{channel.name}</span>? This will remove all posts and comments inside. This action cannot be undone.</p>
+                        <div className="flex justify-end gap-3">
+                            <button onClick={onCancelDelete} className="px-4 py-2 text-sm font-semibold text-stone-600">Cancel</button>
+                            <button onClick={handleDelete} disabled={del.isLoading} className="px-5 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
+                                {del.isLoading && <Loader2 size={14} className="animate-spin" />} Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 }
 

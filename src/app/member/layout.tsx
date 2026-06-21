@@ -6,7 +6,6 @@ import { SidebarProvider } from "@/context/SidebarContext";
 import { UserProvider } from "@/context/UserContext";
 import { useAuth } from "@/context/AuthContext";
 import FloatingNav from "@/components/layout/FloatingNav";
-import { useCohorts } from "@/hooks/use-cohorts";
 import {
     LayoutDashboard,
     MessageSquare,
@@ -15,48 +14,35 @@ import {
     Briefcase,
     Target,
     GraduationCap,
+    type LucideIcon,
 } from "lucide-react";
 
+type NavItem = { name: string; href: string; icon: LucideIcon; badge?: string | number };
+type NavGroup = { title?: string; items: NavItem[] };
+
 function MemberLayoutInner({ children }: { children: React.ReactNode }) {
-    const { cohorts } = useCohorts();
-
-    const navGroups = useMemo(() => {
-        const base = [
-            {
-                items: [
-                    { name: "Dashboard", href: "/member", icon: LayoutDashboard },
-                    { name: "Jobs", href: "/member/jobs", icon: Briefcase },
-                    { name: "Dev Plan", href: "/member/devplan", icon: Target },
-                ],
-            },
-            {
-                title: "Community",
-                items: [
-                    { name: "Community", href: "/member/community", icon: MessageSquare },
-                    { name: "Members", href: "/member/members", icon: Users },
-                ],
-            },
-        ];
-
-        if (cohorts.length > 0) {
-            base.push({
-                title: "Cohorts",
-                items: cohorts.map((c) => ({
-                    name: c.name,
-                    href: `/member/cohorts/${c.id}`,
-                    icon: GraduationCap,
-                })),
-            });
-        }
-
-        base.push({
+    const navGroups = useMemo((): NavGroup[] => [
+        {
+            items: [
+                { name: "Dashboard", href: "/member", icon: LayoutDashboard },
+                { name: "Jobs", href: "/member/jobs", icon: Briefcase },
+                { name: "Dev Plan", href: "/member/devplan", icon: Target },
+            ],
+        },
+        {
+            title: "Community",
+            items: [
+                { name: "Community", href: "/member/community", icon: MessageSquare },
+                { name: "Members", href: "/member/members", icon: Users },
+                { name: "Cohorts", href: "/member/cohorts", icon: GraduationCap },
+            ],
+        },
+        {
             items: [
                 { name: "Settings", href: "/member/settings", icon: Settings },
             ],
-        });
-
-        return base;
-    }, [cohorts]);
+        },
+    ], []);
 
     return (
         <div className="min-h-screen bg-stone-50">

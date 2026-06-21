@@ -255,7 +255,7 @@ export default function AdminEventDetailPage() {
                                 </thead>
                                 <tbody>
                                     {filteredRsvps.map(rsvp => {
-                                        const name = rsvp.profile ? `${rsvp.profile.firstName ?? ""} ${rsvp.profile.lastName ?? ""}`.trim() : rsvp.email;
+                                        const name = rsvp.profile ? `${rsvp.profile.firstName ?? ""} ${rsvp.profile.lastName ?? ""}`.trim() || rsvp.email : (rsvp.email ?? "");
                                         return (
                                             <tr key={rsvp.id} className="bg-white border-b border-stone-100 hover:bg-stone-50 transition-colors">
                                                 <td className="px-6 py-4">

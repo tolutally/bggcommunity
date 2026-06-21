@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { Briefcase, Search, MapPin, Clock, ExternalLink, Bookmark, BookmarkCheck, Loader2, Send } from "lucide-react";
+import { Briefcase, Search, MapPin, Clock, ExternalLink, Bookmark, BookmarkCheck, Loader2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { fetchJobs, getApiErrorMessage, getJobTypeLabel, getWorkModeLabel, requestJobReferral, type JobRecord, type JobType, type WorkMode } from "@/lib/jobs";
+import { ReferralButton } from "@/components/ui/referral-button";
+import { fetchJobs, getApiErrorMessage, getJobTypeLabel, getWorkModeLabel, type JobRecord, type JobType, type WorkMode } from "@/lib/jobs";
 
 const WORK_MODES: Array<{ label: string; value?: WorkMode }> = [
     { label: "All" },
@@ -31,12 +32,10 @@ export default function MemberJobsPage() {
     const [modeFilter, setModeFilter] = useState<WorkMode | undefined>(undefined);
     const [typeFilter, setTypeFilter] = useState<JobType | undefined>(undefined);
     const [saved, setSaved] = useState<Set<string>>(new Set());
-    const [referralRequested, setReferralRequested] = useState<Set<string>>(new Set());
     const [jobs, setJobs] = useState<JobRecord[]>([]);
     const [nextCursor, setNextCursor] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
-    const [isRequestingReferral, setIsRequestingReferral] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -137,24 +136,6 @@ export default function MemberJobsPage() {
         }
     };
 
-    const handleReferralRequest = async (job: JobRecord) => {
-        if (!job.referralAvailable || referralRequested.has(job.id) || isRequestingReferral === job.id) {
-            return;
-        }
-
-        setIsRequestingReferral(job.id);
-
-        try {
-            await requestJobReferral(job.id, getToken);
-            setReferralRequested((prev) => new Set(prev).add(job.id));
-            toast("Referral request sent");
-        } catch (requestError) {
-            toast(getApiErrorMessage(requestError, "Unable to request referral."), "error");
-        } finally {
-            setIsRequestingReferral(null);
-        }
-    };
-
     return (
         <ErrorBoundary>
             <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">
@@ -217,8 +198,6 @@ export default function MemberJobsPage() {
                         <div className="space-y-4">
                             {filtered.map((job) => {
                                 const isSaved = saved.has(job.id);
-                                const referralSent = referralRequested.has(job.id);
-                                const isReferralPending = isRequestingReferral === job.id;
 
                                 return (
                                     <div key={job.id} className="bg-white rounded-2xl border border-stone-200 p-6 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-500/5 transition-all group">
@@ -264,21 +243,11 @@ export default function MemberJobsPage() {
                                                 >
                                                     {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                                                 </button>
-                                                <button
-                                                    onClick={() => job.referralAvailable ? void handleReferralRequest(job) : undefined}
-                                                    disabled={!job.referralAvailable || referralSent || isReferralPending}
-                                                    title={!job.referralAvailable ? "No referral available for this job" : referralSent ? "Referral already requested" : "Seek a referral"}
-                                                    className={`px-5 py-2.5 font-bold rounded-xl transition-colors text-sm flex items-center justify-center gap-2 border ${
-                                                        !job.referralAvailable
-                                                            ? "bg-stone-50 text-stone-300 border-stone-200 cursor-not-allowed"
-                                                            : referralSent
-                                                            ? "bg-brand-50 text-brand-700 border-brand-200 cursor-default"
-                                                            : "bg-white text-brand-700 border-brand-200 hover:bg-brand-50"
-                                                    }`}
-                                                >
-                                                    {isReferralPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                                                    {referralSent ? "Referral requested" : "Seek referral"}
-                                                </button>
+                                                <ReferralButton
+                                                    jobId={job.id}
+                                                    referralAvailable={job.referralAvailable}
+                                                    className="px-5 py-2.5 text-sm rounded-xl"
+                                                />
                                                 {job.externalUrl ? (
                                                     <a href={job.externalUrl} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2">
                                                         Apply <ExternalLink size={14} />

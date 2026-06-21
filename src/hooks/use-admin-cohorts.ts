@@ -8,6 +8,7 @@ import { useApiMutation } from "./use-api-mutation";
 import { apiClient } from "@/lib/api";
 import type {
   ApiResponse,
+  AvailableUser,
   Cohort,
   CohortStats,
   CohortSession,
@@ -19,7 +20,7 @@ import type {
 export function useCreateCohort() {
   return useApiMutation<
     ApiResponse<Cohort>,
-    { name: string; description?: string; status?: string; startDate?: string; endDate?: string }
+    { name: string; track: string; slug?: string; description?: string; status?: string; startDate?: string; endDate?: string }
   >("/admin/cohorts", {
     method: "POST",
     revalidate: "/cohorts",
@@ -59,6 +60,15 @@ export function useCohortStats(slugOrId: string | null) {
     isLoading,
     error,
   };
+}
+
+/* ── Available users (not yet in this cohort) ── */
+
+export function useAvailableCohortUsers(cohortId: string) {
+  const { data, error, isLoading } = useAuthSWR<ApiResponse<AvailableUser[]>>(
+    cohortId ? `/admin/cohorts/${cohortId}/available-users` : null,
+  );
+  return { users: data?.data ?? [], isLoading, error };
 }
 
 /* ── Add members ── */
@@ -114,10 +124,10 @@ export function useCreateCohortSession(cohortId: string) {
     ApiResponse<CohortSession>,
     {
       title: string;
-      description?: string;
       scheduledAt: string;
       durationMinutes: number;
-      host: string;
+      description?: string;
+      meetingPlatform?: "ZOOM" | "GOOGLE_MEET" | "OTHER";
       meetingLink?: string;
     }
   >(`/admin/cohorts/${cohortId}/sessions`, {
@@ -142,6 +152,7 @@ export function useUpdateCohortSession(cohortId: string) {
         scheduledAt?: string;
         durationMinutes?: number;
         host?: string;
+        meetingPlatform?: "ZOOM" | "GOOGLE_MEET" | "OTHER";
         meetingLink?: string;
       },
     ) => {
@@ -216,7 +227,7 @@ export function useDeleteCohortSession(cohortId: string, sessionId: string) {
 export function useCreateCohortResource(cohortId: string) {
   return useApiMutation<
     ApiResponse<CohortResource>,
-    { title: string; url: string }
+    { title: string; url: string; description?: string }
   >(`/admin/cohorts/${cohortId}/resources`, {
     method: "POST",
     revalidate: [`/cohorts/${cohortId}/resources`],

@@ -26,6 +26,7 @@ export interface CohortRecord {
     maxMembers: number | null;
     startDate: string | null;
     endDate: string | null;
+    communityGroupId: string | null;
 }
 
 export interface CohortMemberRecord {
@@ -42,9 +43,11 @@ export interface CohortMemberRecord {
 export interface CohortSessionRecord {
     id: string;
     title: string;
+    description: string | null;
     scheduledAt: string;
     durationMinutes: number;
     host: string;
+    meetingPlatform: string | null;
     meetingLink: string | null;
     recordingUrl: string | null;
     hasRsvp: boolean;
@@ -67,16 +70,41 @@ export interface AdminCohortStatsRecord {
     memberCount: number;
 }
 
-export interface AdminCohortUpsertInput {
+export interface CohortGroupRecord {
+    id: string;
     name: string;
-    slug: string;
+    description: string | null;
+    icon: string | null;
+    colorTheme: string | null;
+    isDefault: boolean;
+    cohortId: string | null;
+    createdAt: string | null;
+    memberCount: number;
+    channelCount: number;
+}
+
+export interface AdminCohortCreateInput {
+    name: string;
+    track: string;
     description?: string | null;
     status?: string | null;
-    track?: string | null;
     startDate?: string | null;
     endDate?: string | null;
     maxMembers?: number | null;
 }
+
+export interface AdminCohortUpdateInput {
+    name?: string;
+    track?: string | null;
+    description?: string | null;
+    status?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    maxMembers?: number | null;
+}
+
+/** @deprecated Use AdminCohortCreateInput or AdminCohortUpdateInput */
+export type AdminCohortUpsertInput = AdminCohortCreateInput;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -108,6 +136,7 @@ function normalizeCohort(value: unknown): CohortRecord {
         maxMembers: typeof record.maxMembers === "number" ? record.maxMembers : null,
         startDate: readString(record.startDate),
         endDate: readString(record.endDate),
+        communityGroupId: readString(record.communityGroupId),
     };
 }
 
@@ -135,9 +164,11 @@ function normalizeSession(value: unknown): CohortSessionRecord {
     return {
         id: String(record.id ?? "unknown-session"),
         title: readString(record.title) ?? "Untitled session",
+        description: readString(record.description),
         scheduledAt: readString(record.scheduledAt) ?? new Date().toISOString(),
         durationMinutes: readNumber(record.durationMinutes, 60),
         host: readString(record.host) ?? "Community Team",
+        meetingPlatform: readString(record.meetingPlatform),
         meetingLink: readString(record.meetingLink),
         recordingUrl: readString(record.recordingUrl),
         hasRsvp: Boolean(record.hasRsvp),
@@ -156,6 +187,24 @@ function normalizeResource(value: unknown): CohortResourceRecord {
         type: readString(record.type),
         size: readString(record.size),
         createdAt: readString(record.createdAt),
+    };
+}
+
+function normalizeCohortGroup(value: unknown): CohortGroupRecord {
+    const record = isRecord(value) ? value : {};
+    const count = isRecord(record._count) ? record._count : {};
+
+    return {
+        id: String(record.id ?? "unknown-group"),
+        name: readString(record.name) ?? "Untitled group",
+        description: readString(record.description),
+        icon: readString(record.icon),
+        colorTheme: readString(record.colorTheme),
+        isDefault: Boolean(record.isDefault),
+        cohortId: readString(record.cohortId),
+        createdAt: readString(record.createdAt),
+        memberCount: readNumber(count.members, readNumber(record.memberCount, 0)),
+        channelCount: readNumber(count.channels, readNumber(record.channelCount, 0)),
     };
 }
 
@@ -207,6 +256,13 @@ export async function fetchCohortSessions(cohortId: string, getToken?: TokenProv
 export async function fetchCohortResources(cohortId: string, getToken?: TokenProvider) {
     const response = await apiRequest<SuccessResponse<unknown[]>>(`/cohorts/${cohortId}/resources`, getToken ? { getToken } : undefined);
     return Array.isArray(response.data) ? response.data.map(normalizeResource) : [];
+}
+
+export async function fetchAdminCohortGroups(cohortId: string, getToken: TokenProvider) {
+    const response = await apiRequest<SuccessResponse<unknown[]>>(`/admin/cohorts/${cohortId}/groups`, {
+        getToken,
+    });
+    return Array.isArray(response.data) ? response.data.map(normalizeCohortGroup) : [];
 }
 
 export async function fetchAdminCohortStats(cohortId: string, getToken: TokenProvider) {

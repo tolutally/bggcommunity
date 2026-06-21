@@ -11,21 +11,9 @@ function normalizeTitle(value: string) {
 }
 
 function buildDraftMilestoneTitles(draft: OnboardingDraft) {
-  const titles: string[] = [];
-  const goal = draft.devPlan.goal.trim();
-
-  if (goal) {
-    titles.push(goal);
-  }
-
-  draft.devPlan.milestones
+  return draft.devPlan.milestones
     .map((milestone) => milestone.trim())
-    .filter(Boolean)
-    .forEach((milestone) => {
-      titles.push(milestone);
-    });
-
-  return titles;
+    .filter(Boolean);
 }
 
 function readResponseData<T>(input: unknown): T | null {
@@ -64,6 +52,14 @@ export async function fetchCurrentUserPlan(getToken: TokenProvider): Promise<Dev
   }
 }
 
+export async function updateCurrentUserPlan(goal: string | null, getToken: TokenProvider) {
+  return apiRequest<ApiResponse<DeveloperPlan>>("/users/me/plan", {
+    method: "PATCH",
+    getToken,
+    body: { goal },
+  });
+}
+
 export async function addCurrentUserPlanMilestone(title: string, order: number, getToken: TokenProvider) {
   return apiRequest<ApiResponse<Milestone> | { success: boolean; message?: string }>("/users/me/plan/milestones", {
     method: "POST",
@@ -77,6 +73,11 @@ export async function addCurrentUserPlanMilestone(title: string, order: number, 
 
 export async function syncDraftDevPlanToCurrentUserPlan(draft: OnboardingDraft, getToken: TokenProvider) {
   await createCurrentUserPlan(getToken);
+
+  const draftGoal = draft.devPlan.goal.trim();
+  if (draftGoal) {
+    await updateCurrentUserPlan(draftGoal, getToken);
+  }
 
   const desiredTitles = buildDraftMilestoneTitles(draft);
   if (desiredTitles.length === 0) {

@@ -22,6 +22,7 @@ import {
     updateProfileVisibility,
     uploadCurrentUserAvatar,
 } from "@/lib/users";
+import { useDeveloperPlan } from "@/hooks/use-developer-plan";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -38,11 +39,6 @@ interface FormData {
     company: string;
 }
 
-interface DevGoal {
-    id: number;
-    text: string;
-    done: boolean;
-}
 
 interface FieldErrors {
     occupation?: string;
@@ -68,21 +64,10 @@ const DEFAULT_FORM: FormData = {
     company: "",
 };
 
-const DEFAULT_GOALS: DevGoal[] = [];
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
-
-function loadJSON<T>(key: string, fallback: T): T {
-    if (typeof window === "undefined") return fallback;
-    try {
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : fallback;
-    } catch {
-        return fallback;
-    }
-}
 
 function isValidURL(s: string): boolean {
     if (!s) return true;
@@ -118,7 +103,7 @@ export default function MemberProfilePage() {
     const fileRef = useRef<HTMLInputElement>(null);
 
     /* --- Dev Plan (read-only preview) --- */
-    const [goals] = useState<DevGoal[]>(() => loadJSON("bgg-goals", DEFAULT_GOALS));
+    const { milestones, progress: planProgress } = useDeveloperPlan();
 
     /* --- Password --- */
     const [showPwSection, setShowPwSection] = useState(false);
@@ -313,8 +298,8 @@ export default function MemberProfilePage() {
         setTimeout(() => setPwSuccess(false), 3000);
     };
 
-    const doneCount = goals.filter(g => g.done).length;
-    const progress = goals.length ? Math.round((doneCount / goals.length) * 100) : 0;
+    const doneCount = milestones.filter(m => m.completed).length;
+    const progress = planProgress;
     const progressWidthClass =
         progress >= 100 ? "w-full" :
         progress >= 90 ? "w-11/12" :
@@ -365,22 +350,24 @@ export default function MemberProfilePage() {
                         </div>
 
                         {/* Info */}
-                        <div className="flex-1 space-y-4 pt-2">
+                        <div className="flex-1 pt-2">
                             <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                                <div>
-                                    <div className="flex items-center gap-3">
-                                        <h1 className="text-3xl font-bold text-stone-900">{user.name}</h1>
+                                <div className="min-w-0 flex-1">
+                                    <h1 className="text-3xl font-bold text-stone-900 truncate">{user.name}</h1>
+
+                                    {/* Status badges */}
+                                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                                         <button onClick={() => { void handleToggleOpenToWork(); }} className={`cursor-pointer flex items-center gap-2 px-3 py-1 rounded-full border transition-all select-none ${isOpenToWork ? "bg-green-50 border-green-200 text-green-700" : "bg-stone-50 border-stone-200 text-stone-400 hover:border-stone-300"}`}>
-                                            <div className={`w-3 h-3 rounded-full transition-colors ${isOpenToWork ? "bg-green-500" : "bg-stone-300"}`} />
+                                            <div className={`w-2.5 h-2.5 rounded-full transition-colors ${isOpenToWork ? "bg-green-500" : "bg-stone-300"}`} />
                                             <span className="text-xs font-bold whitespace-nowrap">{isOpenToWork ? "Open to Work" : "Not Open"}</span>
                                         </button>
-
                                         <button onClick={() => { void handleToggleProfileVisibility(); }} disabled={isUpdatingPrivacy} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-all select-none disabled:opacity-70 ${isProfileVisible ? "bg-brand-50 border-brand-200 text-brand-700" : "bg-stone-50 border-stone-200 text-stone-500"}`}>
                                             {isProfileVisible ? <Eye size={12} /> : <EyeOff size={12} />}
                                             <span className="text-xs font-bold whitespace-nowrap">{isProfileVisible ? "Profile Visible" : "Profile Hidden"}</span>
                                         </button>
                                     </div>
 
+                                    {/* Occupation / company */}
                                     <div className="flex items-center gap-2 mt-2 text-stone-500 font-medium flex-wrap">
                                         {isEditing ? (
                                             <div>
@@ -398,33 +385,35 @@ export default function MemberProfilePage() {
                                         )}
                                     </div>
 
+                                    {/* Location / industry */}
                                     <div className="flex items-center gap-4 mt-3 text-sm text-stone-500 flex-wrap">
-                                        <div className="flex items-center gap-1.5 min-w-[120px] max-w-[200px]">
+                                        <div className="flex items-center gap-1.5">
                                             <MapPin size={16} className="text-stone-400 shrink-0" />
                                             {isEditing ? (
-                                                <div className="min-w-0 flex-1">
-                                                    <input type="text" title="Location" aria-label="Location" name="location" value={formData.location} onChange={handleChange} className={`${inputCls("location")} !py-1 !text-xs w-full`} />
+                                                <div className="min-w-0">
+                                                    <input type="text" title="Location" aria-label="Location" name="location" value={formData.location} onChange={handleChange} className={`${inputCls("location")} !py-1 !text-xs`} />
                                                     {errors.location && <p className="text-xs text-rose-500 mt-0.5">{errors.location}</p>}
                                                 </div>
                                             ) : formData.location ? formData.location : <span className="italic text-stone-300">Add location</span>}
                                         </div>
-                                        <div className="flex items-center gap-1.5 min-w-[120px] max-w-[200px]">
+                                        <div className="flex items-center gap-1.5">
                                             <Building2 size={16} className="text-stone-400 shrink-0" />
                                             {isEditing ? (
-                                                <input type="text" title="Industry" aria-label="Industry" name="industry" value={formData.industry} onChange={handleChange} className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500/20 focus:bg-white outline-none w-full min-w-0" />
+                                                <input type="text" title="Industry" aria-label="Industry" name="industry" value={formData.industry} onChange={handleChange} className="px-2 py-1 border border-stone-200 rounded-lg text-xs bg-stone-50 focus:ring-2 focus:ring-brand-500/20 focus:bg-white outline-none min-w-0" />
                                             ) : formData.industry ? formData.industry : <span className="italic text-stone-300">Add industry</span>}
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col gap-2">
+                                {/* Actions */}
+                                <div className="flex-shrink-0 flex flex-col gap-2">
                                     {isEditing ? (
                                         <>
-                                            <button onClick={handleCancel} className="px-5 py-2.5 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors">Cancel</button>
-                                            <button onClick={() => { void handleSave(); }} disabled={isSavingProfile} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-brand-800 text-white hover:bg-brand-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-70">{isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save</button>
+                                            <button onClick={handleCancel} className="px-5 py-2.5 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors whitespace-nowrap">Cancel</button>
+                                            <button onClick={() => { void handleSave(); }} disabled={isSavingProfile} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-brand-800 text-white hover:bg-brand-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-70 whitespace-nowrap">{isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save</button>
                                         </>
                                     ) : (
-                                        <button onClick={() => setIsEditing(true)} className="px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 bg-white border text-stone-700 hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50 transition-all shadow-sm"><Edit2 size={18} /> Edit Profile</button>
+                                        <button onClick={() => setIsEditing(true)} className="px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 bg-white border text-stone-700 hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50 transition-all shadow-sm whitespace-nowrap"><Edit2 size={16} /> Edit Profile</button>
                                     )}
                                 </div>
                             </div>
@@ -461,7 +450,7 @@ export default function MemberProfilePage() {
                                 <div className="p-2 bg-accent-100 text-accent-600 rounded-xl"><Target size={20} /></div>
                                 <div>
                                     <h2 className="text-xl font-bold text-stone-900">Development Plan</h2>
-                                    <p className="text-sm text-stone-500">{doneCount}/{goals.length} goals completed &middot; {progress}%</p>
+                                    <p className="text-sm text-stone-500">{doneCount}/{milestones.length} milestones completed &middot; {progress}%</p>
                                 </div>
                             </div>
                             <Link href="/member/devplan" className="text-sm font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 transition-colors">
@@ -474,23 +463,23 @@ export default function MemberProfilePage() {
                             <div className={`h-full bg-gradient-to-r from-accent-500 to-brand-600 rounded-full transition-all duration-500 ${progressWidthClass}`} />
                         </div>
 
-                        {/* Goals preview (read-only, max 5) */}
+                        {/* Milestones preview (read-only, max 5) */}
                         <div className="space-y-2 mb-4">
-                            {goals.slice(0, 5).map(g => (
-                                <Link key={g.id} href="/member/devplan" className={`flex items-center gap-3 p-3 rounded-xl border transition-all hover:border-brand-200 ${g.done ? "bg-green-50/50 border-green-100" : "bg-white border-stone-100"}`}>
-                                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${g.done ? "bg-accent-500 border-accent-500 text-white" : "border-stone-300"}`}>
-                                        {g.done && <Check size={12} />}
+                            {milestones.slice(0, 5).map(m => (
+                                <Link key={m.id} href="/member/devplan" className={`flex items-center gap-3 p-3 rounded-xl border transition-all hover:border-brand-200 ${m.completed ? "bg-green-50/50 border-green-100" : "bg-white border-stone-100"}`}>
+                                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${m.completed ? "bg-accent-500 border-accent-500 text-white" : "border-stone-300"}`}>
+                                        {m.completed && <Check size={12} />}
                                     </div>
-                                    <span className={`flex-1 text-sm font-medium ${g.done ? "line-through text-stone-400" : "text-stone-800"}`}>{g.text}</span>
+                                    <span className={`flex-1 text-sm font-medium ${m.completed ? "line-through text-stone-400" : "text-stone-800"}`}>{m.title}</span>
                                     <ArrowRight size={14} className="text-stone-300" />
                                 </Link>
                             ))}
-                            {goals.length > 5 && (
-                                <p className="text-xs text-stone-400 text-center pt-1">+{goals.length - 5} more goals</p>
+                            {milestones.length > 5 && (
+                                <p className="text-xs text-stone-400 text-center pt-1">+{milestones.length - 5} more milestones</p>
                             )}
                         </div>
 
-                        {goals.length === 0 ? (
+                        {milestones.length === 0 ? (
                             <Link href="/member/devplan" className="flex items-center justify-center gap-2 w-full py-3 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-sm rounded-xl transition-colors border border-brand-100">
                                 <Target size={15} /> Set Up Your Plan
                             </Link>
@@ -571,8 +560,15 @@ export default function MemberProfilePage() {
 
                 {/* Right Column: Socials */}
                 <div className="space-y-8">
-                    <section className="bg-white rounded-3xl p-8 border border-stone-100 shadow-sm">
-                        <h2 className="text-xl font-bold text-stone-900 mb-6 flex items-center gap-2"><Globe size={20} className="text-brand-600" /> Online Presence</h2>
+                    <section className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-base font-bold text-stone-900 flex items-center gap-2 whitespace-nowrap"><Globe size={18} className="text-brand-600" /> Online Presence</h2>
+                            {!isEditing && (
+                                <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-stone-600 border border-stone-200 hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50 transition-all">
+                                    <Edit2 size={13} /> Edit
+                                </button>
+                            )}
+                        </div>
                         <div className="space-y-6">
                             {/* Website */}
                             <div className="space-y-2">

@@ -9,6 +9,7 @@ import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
 import { Bell, ChevronDown, Search, Menu, X, type LucideIcon } from "lucide-react";
 import { useState } from "react";
+import { useUnreadNotificationCount } from "@/hooks/use-notifications";
 
 type NavItem = {
     name: string;
@@ -31,6 +32,7 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
     const pathname = usePathname();
     const { user } = useUser();
     const { logout } = useAuth();
+    const unreadCount = useUnreadNotificationCount();
     const [profileMenuState, setProfileMenuState] = useState({ pathname, open: false });
     const [mobileMenuState, setMobileMenuState] = useState({ pathname, open: false });
     const showProfileMenu = profileMenuState.open && profileMenuState.pathname === pathname;
@@ -114,6 +116,13 @@ export default function FloatingNav({ navGroups, moduleType }: FloatingNavProps)
                             className="relative p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
                         >
                             <Bell className="h-5 w-5" />
+                            {unreadCount > 0 && (
+                                <span className="absolute top-0.5 right-0.5 h-4 w-4 bg-rose-500 rounded-full border-2 border-white flex items-center justify-center">
+                                    <span className="text-[10px] font-bold text-white leading-none">
+                                        {unreadCount > 9 ? "9+" : unreadCount}
+                                    </span>
+                                </span>
+                            )}
                         </Link>
 
                         {/* Profile Dropdown */}

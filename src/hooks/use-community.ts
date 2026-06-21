@@ -9,6 +9,7 @@ import type {
   CommunityGroupDetail,
   Post,
   Comment,
+  ReportInput,
 } from "@/lib/types";
 
 /* ── Groups ── */
@@ -16,6 +17,13 @@ import type {
 export function useCommunityGroups() {
   const { data, error, isLoading, mutate } = useAuthSWR<PaginatedResponse<CommunityGroup>>(
     "/community/groups",
+  );
+  return { groups: data?.data ?? [], isLoading, error, mutate };
+}
+
+export function usePrivateCommunityGroups() {
+  const { data, error, isLoading, mutate } = useAuthSWR<PaginatedResponse<CommunityGroup>>(
+    "/community/groups/private",
   );
   return { groups: data?.data ?? [], isLoading, error, mutate };
 }
@@ -90,6 +98,38 @@ export function useDeleteComment(commentId: string) {
   return useApiMutation(`/community/comments/${commentId}`, {
     method: "DELETE",
   });
+}
+
+/* ── Single-item fetches (used by admin moderation panel) ── */
+
+export function usePost(postId: string | null) {
+  const { data, isLoading, error } = useAuthSWR<ApiResponse<Post>>(
+    postId ? `/community/posts/${postId}` : null,
+  );
+  return { post: data?.data ?? null, isLoading, error };
+}
+
+export function useComment(commentId: string | null) {
+  const { data, isLoading, error } = useAuthSWR<ApiResponse<Comment>>(
+    commentId ? `/community/comments/${commentId}` : null,
+  );
+  return { comment: data?.data ?? null, isLoading, error };
+}
+
+/* ── Reports ── */
+
+export function useReportPost(postId: string) {
+  return useApiMutation<ApiResponse<{ id: string }>, ReportInput>(
+    `/community/posts/${postId}/report`,
+    { method: "POST" },
+  );
+}
+
+export function useReportComment(commentId: string) {
+  return useApiMutation<ApiResponse<{ id: string }>, ReportInput>(
+    `/community/comments/${commentId}/report`,
+    { method: "POST" },
+  );
 }
 
 /* ── Helpers ── */

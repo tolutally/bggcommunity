@@ -1,20 +1,25 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Hash, Loader2, MessageSquare, Send, Users, Globe, Lock } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Hash, Loader2, MessageSquare, Send, Users, Globe, Lock, MoreHorizontal, Flag } from "lucide-react";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ReportModal } from "@/components/ui/report-modal";
 import { useToast } from "@/components/ui/toast";
 import {
     useCommunityGroups,
+    usePrivateCommunityGroups,
     useCommunityGroup,
     useChannelPosts,
     usePostComments,
     useCreatePost,
     useCreateComment,
+    useReportPost,
+    useReportComment,
     fmtPostDate,
 } from "@/hooks/use-community";
-import type { CommunityGroup, Post, Comment } from "@/lib/types";
+import { ApiRequestError } from "@/lib/api";
+import type { CommunityGroup, Post, Comment, ReportInput } from "@/lib/types";
 
 type Tab = "general" | "my-groups";
 
@@ -25,13 +30,101 @@ function authorName(post: Post | Comment): string {
     return "Member";
 }
 
+/* ── Comment item with report action ── */
+function CommentItem({ comment }: { comment: Comment }) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [reportOpen, setReportOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const { trigger: reportTrigger, isLoading: reporting } = useReportComment(comment.id);
+    const { toast } = useToast();
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handler = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [menuOpen]);
+
+    const handleReport = async (input: ReportInput) => {
+        try {
+            await reportTrigger(input);
+            setReportOpen(false);
+            toast("Report submitted");
+        } catch (err) {
+            if (err instanceof ApiRequestError && err.status === 409) {
+                setReportOpen(false);
+                toast("You've already reported this comment", "error");
+            } else {
+                toast("Could not submit report", "error");
+            }
+        }
+    };
+
+    return (
+        <div className="group/comment">
+            <div className="flex items-start justify-between gap-1">
+                <div className="min-w-0 flex-1">
+                    <span className="text-xs font-semibold text-stone-600">{authorName(comment)}</span>
+                    <span className="text-xs text-stone-400"> &middot; {fmtPostDate(comment.createdAt)}</span>
+                    <p className="text-sm text-stone-700 mt-0.5">{comment.body}</p>
+                </div>
+                <div ref={menuRef} className="relative flex-shrink-0 opacity-0 group-hover/comment:opacity-100 transition-opacity">
+                    <button
+                        onClick={() => setMenuOpen((prev) => !prev)}
+                        aria-label="Comment actions"
+                        className="p-1 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                    >
+                        <MoreHorizontal size={13} />
+                    </button>
+                    {menuOpen && (
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-10 py-1 min-w-[140px]">
+                            <button
+                                onClick={() => { setMenuOpen(false); setReportOpen(true); }}
+                                className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                            >
+                                <Flag size={13} /> Report comment
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+            <ReportModal
+                open={reportOpen}
+                onClose={() => setReportOpen(false)}
+                onSubmit={handleReport}
+                isLoading={reporting}
+                contentType="comment"
+            />
+        </div>
+    );
+}
+
 /* ── Single post card with inline reply ── */
 function PostItem({ post }: { post: Post }) {
     const [draft, setDraft] = useState("");
     const [optimisticComments, setOptimisticComments] = useState<Comment[]>([]);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [reportOpen, setReportOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
     const { comments: fetchedComments, mutate: mutateComments } = usePostComments(post.id);
     const { trigger, isLoading } = useCreateComment(post.id);
+    const { trigger: reportTrigger, isLoading: reporting } = useReportPost(post.id);
     const { toast } = useToast();
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handler = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [menuOpen]);
 
     const comments = useMemo(() => {
         const byId = new Map<string, Comment>();
@@ -58,26 +151,59 @@ function PostItem({ post }: { post: Post }) {
         }
     };
 
+    const handleReport = async (input: ReportInput) => {
+        try {
+            await reportTrigger(input);
+            setReportOpen(false);
+            toast("Report submitted");
+        } catch (err) {
+            if (err instanceof ApiRequestError && err.status === 409) {
+                setReportOpen(false);
+                toast("You've already reported this post", "error");
+            } else {
+                toast("Could not submit report", "error");
+            }
+        }
+    };
+
     return (
         <article className="rounded-2xl border border-stone-200 bg-white p-5">
-            <div className="flex items-center gap-2 mb-2">
-                <div className="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 text-xs font-bold flex-shrink-0">
-                    {authorName(post)[0]}
+            <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 text-xs font-bold flex-shrink-0">
+                        {authorName(post)[0]}
+                    </div>
+                    <span className="text-sm font-semibold text-stone-700 truncate">{authorName(post)}</span>
+                    <span className="text-xs text-stone-400 flex-shrink-0">&middot; {fmtPostDate(post.createdAt)}</span>
                 </div>
-                <span className="text-sm font-semibold text-stone-700">{authorName(post)}</span>
-                <span className="text-xs text-stone-400">&middot; {fmtPostDate(post.createdAt)}</span>
+                <div ref={menuRef} className="relative flex-shrink-0">
+                    <button
+                        onClick={() => setMenuOpen((prev) => !prev)}
+                        aria-label="Post actions"
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                    >
+                        <MoreHorizontal size={15} />
+                    </button>
+                    {menuOpen && (
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-10 py-1 min-w-[130px]">
+                            <button
+                                onClick={() => { setMenuOpen(false); setReportOpen(true); }}
+                                className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                            >
+                                <Flag size={13} /> Report post
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
+
             {post.title && <h3 className="text-base font-bold text-stone-900 mb-1">{post.title}</h3>}
             <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-wrap">{post.body}</p>
 
             {comments.length > 0 && (
                 <div className="mt-4 space-y-2 pl-3 border-l-2 border-stone-100">
                     {comments.map((comment) => (
-                        <div key={comment.id}>
-                            <span className="text-xs font-semibold text-stone-600">{authorName(comment)}</span>
-                            <span className="text-xs text-stone-400"> &middot; {fmtPostDate(comment.createdAt)}</span>
-                            <p className="text-sm text-stone-700 mt-0.5">{comment.body}</p>
-                        </div>
+                        <CommentItem key={comment.id} comment={comment} />
                     ))}
                 </div>
             )}
@@ -102,6 +228,14 @@ function PostItem({ post }: { post: Post }) {
                     {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 </button>
             </div>
+
+            <ReportModal
+                open={reportOpen}
+                onClose={() => setReportOpen(false)}
+                onSubmit={handleReport}
+                isLoading={reporting}
+                contentType="post"
+            />
         </article>
     );
 }
@@ -212,10 +346,22 @@ export default function MemberCommunityPage() {
     const [tab, setTab] = useState<Tab>("general");
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
-    const { groups, isLoading: loadingGroups } = useCommunityGroups();
+    const { groups, isLoading: loadingPublic } = useCommunityGroups();
+    const { groups: privateGroups, isLoading: loadingPrivate } = usePrivateCommunityGroups();
+    const loadingGroups = loadingPublic || loadingPrivate;
 
-    // Groups the member has been added to (gated)
-    const myGroups = useMemo(() => groups.filter(g => g.isJoined), [groups]);
+    // Non-default public groups + all cohort-linked private groups, deduplicated
+    const myGroups = useMemo(() => {
+        const seen = new Set<string>();
+        const result: typeof groups = [];
+        for (const g of groups) {
+            if (!g.isDefault && g.isJoined) { seen.add(g.id); result.push(g); }
+        }
+        for (const g of privateGroups) {
+            if (!seen.has(g.id)) { seen.add(g.id); result.push(g); }
+        }
+        return result;
+    }, [groups, privateGroups]);
 
     const activeGroup = useMemo(() => {
         const target = selectedGroupId ?? myGroups[0]?.id ?? null;
@@ -223,9 +369,6 @@ export default function MemberCommunityPage() {
     }, [selectedGroupId, myGroups]);
 
     // General discussion group — first group where isJoined is not gating (open to all)
-    // Backend serves it as the first group or with a special flag; we treat it as a separate tab
-    // pointing at the first available group's general channel, or a dedicated general endpoint.
-    // For now, general tab shows groups[0] if it exists (the admin-designated open board).
     const generalGroup = useMemo(() => groups.find(g => g.name.toLowerCase().includes("general")) ?? groups[0] ?? null, [groups]);
 
     return (
@@ -268,10 +411,10 @@ export default function MemberCommunityPage() {
 
                 {/* ── My Groups Tab ── */}
                 {tab === "my-groups" && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Sidebar */}
-                        <aside className="space-y-3">
-                            <h2 className="text-xs font-bold text-stone-400 uppercase tracking-wider">Groups you&apos;re in</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6 items-start">
+                        {/* Sidebar — full width on mobile when no group selected; hidden when group selected */}
+                        <aside className={`space-y-2 ${activeGroup ? "hidden md:flex md:flex-col" : "flex flex-col"}`}>
+                            <h2 className="text-xs font-bold text-stone-400 uppercase tracking-wider px-1 mb-1">Groups you&apos;re in</h2>
 
                             {loadingGroups ? (
                                 <div className="rounded-2xl border border-stone-100 bg-white p-5 flex items-center gap-2 text-stone-500 text-sm">
@@ -294,10 +437,13 @@ export default function MemberCommunityPage() {
                                             <div className="w-9 h-9 rounded-xl bg-brand-100 flex items-center justify-center text-brand-700 flex-shrink-0">
                                                 <Users size={16} />
                                             </div>
-                                            <div className="min-w-0">
-                                                <p className="font-bold text-stone-900 text-sm leading-snug">{group.name}</p>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="font-bold text-stone-900 text-sm leading-snug">{group.name}</p>
+                                                    {group.cohortId && <Lock size={10} className="text-amber-600 flex-shrink-0" />}
+                                                </div>
                                                 {group.description && <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">{group.description}</p>}
-                                                <p className="text-xs text-stone-400 mt-1.5">{group.memberCount} members &middot; {group.newPostCount} new</p>
+                                                <p className="text-xs text-stone-400 mt-1.5">{group.memberCount ?? group._count?.members ?? 0} members &middot; {group.newPostCount} new</p>
                                             </div>
                                         </div>
                                     </button>
@@ -306,13 +452,21 @@ export default function MemberCommunityPage() {
                         </aside>
 
                         {/* Content panel */}
-                        <section className="lg:col-span-2">
+                        <section className={`${!activeGroup ? "hidden md:block" : "block"}`}>
                             {!activeGroup ? (
                                 <EmptyState icon={MessageSquare} heading="Select a group" description="Choose a group from the left to view its channels and posts." variant="plain" />
                             ) : (
                                 <div className="space-y-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center text-brand-700">
+                                    {/* Mobile back button */}
+                                    <button
+                                        onClick={() => setSelectedGroupId(null)}
+                                        className="md:hidden flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-800 transition-colors"
+                                    >
+                                        <span aria-hidden>←</span> All groups
+                                    </button>
+
+                                    <div className="flex items-center gap-3 pb-3 border-b border-stone-100">
+                                        <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center text-brand-700 flex-shrink-0">
                                             <Users size={18} />
                                         </div>
                                         <div>
@@ -320,7 +474,7 @@ export default function MemberCommunityPage() {
                                             {activeGroup.description && <p className="text-sm text-stone-500">{activeGroup.description}</p>}
                                         </div>
                                     </div>
-                                        <GroupPanel group={activeGroup} />
+                                    <GroupPanel group={activeGroup} />
                                 </div>
                             )}
                         </section>

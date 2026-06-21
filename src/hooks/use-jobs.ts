@@ -2,7 +2,7 @@
 
 import { useAuthSWR } from "./use-auth-swr";
 import { useApiMutation } from "./use-api-mutation";
-import type { ApiResponse, PaginatedResponse, Job } from "@/lib/types";
+import type { ApiResponse, PaginatedResponse, Job, ReferralRequest } from "@/lib/types";
 
 /**
  * Fetch paginated jobs list via GET /jobs.
@@ -46,9 +46,20 @@ export function useRequestReferral(jobId: string) {
     `/jobs/${jobId}/referral-request`,
     {
       method: "POST",
-      revalidate: [`/jobs/${jobId}`],
+      revalidate: [`/jobs/${jobId}`, `/jobs/${jobId}/referral-request`],
     },
   );
+}
+
+/**
+ * Fetch the current user's referral request for a job via GET /jobs/:id/referral-request.
+ * Returns null if the user hasn't requested a referral yet.
+ */
+export function useMyReferralRequest(jobId: string | null) {
+  const { data, isLoading, mutate } = useAuthSWR<ApiResponse<ReferralRequest | null>>(
+    jobId ? `/jobs/${jobId}/referral-request` : null,
+  );
+  return { referralRequest: data?.data ?? null, isLoading, mutate };
 }
 
 /* ── Display helpers ── */

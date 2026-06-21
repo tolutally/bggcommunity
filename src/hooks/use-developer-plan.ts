@@ -10,14 +10,27 @@ export function useDeveloperPlan() {
   const { data, error, isLoading, mutate } = useAuthSWR<ApiResponse<DeveloperPlan>>(
     "/users/me/plan",
   );
+  const rawMilestones = data?.data?.milestones ?? [];
+  const milestones = rawMilestones.map((m) => ({
+    ...m,
+    completed: m.status === "COMPLETED",
+  }));
   return {
     plan: data?.data ?? null,
-    milestones: data?.data?.milestones ?? [],
-    progress: data?.data?.progress ?? 0,
+    goal: data?.data?.goal ?? null,
+    milestones,
+    progress: data?.data?.percentage ?? 0,
     isLoading,
     error,
     mutate,
   };
+}
+
+export function useUpdateMyPlan() {
+  return useApiMutation<ApiResponse<DeveloperPlan>, { goal: string | null }>(
+    "/users/me/plan",
+    { method: "PATCH", revalidate: ["/users/me/plan"] },
+  );
 }
 
 export function useToggleMilestone(milestoneId: string) {
@@ -65,8 +78,7 @@ export function useCreateMemberPlan(userId: string) {
 }
 
 export interface AddMilestoneInput {
-  title: string;
-  order?: number;
+  milestones: Array<{ title: string; order?: number }>;
 }
 
 export function useAddMilestone(userId: string) {
