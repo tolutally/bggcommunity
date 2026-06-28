@@ -14,6 +14,12 @@ import {
     Trash2,
     Loader2,
     X,
+    Briefcase,
+    Building2,
+    MapPin,
+    Calendar,
+    Linkedin,
+    BadgeCheck,
 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -38,6 +44,7 @@ export default function AdminMembersPage() {
     const [selectedStatus, setSelectedStatus] = useState("All");
 
     const [showAddModal, setShowAddModal] = useState(false);
+    const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
     const [addForm, setAddForm] = useState({ email: "", firstName: "", lastName: "" });
     const { trigger: addMember, isLoading: isAdding } = useAddMember();
     const { toast } = useToast();
@@ -179,7 +186,7 @@ export default function AdminMembersPage() {
                 ) : viewMode === "grid" ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {filteredMembers.map((member) => (
-                            <MemberGridCard key={member.id} member={member} onRefresh={() => void reload()} />
+                            <MemberGridCard key={member.id} member={member} onRefresh={() => void reload()} onSelect={() => setSelectedMember(member)} />
                         ))}
                     </div>
                 ) : (
@@ -198,7 +205,7 @@ export default function AdminMembersPage() {
                                 </thead>
                                 <tbody>
                                     {filteredMembers.map((member) => (
-                                        <MemberListRow key={member.id} member={member} onRefresh={() => void reload()} />
+                                        <MemberListRow key={member.id} member={member} onRefresh={() => void reload()} onSelect={() => setSelectedMember(member)} />
                                     ))}
                                 </tbody>
                             </table>
@@ -234,7 +241,7 @@ export default function AdminMembersPage() {
                 <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-lg font-bold text-stone-900">Add Member</h2>
-                        <button onClick={() => setShowAddModal(false)} className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
+                        <button onClick={() => setShowAddModal(false)} title="Close" aria-label="Close add member dialog" className="text-stone-400 hover:text-stone-600"><X size={20} /></button>
                     </div>
                     <div className="space-y-3">
                         <div>
@@ -293,6 +300,10 @@ export default function AdminMembersPage() {
                 </div>
             </div>
         ) : null}
+
+        {selectedMember ? (
+            <MemberDetailModal member={selectedMember} onClose={() => setSelectedMember(null)} />
+        ) : null}
         </>
     );
 }
@@ -308,13 +319,19 @@ function statusDotClass(status: string) {
     return "bg-stone-400";
 }
 
-function MemberGridCard({ member, onRefresh }: { member: MemberRecord; onRefresh: () => void }) {
+function MemberGridCard({ member, onRefresh, onSelect }: { member: MemberRecord; onRefresh: () => void; onSelect: () => void }) {
     const cohortLabel = member.cohort ?? "Unassigned";
     const emailLabel = member.email ?? "No email";
 
     return (
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col items-center text-center group hover:border-brand-300 hover:shadow-lg hover:shadow-brand-500/5 transition-all relative overflow-visible">
-            <div className="absolute top-4 right-4 z-10">
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={onSelect}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
+            className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col items-center text-center group hover:border-brand-300 hover:shadow-lg hover:shadow-brand-500/5 transition-all relative overflow-visible cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500"
+        >
+            <div className="absolute top-4 right-4 z-10" onClick={(e) => e.stopPropagation()}>
                 <AdminMemberActions member={member} onRefresh={onRefresh} />
             </div>
 
@@ -348,11 +365,11 @@ function MemberGridCard({ member, onRefresh }: { member: MemberRecord; onRefresh
     );
 }
 
-function MemberListRow({ member, onRefresh }: { member: MemberRecord; onRefresh: () => void }) {
+function MemberListRow({ member, onRefresh, onSelect }: { member: MemberRecord; onRefresh: () => void; onSelect: () => void }) {
     const cohortLabel = member.cohort ?? "Unassigned";
 
     return (
-        <tr className="bg-white border-b border-stone-100 hover:bg-stone-50 transition-colors group">
+        <tr onClick={onSelect} className="bg-white border-b border-stone-100 hover:bg-stone-50 transition-colors group cursor-pointer">
             <td className="px-6 py-4 flex items-center gap-3">
                 <AvatarInitials name={member.name} src={member.avatarUrl ?? undefined} size="md" />
                 <div>
@@ -374,7 +391,7 @@ function MemberListRow({ member, onRefresh }: { member: MemberRecord; onRefresh:
             <td className="px-6 py-4 text-stone-500 font-medium">
                 {member.joinedLabel}
             </td>
-            <td className="px-6 py-4 text-right">
+            <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                 <AdminMemberActions member={member} onRefresh={onRefresh} />
             </td>
         </tr>
@@ -515,5 +532,93 @@ function AdminMemberActions({ member, onRefresh }: { member: MemberRecord; onRef
                 loading={deleting}
             />
         </>
+    );
+}
+
+function MemberDetailModal({ member, onClose }: { member: MemberRecord; onClose: () => void }) {
+    useEffect(() => {
+        function handleKey(e: KeyboardEvent) {
+            if (e.key === "Escape") onClose();
+        }
+        document.addEventListener("keydown", handleKey);
+        return () => document.removeEventListener("keydown", handleKey);
+    }, [onClose]);
+
+    const details: { icon: typeof Mail; label: string; value: string | null }[] = [
+        { icon: Mail, label: "Email", value: member.email },
+        { icon: Briefcase, label: "Occupation", value: member.occupation },
+        { icon: Building2, label: "Industry", value: member.industry },
+        { icon: MapPin, label: "Location", value: member.location },
+        { icon: BadgeCheck, label: "Cohort", value: member.cohort ?? "Unassigned" },
+        { icon: Calendar, label: "Joined", value: member.joinedLabel },
+    ];
+
+    return (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div
+                className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="relative p-6 border-b border-stone-100">
+                    <button
+                        onClick={onClose}
+                        title="Close"
+                        aria-label="Close member details"
+                        className="absolute top-4 right-4 text-stone-400 hover:text-stone-600"
+                    >
+                        <X size={20} />
+                    </button>
+                    <div className="flex flex-col items-center text-center">
+                        <div className="relative mb-3">
+                            <AvatarInitials name={member.name} src={member.avatarUrl ?? undefined} size="xl" className="border-4 border-stone-50 shadow-sm" />
+                            <span className={`absolute bottom-0 right-0 w-6 h-6 rounded-full border-4 border-white ${statusDotClass(member.status)}`} />
+                        </div>
+                        <h2 className="text-xl font-bold text-stone-900">{member.name}</h2>
+                        <div className="flex flex-wrap justify-center items-center gap-2 mt-2">
+                            <StatusBadge label={member.status} preset={member.status as never} />
+                            {member.isOpenToWork ? (
+                                <span className="px-2 py-0.5 rounded-md text-xs font-bold border bg-green-50 text-green-700 border-green-200">
+                                    Open to work
+                                </span>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-6 space-y-5">
+                    {member.bio ? (
+                        <div>
+                            <h3 className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-1">About</h3>
+                            <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-line">{member.bio}</p>
+                        </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {details.map(({ icon: Icon, label, value }) => (
+                            <div key={label} className="flex items-start gap-3">
+                                <span className="mt-0.5 text-stone-400">
+                                    <Icon size={16} />
+                                </span>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">{label}</p>
+                                    <p className="text-sm font-medium text-stone-800 break-words">{value ?? "—"}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {member.linkedinUrl ? (
+                        <a
+                            href={member.linkedinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-stone-200 text-sm font-semibold text-stone-700 hover:border-brand-300 hover:text-brand-700 transition-colors"
+                        >
+                            <Linkedin size={15} /> View LinkedIn
+                        </a>
+                    ) : null}
+                </div>
+            </div>
+        </div>
     );
 }
