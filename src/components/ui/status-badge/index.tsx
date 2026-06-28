@@ -53,6 +53,7 @@ export const STATUS_PRESETS = {
     // platforms
     Zoom:          { bg: "bg-blue-50",   text: "text-blue-700",   dot: "bg-blue-500",   border: "border-blue-200" },
     "Google Meet": { bg: "bg-green-50",  text: "text-green-700",  dot: "bg-green-500",  border: "border-green-200" },
+    Other:         { bg: "bg-stone-50",  text: "text-stone-600",  dot: "bg-stone-400",  border: "border-stone-200" },
 
     // event types
     Workshop:         { bg: "bg-purple-50",   text: "text-purple-700",   dot: "bg-purple-500",   border: "border-purple-200" },
@@ -84,7 +85,7 @@ export function StatusBadge({
     icon: Icon,
     className,
 }: StatusBadgeProps) {
-    const scheme = preset
+    const scheme = (preset && STATUS_PRESETS[preset])
         ? STATUS_PRESETS[preset]
         : color
             ? colorClasses(color)

@@ -2,14 +2,25 @@
 
 import { useAuthSWR } from "./use-auth-swr";
 import { useApiMutation } from "./use-api-mutation";
-import type { ApiResponse, PaginatedResponse, ModerationReport, ModerationReportStatus } from "@/lib/types";
+import type { ApiResponse, PaginatedResponse, ModerationReport } from "@/lib/types";
 
-export function useReportQueue(status?: ModerationReportStatus) {
-  const params = status ? `?status=${status}` : "";
+// The API list endpoint accepts status=OPEN|RESOLVED as a query filter.
+// The report record itself carries status: "OPEN" | "RESOLVED".
+export function useReportQueue(status?: "OPEN" | "RESOLVED", cursor?: string) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (cursor) params.set("cursor", cursor);
+  const query = params.toString();
   const { data, error, isLoading, mutate } = useAuthSWR<PaginatedResponse<ModerationReport>>(
-    `/admin/moderation/reports${params}`,
+    `/admin/moderation/reports${query ? `?${query}` : ""}`,
   );
-  return { reports: data?.data ?? [], isLoading, error, mutate };
+  return {
+    reports: data?.data ?? [],
+    nextCursor: data?.nextCursor ?? null,
+    isLoading,
+    error,
+    mutate,
+  };
 }
 
 export function useReportDetail(reportId: string | null) {

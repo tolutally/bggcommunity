@@ -14,23 +14,18 @@ import {
     Loader2,
     MapPin,
     MessageSquare,
-    Users,
     Video,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { EmptyState } from "@/components/ui/empty-state";
-import { useToast } from "@/components/ui/toast";
 import { useEvents, eventTypeLabel, fmtDuration } from "@/hooks/use-events";
-import { useJobs, fmtJobDate, useRequestReferral } from "@/hooks/use-jobs";
-
-interface DevGoalSnapshot {
-    done?: boolean;
-    status?: "not-started" | "in-progress" | "completed";
-}
+import { useJobs, fmtJobDate } from "@/hooks/use-jobs";
+import { ReferralButton } from "@/components/ui/referral-button";
+import { useDeveloperPlan } from "@/hooks/use-developer-plan";
 
 const container = {
     hidden: { opacity: 0 },
@@ -50,10 +45,15 @@ const item = {
 export default function MemberDashboard() {
     const { user } = useUser();
     const [scheduleView, setScheduleView] = useState<'upcoming' | 'past'>('upcoming');
-    const [devPlanMeta, setDevPlanMeta] = useState({ total: 0, completed: 0 });
 
     const { events, isLoading: isLoadingSchedule, error: scheduleErrorRaw } = useEvents();
     const { jobs, isLoading: isLoadingJobs, error: jobsErrorRaw } = useJobs();
+    const { milestones: devMilestones, goal: devGoal } = useDeveloperPlan();
+
+    const devPlanMeta = {
+        total: devMilestones.length,
+        completed: devMilestones.filter((m) => m.completed).length,
+    };
 
     const scheduleError = scheduleErrorRaw instanceof Error ? scheduleErrorRaw.message : scheduleErrorRaw ? "Could not load schedule." : null;
     const jobsError = jobsErrorRaw instanceof Error ? jobsErrorRaw.message : jobsErrorRaw ? "Could not load jobs." : null;
@@ -67,35 +67,6 @@ export default function MemberDashboard() {
     , [events, now]);
     const featuredJobs = useMemo(() => jobs.filter(j => j.isFeatured), [jobs]);
 
-    useEffect(() => {
-        const loadDevPlanMeta = () => {
-            try {
-                const raw = localStorage.getItem("bgg-goals");
-                if (!raw) {
-                    setDevPlanMeta({ total: 0, completed: 0 });
-                    return;
-                }
-
-                const goals = JSON.parse(raw) as DevGoalSnapshot[];
-                if (!Array.isArray(goals) || goals.length === 0) {
-                    setDevPlanMeta({ total: 0, completed: 0 });
-                    return;
-                }
-
-                const completed = goals.filter((goal) => goal.done || goal.status === "completed").length;
-                setDevPlanMeta({ total: goals.length, completed });
-            } catch {
-                setDevPlanMeta({ total: 0, completed: 0 });
-            }
-        };
-
-        loadDevPlanMeta();
-        window.addEventListener("storage", loadDevPlanMeta);
-
-        return () => {
-            window.removeEventListener("storage", loadDevPlanMeta);
-        };
-    }, []);
 
     const showDevPlanReminder = devPlanMeta.total === 0 || devPlanMeta.completed < devPlanMeta.total;
 
@@ -213,7 +184,9 @@ export default function MemberDashboard() {
                                             <Activity size={14} /> Your Dev Journey
                                         </span>
                                         <h3 className="text-3xl font-bold leading-tight">Dev Plan</h3>
-                                        <p className="text-brand-200 text-sm mt-1">Track your growth & hit your goals</p>
+                                        <p className="text-brand-200 text-sm mt-1 line-clamp-2">
+                                          {devGoal ?? "Track your growth & hit your goals"}
+                                        </p>
                                     </div>
                                     <div className="text-right hidden sm:block">
                                         <div className="text-4xl font-bold text-accent-400">{devPlanMeta.completed}<span className="text-lg text-white/60">/{devPlanMeta.total || "-"}</span></div>
@@ -238,8 +211,8 @@ export default function MemberDashboard() {
                                     </Link>
                                     <span className="text-sm font-medium text-brand-200">
                                         {devPlanMeta.total > 0
-                                            ? `${Math.round((devPlanMeta.completed / devPlanMeta.total) * 100)}% to your goals`
-                                            : "Set your first goals to get started"}
+                                            ? `${Math.round((devPlanMeta.completed / devPlanMeta.total) * 100)}% complete`
+                                            : devGoal ? "Add milestones to track progress" : "Set your first goals to get started"}
                                     </span>
                                 </div>
                             </div>
@@ -387,10 +360,12 @@ export default function MemberDashboard() {
                                         ) : null}
 
                                         {/* View All Card */}
-                                        <Link href="/member/schedule" className="aspect-video border-2 border-dashed border-stone-200 rounded-2xl flex flex-col items-center justify-center text-stone-400 hover:border-accent-400 hover:text-accent-500 transition-colors cursor-pointer group">
-                                            <Video size={32} className="mb-2" />
-                                            <span className="font-semibold text-sm">View All Recordings</span>
-                                        </Link>
+                                        {pastRecordings.length > 0 && (
+                                            <Link href="/member/schedule" className="aspect-video border-2 border-dashed border-stone-200 rounded-2xl flex flex-col items-center justify-center text-stone-400 hover:border-accent-400 hover:text-accent-500 transition-colors cursor-pointer group">
+                                                <Video size={32} className="mb-2" />
+                                                <span className="font-semibold text-sm">View All Recordings</span>
+                                            </Link>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -475,7 +450,7 @@ export default function MemberDashboard() {
                                                     </Link>
                                                 )}
                                                 {job.referralAvailable ? (
-                                                    <JobReferralButton jobId={job.id} />
+                                                    <ReferralButton jobId={job.id} referralAvailable={job.referralAvailable} className="flex-1 px-3 py-2 text-xs rounded-lg" iconSize={12} />
                                                 ) : null}
                                             </div>
                                         </div>
@@ -506,17 +481,3 @@ export default function MemberDashboard() {
     );
 }
 
-function JobReferralButton({ jobId }: { jobId: string }) {
-    const { trigger, isLoading } = useRequestReferral(jobId);
-    const { toast } = useToast();
-    return (
-        <button
-            onClick={() => void trigger({}).then(() => toast("Referral request sent")).catch(() => toast("Could not request referral", "error"))}
-            disabled={isLoading}
-            className="flex-1 px-3 py-2 bg-accent-100 text-accent-700 font-bold rounded-lg hover:bg-accent-200 transition-colors text-xs flex items-center justify-center gap-1 disabled:opacity-60"
-        >
-            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Users size={12} />}
-            Seek Referral
-        </button>
-    );
-}

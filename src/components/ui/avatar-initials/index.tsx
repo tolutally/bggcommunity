@@ -44,6 +44,7 @@ const COLORS = [
 ];
 
 function colorFromName(name: string) {
+    if (!name) return COLORS[0];
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
         hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -52,6 +53,7 @@ function colorFromName(name: string) {
 }
 
 function getInitials(name: string) {
+    if (!name) return "?";
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     return (parts[0]?.[0] ?? "?").toUpperCase();

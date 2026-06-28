@@ -28,6 +28,23 @@ export function useCohorts(cursor?: string) {
   };
 }
 
+/* ── Cohorts the current user is enrolled in ── */
+
+export function useMyCohorts(cursor?: string) {
+  const params = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  const { data, error, isLoading, mutate } = useAuthSWR<PaginatedResponse<Cohort>>(
+    `/users/me/cohorts${params}`,
+  );
+
+  return {
+    cohorts: data?.data ?? [],
+    nextCursor: data?.nextCursor ?? null,
+    isLoading,
+    error,
+    mutate,
+  };
+}
+
 /* ── Single cohort detail ── */
 
 export function useCohort(slugOrId: string | null) {

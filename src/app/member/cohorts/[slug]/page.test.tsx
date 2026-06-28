@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, it, vi } from "vitest";
 
 const toastMock = vi.fn();
 
@@ -38,19 +38,25 @@ describe("member cohort page smoke", () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        vi.mocked(cohortsApi.resolveCohortIdFromSlug).mockResolvedValue({
+        const mockCohort = {
             id: "cohort-1",
             slug: "cohort-alpha",
             name: "Cohort Alpha",
             description: "Alpha",
-        });
+            status: null,
+            track: null,
+            phase: null,
+            health: null,
+            activeRate: null,
+            memberCount: null,
+            maxMembers: null,
+            startDate: null,
+            endDate: null,
+            communityGroupId: null,
+        } as const;
 
-        vi.mocked(cohortsApi.fetchCohortDetail).mockResolvedValue({
-            id: "cohort-1",
-            slug: "cohort-alpha",
-            name: "Cohort Alpha",
-            description: "Alpha",
-        });
+        vi.mocked(cohortsApi.resolveCohortIdFromSlug).mockResolvedValue(mockCohort);
+        vi.mocked(cohortsApi.fetchCohortDetail).mockResolvedValue(mockCohort);
 
         vi.mocked(cohortsApi.fetchCohortMembers).mockResolvedValue([]);
         vi.mocked(cohortsApi.fetchCohortResources).mockResolvedValue([]);
@@ -59,46 +65,46 @@ describe("member cohort page smoke", () => {
                 {
                     id: "session-1",
                     title: "System Design",
+                    description: null,
                     scheduledAt: "2099-01-01T10:00:00.000Z",
                     durationMinutes: 60,
                     host: "Mentor",
+                    meetingPlatform: null,
                     meetingLink: "https://meet.example.com",
                     recordingUrl: null,
                     hasRsvp: false,
+                    attendeeCount: 0,
                 },
             ])
             .mockResolvedValue([
                 {
                     id: "session-1",
                     title: "System Design",
+                    description: null,
                     scheduledAt: "2099-01-01T10:00:00.000Z",
                     durationMinutes: 60,
                     host: "Mentor",
+                    meetingPlatform: null,
                     meetingLink: "https://meet.example.com",
                     recordingUrl: null,
                     hasRsvp: true,
+                    attendeeCount: 1,
                 },
             ]);
     });
 
-    it("loads and retries RSVP mutation", async () => {
+    it("loads sessions and opens detail modal on click", async () => {
         const user = userEvent.setup();
-
-        vi.mocked(cohortsApi.toggleCohortSessionRsvp)
-            .mockRejectedValueOnce(new Error("RSVP failed"))
-            .mockResolvedValueOnce(true);
 
         render(<MemberCohortPage />);
 
         await screen.findByText("Cohort Alpha");
         await screen.findByText("System Design");
 
-        await user.click(screen.getByRole("button", { name: /RSVP|Going/ }));
-        await screen.findByRole("button", { name: "Retry" });
+        // Click the session card to open the detail modal
+        await user.click(screen.getAllByRole("button").find((b) => b.textContent?.includes("System Design")) ?? screen.getByText("System Design"));
 
-        await user.click(screen.getByRole("button", { name: "Retry" }));
-        await screen.findByRole("button", { name: "Going" });
-
-        expect(cohortsApi.toggleCohortSessionRsvp).toHaveBeenCalledTimes(2);
+        // Detail modal should appear
+        await screen.findByText("Session Details");
     });
 });

@@ -149,7 +149,7 @@ export default function AdminCohortsPage() {
                                     </button>
                                 </div>
 
-                                <Link href={`/admin/cohorts/${cohort.slug}`} className="block">
+                                <Link href={`/admin/cohorts/${cohort.slug || cohort.id}`} className="block">
                                     <div className="flex items-start justify-between mb-4 pr-20">
                                         <div className="flex items-center gap-3">
                                             <div className="p-3 bg-brand-50 text-brand-700 rounded-xl group-hover:bg-brand-100 transition-colors"><GraduationCap size={22} /></div>
@@ -177,12 +177,6 @@ export default function AdminCohortsPage() {
                             </div>
                         ))}
 
-                        {/* Create New Card */}
-                        <button onClick={() => setShowCreateModal(true)} className="border-2 border-dashed border-stone-200 rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-brand-300 hover:bg-stone-50 cursor-pointer transition-colors min-h-[220px]">
-                            <div className="h-14 w-14 bg-white rounded-full flex items-center justify-center shadow-sm mb-3 text-stone-400"><Plus size={26} /></div>
-                            <p className="font-bold text-stone-600">Create New Cohort</p>
-                            <p className="text-xs text-stone-400 mt-1">Start a new learning cohort</p>
-                        </button>
                     </div>
 
                     {/* Pagination */}
@@ -250,6 +244,7 @@ function CohortFormModal({ mode, cohort, onClose, onSuccess }: {
     onSuccess: () => void;
 }) {
     const [name, setName] = useState(cohort?.name ?? "");
+    const [track, setTrack] = useState("");
     const [description, setDescription] = useState(cohort?.description ?? "");
     const [startDate, setStartDate] = useState(cohort?.startDate?.split("T")[0] ?? "");
     const [endDate, setEndDate] = useState(cohort?.endDate?.split("T")[0] ?? "");
@@ -264,6 +259,7 @@ function CohortFormModal({ mode, cohort, onClose, onSuccess }: {
     const validate = () => {
         const e: Record<string, string> = {};
         if (!name.trim()) e.name = "Name is required";
+        if (mode === "create" && !track.trim()) e.track = "Track is required";
         if (!description.trim()) e.description = "Description is required";
         if (!startDate) e.startDate = "Start date is required";
         if (!endDate) e.endDate = "End date is required";
@@ -274,8 +270,15 @@ function CohortFormModal({ mode, cohort, onClose, onSuccess }: {
     const handleSubmit = async () => {
         if (!validate()) return;
         setSubmitting(true);
-        const payload = {
-            name: name.trim(),
+        const trimmedName = name.trim();
+        const autoSlug = trimmedName
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, "")
+            .trim()
+            .replace(/\s+/g, "-")
+            .replace(/-+/g, "-");
+        const baseFields = {
+            name: trimmedName,
             description: description.trim(),
             status,
             startDate: new Date(startDate).toISOString(),
@@ -283,10 +286,10 @@ function CohortFormModal({ mode, cohort, onClose, onSuccess }: {
         };
         try {
             if (mode === "create") {
-                await createMut.trigger(payload);
+                await createMut.trigger({ ...baseFields, slug: autoSlug, track: track.trim() });
                 toast("Cohort created", "success");
             } else {
-                await updateMut.trigger(payload);
+                await updateMut.trigger({ ...baseFields, ...(track.trim() ? { track: track.trim() } : {}) });
                 toast("Cohort updated", "success");
             }
             onSuccess();
@@ -312,6 +315,13 @@ function CohortFormModal({ mode, cohort, onClose, onSuccess }: {
                         <label className="block text-sm font-semibold text-stone-700 mb-1.5">Cohort Name</label>
                         <input type="text" placeholder="e.g. Cohort Delta" value={name} onChange={(e) => setName(e.target.value)} className={`w-full px-4 py-3 border rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none ${errors.name ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
                         {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+                    </div>
+                    <div>
+                        <label className="block text-sm font-semibold text-stone-700 mb-1.5">
+                            Track {mode === "create" && <span className="text-red-500">*</span>}
+                        </label>
+                        <input type="text" placeholder="e.g. Software Engineering, Product, Design" value={track} onChange={(e) => setTrack(e.target.value)} className={`w-full px-4 py-3 border rounded-xl text-sm focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 outline-none ${errors.track ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
+                        {errors.track && <p className="text-red-500 text-xs mt-1">{errors.track}</p>}
                     </div>
                     <div>
                         <label className="block text-sm font-semibold text-stone-700 mb-1.5">Description</label>

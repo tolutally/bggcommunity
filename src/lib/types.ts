@@ -37,6 +37,14 @@ export type ReferralRequestStatus = "PENDING" | "FULFILLED" | "DECLINED";
 
 export type UserStatus = "ACTIVE" | "SUSPENDED" | "DELETED";
 
+// ── Available user (scoped to a group or cohort) ──
+
+export interface AvailableUser {
+  id: string;
+  email: string;
+  profile: { firstName: string; lastName: string } | null;
+}
+
 // ── User / Profile ──
 
 export interface Profile {
@@ -177,10 +185,15 @@ export interface CommunityGroup {
   id: string;
   name: string;
   description: string | null;
-  memberCount: number;
+  icon: string;
+  colorTheme: string;
+  isDefault: boolean;
+  cohortId: string | null;
+  memberCount?: number;
   newPostCount: number;
   isJoined?: boolean;
   createdAt: string;
+  _count?: { members: number };
 }
 
 export interface CommunityGroupDetail extends CommunityGroup {
@@ -192,6 +205,12 @@ export interface Channel {
   id: string;
   name: string;
   description: string | null;
+}
+
+export interface GroupMember {
+  id: string;
+  email: string;
+  profile: { firstName: string; lastName: string; avatarUrl: string | null } | null;
 }
 
 export interface Post {
@@ -248,7 +267,6 @@ export interface NotificationMeta {
 
 export interface AppNotification {
   id: string;
-  userId: string;
   type: NotificationType | string;
   title: string;
   body: string;
@@ -270,6 +288,7 @@ export interface Milestone {
   id: string;
   title: string;
   order: number;
+  status: string;
   completed: boolean;
   completedAt: string | null;
   createdAt: string;
@@ -278,26 +297,54 @@ export interface Milestone {
 export interface DeveloperPlan {
   id: string;
   userId: string;
+  goal: string | null;
   milestones: Milestone[];
-  progress: number;
+  percentage: number;
   createdAt: string;
 }
 
 // ── Moderation ──
 
-export type ModerationReportStatus = "PENDING" | "DISMISSED" | "WARNED" | "DELETED";
-export type ModerationReportType = "POST" | "COMMENT" | "PROFILE";
+// status field on the report record itself: "OPEN" (pending review) or "RESOLVED"
+export type ModerationReportStatus = "OPEN" | "RESOLVED";
+// resolution sub-type recorded when a report is resolved
+export type ModerationReportResolution = "DISMISSED" | "WARNED" | "DELETED" | null;
+// contentType as returned by the API (title-case)
+export type ModerationContentType = "Post" | "Comment" | "Profile";
+
+export type ReportReason =
+  | "HARASSMENT"
+  | "SPAM"
+  | "INAPPROPRIATE_CONTENT"
+  | "MISINFORMATION"
+  | "HATE_SPEECH";
+
+export type ReportSeverity = "LOW" | "MEDIUM" | "HIGH";
+
+export interface ReportInput {
+  reason: ReportReason;
+  description?: string;
+  severity?: ReportSeverity;
+}
 
 export interface ModerationReport {
   id: string;
-  type: ModerationReportType;
+  contentType: ModerationContentType;
   status: ModerationReportStatus;
+  resolution: ModerationReportResolution;
   reason: string;
+  description: string | null;
+  severity: ReportSeverity;
   content: string | null;
+  contentId: string | null;
+  postId: string | null;
+  commentId: string | null;
   reportedUser: {
     id: string;
     email: string;
-    profile: Pick<Profile, "firstName" | "lastName" | "avatarUrl"> | null;
+    profile: (Pick<Profile, "firstName" | "lastName" | "avatarUrl"> & { flagCount?: number }) | null;
+    accountAge?: string;
+    trustScore?: string;
   };
   reporter: {
     id: string;
@@ -319,4 +366,13 @@ export interface AnalyticsOverview {
   totalCohorts: number;
   activeCohorts: number;
   openReports: number;
+}
+
+export interface AnalyticsGrowthPoint {
+  period: string;       // "YYYY-MM"
+  totalMembers: number;
+  newMembers: number;
+  activeMembers: number;
+  events: number;
+  rsvps: number;
 }

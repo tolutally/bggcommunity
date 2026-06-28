@@ -2,10 +2,11 @@
 
 import { ArrowDown, ArrowUp, Users, Calendar, TrendingUp, Activity, Download, Check, X, Eye, FileSpreadsheet, FileText, Loader2, ChevronDown } from "lucide-react";
 import React, { useState } from "react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useToast } from "@/components/ui/toast";
 import { exportCSV, exportXLSX, exportPDF } from "@/lib/export";
-import { useAnalyticsOverview, useAnalyticsCohorts, useExportAnalyticsReport } from "@/hooks/use-analytics";
+import { useAnalyticsOverview, useAnalyticsCohorts, useAnalyticsGrowth, useExportAnalyticsReport } from "@/hooks/use-analytics";
 
 
 export default function AdminAnalyticsPage() {
@@ -16,6 +17,7 @@ export default function AdminAnalyticsPage() {
 
     const { overview, isLoading: loadingOverview } = useAnalyticsOverview();
     const { cohorts: apiCohorts, isLoading: loadingCohorts } = useAnalyticsCohorts();
+    const { growth, isLoading: loadingGrowth } = useAnalyticsGrowth(6);
     const { trigger: exportAnalyticsReport, isLoading: isExportingReport } = useExportAnalyticsReport();
 
     const drillCohort = apiCohorts.find(c => c.id === drillDownCohortId) ?? null;
@@ -112,13 +114,43 @@ export default function AdminAnalyticsPage() {
                 <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-stone-100 shadow-sm">
                     <div className="mb-6">
                         <h3 className="font-bold text-stone-900">Platform Growth</h3>
-                        <p className="text-sm text-stone-500 mt-1">Member acquisition and active users over time</p>
+                        <p className="text-sm text-stone-500 mt-1">Member acquisition and activity over the last 6 months</p>
                     </div>
-                    <div className="flex flex-col items-center justify-center h-48 rounded-xl bg-stone-50 border border-dashed border-stone-200 gap-2">
-                        <TrendingUp size={24} className="text-stone-300" />
-                        <p className="text-sm font-semibold text-stone-400">Historical trend data unavailable</p>
-                        <p className="text-xs text-stone-400">A time-series API endpoint is needed to display growth charts.</p>
-                    </div>
+                    {loadingGrowth ? (
+                        <div className="flex items-center justify-center h-52 gap-2 text-stone-400"><Loader2 size={18} className="animate-spin" /> Loading...</div>
+                    ) : growth.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={208}>
+                            <AreaChart data={growth.map(p => ({ ...p, label: formatPeriod(p.period) }))} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                                <defs>
+                                    <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#6d28d9" stopOpacity={0.15} />
+                                        <stop offset="95%" stopColor="#6d28d9" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="gradActive" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15} />
+                                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="gradNew" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" />
+                                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#a8a29e" }} axisLine={false} tickLine={false} />
+                                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#a8a29e" }} axisLine={false} tickLine={false} />
+                                <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #e7e5e4", fontSize: 12 }} />
+                                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+                                <Area type="monotone" dataKey="totalMembers" name="Total Members" stroke="#6d28d9" strokeWidth={2} fill="url(#gradTotal)" dot={false} />
+                                <Area type="monotone" dataKey="activeMembers" name="Active Members" stroke="#f59e0b" strokeWidth={2} fill="url(#gradActive)" dot={false} />
+                                <Area type="monotone" dataKey="newMembers" name="New Members" stroke="#10b981" strokeWidth={2} fill="url(#gradNew)" dot={false} />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-52 rounded-xl bg-stone-50 border border-dashed border-stone-200 gap-2">
+                            <TrendingUp size={24} className="text-stone-300" />
+                            <p className="text-sm font-semibold text-stone-400">No growth data yet</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Side Stats */}
@@ -148,18 +180,34 @@ export default function AdminAnalyticsPage() {
                     </div>
 
                     <div className="bg-gradient-to-br from-stone-900 to-stone-800 rounded-2xl p-6 text-white shadow-lg">
-                        <h3 className="font-bold mb-2">Platform Health</h3>
-                        <p className="text-stone-400 text-sm mb-6">System performance and uptime.</p>
-                        <div className="space-y-4">
-                            <div>
-                                <div className="flex justify-between text-xs mb-1 text-stone-300"><span>Server Uptime</span><span className="text-emerald-400">99.9%</span></div>
-                                <div className="w-full bg-stone-700/50 rounded-full h-1.5"><div className="bg-emerald-500 h-1.5 rounded-full w-[99%]"></div></div>
+                        <h3 className="font-bold mb-2">Cohort Health</h3>
+                        <p className="text-stone-400 text-sm mb-6">Active cohorts and member engagement.</p>
+                        {loadingOverview ? (
+                            <div className="flex items-center gap-2 text-stone-400 text-sm"><Loader2 size={14} className="animate-spin" /> Loading...</div>
+                        ) : overview ? (
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="flex justify-between text-xs mb-1 text-stone-300">
+                                        <span>Active Cohorts</span>
+                                        <span className="text-emerald-400">{overview.activeCohorts}/{overview.totalCohorts}</span>
+                                    </div>
+                                    <div className="w-full bg-stone-700/50 rounded-full h-1.5">
+                                        <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${overview.totalCohorts > 0 ? Math.round((overview.activeCohorts / overview.totalCohorts) * 100) : 0}%` }} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="flex justify-between text-xs mb-1 text-stone-300">
+                                        <span>Member Activity Rate</span>
+                                        <span className="text-blue-400">{overview.totalMembers > 0 ? Math.round((overview.activeThisMonth / overview.totalMembers) * 100) : 0}%</span>
+                                    </div>
+                                    <div className="w-full bg-stone-700/50 rounded-full h-1.5">
+                                        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${overview.totalMembers > 0 ? Math.round((overview.activeThisMonth / overview.totalMembers) * 100) : 0}%` }} />
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <div className="flex justify-between text-xs mb-1 text-stone-300"><span>Response Time</span><span className="text-blue-400">120ms</span></div>
-                                <div className="w-full bg-stone-700/50 rounded-full h-1.5"><div className="bg-blue-500 h-1.5 rounded-full w-[85%]"></div></div>
-                            </div>
-                        </div>
+                        ) : (
+                            <p className="text-stone-400 text-sm">No data available.</p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -221,6 +269,12 @@ function MetricCard({ title, value, change, trend, icon: Icon, inverse }: { titl
             </div>
         </div>
     );
+}
+
+function formatPeriod(period: string): string {
+    const [year, month] = period.split("-");
+    const date = new Date(Number(year), Number(month) - 1, 1);
+    return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
 }
 
 function ProgramBar({ label, value, color }: { label: string; value: string; color: string }) {

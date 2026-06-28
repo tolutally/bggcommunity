@@ -152,6 +152,7 @@ export async function fetchEventDetail(id: string, getToken?: TokenProvider) {
     return normalizeEventDetail(response.data);
 }
 
+
 export async function toggleEventRsvp(id: string, getToken: TokenProvider) {
     const response = await apiRequest<ToggleRsvpResponse>(`/events/${id}/rsvp`, {
         method: "POST",
@@ -165,7 +166,7 @@ export async function createEvent(data: EventUpsertInput, getToken: TokenProvide
     await apiRequest(`/admin/events`, {
         method: "POST",
         getToken,
-        body: JSON.stringify(data),
+        body: data,
     });
 }
 
@@ -173,7 +174,7 @@ export async function updateEvent(id: string, data: Partial<EventUpsertInput>, g
     await apiRequest(`/admin/events/${id}`, {
         method: "PATCH",
         getToken,
-        body: JSON.stringify(data),
+        body: data,
     });
 }
 
@@ -196,7 +197,7 @@ export async function updateEventRecording(id: string, recordingUrl: string, get
     const response = await apiRequest<DetailResponse<unknown>>(`/admin/events/${id}/recording`, {
         method: "PATCH",
         getToken,
-        body: JSON.stringify({ recordingUrl }),
+        body: { recordingUrl },
     });
 
     return normalizeEvent(response.data);

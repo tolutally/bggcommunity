@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { Briefcase, Plus, X, Trash2, Pencil, MapPin, Building2, Clock, ExternalLink, Star, Loader2, RefreshCw, Users, CheckCircle, XCircle } from "lucide-react";
+import { Briefcase, Plus, X, Trash2, Pencil, MapPin, Building2, Clock, ExternalLink, Star, Loader2, RefreshCw, Users, CheckCircle, XCircle, MoreVertical } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -271,6 +271,18 @@ function JobRow({
     onToggle: () => void;
     onReferrals?: () => void;
 }) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        function handleOutside(e: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+        }
+        document.addEventListener("mousedown", handleOutside);
+        return () => document.removeEventListener("mousedown", handleOutside);
+    }, [menuOpen]);
+
     return (
         <div className={`bg-white rounded-2xl border p-5 flex flex-col md:flex-row md:items-center gap-4 transition-all ${job.isFeatured ? "border-brand-200 hover:border-brand-300" : "border-stone-100 opacity-80 hover:opacity-100"}`}>
             <div className="w-12 h-12 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600 font-bold text-lg flex-shrink-0">
@@ -292,24 +304,62 @@ function JobRow({
                     <span className="flex items-center gap-1"><Clock size={14} /> {getJobTypeLabel(job.jobType)}</span>
                     <span className="inline-flex items-center rounded-full border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-semibold text-stone-600">{getWorkModeLabel(job.workMode)}</span>
                 </div>
-
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
-                {onReferrals ? (
-                    <button onClick={onReferrals} title="View referral requests" className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors flex items-center gap-1">
-                        <Users size={13} /> Referrals
-                    </button>
-                ) : null}
+                {/* Feature/Unfeature stays visible as primary action */}
                 <button onClick={onToggle} disabled={isToggling} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed ${job.isFeatured ? "bg-brand-50 text-brand-700 hover:bg-brand-100" : "bg-stone-50 text-stone-500 hover:bg-stone-100"}`}>
                     {isToggling ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} className="inline-block mr-1" />}
                     {job.isFeatured ? "Unfeature" : "Feature"}
                 </button>
-                {job.externalUrl ? (
-                    <a href={job.externalUrl} target="_blank" rel="noopener noreferrer" aria-label="Open job posting" title="Open job posting" className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors"><ExternalLink size={16} /></a>
-                ) : null}
-                <button onClick={onEdit} aria-label="Edit job" title="Edit job" className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors"><Pencil size={16} /></button>
-                <button onClick={onDelete} aria-label="Delete job" title="Delete job" className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+
+                {/* 3-dot actions menu */}
+                <div className="relative" ref={menuRef}>
+                    <button
+                        onClick={() => setMenuOpen(v => !v)}
+                        aria-label="More actions"
+                        className="p-2 text-stone-400 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors"
+                    >
+                        <MoreVertical size={16} />
+                    </button>
+
+                    {menuOpen ? (
+                        <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl border border-stone-200 shadow-lg z-20 overflow-hidden">
+                            {onReferrals ? (
+                                <button
+                                    onClick={() => { setMenuOpen(false); onReferrals(); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-brand-700 hover:bg-brand-50 text-left"
+                                >
+                                    <Users size={14} /> Referrals
+                                </button>
+                            ) : null}
+                            {job.externalUrl ? (
+                                <a
+                                    href={job.externalUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() => setMenuOpen(false)}
+                                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50"
+                                >
+                                    <ExternalLink size={14} /> View posting
+                                </a>
+                            ) : null}
+                            <button
+                                onClick={() => { setMenuOpen(false); onEdit(); }}
+                                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 text-left"
+                            >
+                                <Pencil size={14} /> Edit
+                            </button>
+                            <div className="border-t border-stone-100" />
+                            <button
+                                onClick={() => { setMenuOpen(false); onDelete(); }}
+                                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 text-left"
+                            >
+                                <Trash2 size={14} /> Delete
+                            </button>
+                        </div>
+                    ) : null}
+                </div>
             </div>
         </div>
     );
@@ -496,6 +546,7 @@ function ReferralRequestRow({ request, onStatusChange, toast }: {
     toast: (msg: string, variant?: "success" | "error") => void;
 }) {
     const { trigger: updateStatus, isLoading } = useUpdateReferralStatus(request.id);
+    const [pendingAction, setPendingAction] = useState<null | "FULFILLED" | "DECLINED">(null);
 
     const profile = request.user?.profile;
     const name = profile ? `${profile.firstName} ${profile.lastName}`.trim() : (request.user?.email ?? "Unknown");
@@ -503,10 +554,12 @@ function ReferralRequestRow({ request, onStatusChange, toast }: {
     const handleAction = async (status: import("@/lib/types").ReferralRequestStatus) => {
         try {
             await updateStatus({ status });
-            toast(status === "FULFILLED" ? "Marked as fulfilled" : "Marked as declined");
+            toast(status === "FULFILLED" ? "Marked as fulfilled" : "Marked as declined", "success");
             onStatusChange();
         } catch {
             toast("Unable to update request", "error");
+        } finally {
+            setPendingAction(null);
         }
     };
 
@@ -517,42 +570,63 @@ function ReferralRequestRow({ request, onStatusChange, toast }: {
     };
 
     return (
-        <div className="bg-stone-50 rounded-xl border border-stone-100 p-4 flex items-start gap-3">
-            <AvatarInitials name={name} src={profile?.avatarUrl ?? undefined} size="sm" />
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm text-stone-900">{name}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${statusBadge[request.status]}`}>
-                        {request.status}
-                    </span>
+        <>
+            <div className="bg-stone-50 rounded-xl border border-stone-100 p-4 flex items-start gap-3">
+                <AvatarInitials name={name} src={profile?.avatarUrl ?? undefined} size="sm" />
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-stone-900">{name}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${statusBadge[request.status]}`}>
+                            {request.status}
+                        </span>
+                    </div>
+                    {request.user?.email && !profile ? (
+                        <p className="text-xs text-stone-500 mt-0.5 truncate">{request.user.email}</p>
+                    ) : null}
+                    {request.message ? (
+                        <p className="text-xs text-stone-500 mt-1 line-clamp-2">{request.message}</p>
+                    ) : null}
+                    <p className="text-xs text-stone-400 mt-1">
+                        {new Date(request.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </p>
                 </div>
-                {request.message ? (
-                    <p className="text-xs text-stone-500 mt-1 line-clamp-2">{request.message}</p>
+                {request.status === "PENDING" ? (
+                    <div className="flex gap-1 flex-shrink-0">
+                        <button
+                            onClick={() => setPendingAction("FULFILLED")}
+                            disabled={isLoading}
+                            title="Mark fulfilled"
+                            className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 disabled:opacity-50"
+                        >
+                            <CheckCircle size={14} />
+                        </button>
+                        <button
+                            onClick={() => setPendingAction("DECLINED")}
+                            disabled={isLoading}
+                            title="Decline"
+                            className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50"
+                        >
+                            <XCircle size={14} />
+                        </button>
+                    </div>
                 ) : null}
-                <p className="text-xs text-stone-400 mt-1">
-                    {new Date(request.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                </p>
             </div>
-            {request.status === "PENDING" ? (
-                <div className="flex gap-1 flex-shrink-0">
-                    <button
-                        onClick={() => void handleAction("FULFILLED")}
-                        disabled={isLoading}
-                        title="Mark fulfilled"
-                        className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 disabled:opacity-50"
-                    >
-                        {isLoading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                    </button>
-                    <button
-                        onClick={() => void handleAction("DECLINED")}
-                        disabled={isLoading}
-                        title="Mark declined"
-                        className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50"
-                    >
-                        <XCircle size={14} />
-                    </button>
-                </div>
-            ) : null}
-        </div>
+
+            <ConfirmModal
+                open={pendingAction !== null}
+                onClose={() => { if (!isLoading) setPendingAction(null); }}
+                onConfirm={() => { if (pendingAction) void handleAction(pendingAction); }}
+                loading={isLoading}
+                title={pendingAction === "DECLINED" ? "Decline Referral?" : "Mark as Fulfilled?"}
+                description={
+                    pendingAction === "DECLINED"
+                        ? "This will notify the member that their request has been declined."
+                        : "Confirm you have provided this referral to the member."
+                }
+                confirmLabel={pendingAction === "DECLINED" ? "Decline" : "Confirm"}
+                variant={pendingAction === "DECLINED" ? "danger" : "primary"}
+                icon={pendingAction === "DECLINED" ? XCircle : CheckCircle}
+            />
+        </>
     );
 }

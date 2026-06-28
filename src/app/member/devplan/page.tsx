@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Target,
   CheckCircle,
@@ -23,6 +23,7 @@ import {
   useDeveloperPlan,
   useEditMyMilestone,
   useToggleMilestone,
+  useUpdateMyPlan,
 } from "@/hooks/use-developer-plan";
 import { ApiRequestError } from "@/lib/api";
 import type { Milestone } from "@/lib/types";
@@ -43,6 +44,123 @@ const STATUS_CONFIG = {
     ring: "border-stone-200",
   },
 } as const;
+
+function GoalCard({
+  goal,
+  progress,
+  completedCount,
+  incompleteCount,
+  showProgress,
+  onSaved,
+}: {
+  goal: string | null;
+  progress: number;
+  completedCount: number;
+  incompleteCount: number;
+  showProgress: boolean;
+  onSaved: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(goal ?? "");
+  const { toast } = useToast();
+  const updateMutation = useUpdateMyPlan();
+
+  const handleSave = async () => {
+    const cleaned = draft.trim();
+    try {
+      await updateMutation.trigger({ goal: cleaned || null });
+      setIsEditing(false);
+      onSaved();
+      toast(cleaned ? "Goal saved" : "Goal cleared", "success");
+    } catch {
+      toast("Unable to save goal", "error");
+    }
+  };
+
+  const handleStartEdit = () => {
+    setDraft(goal ?? "");
+    setIsEditing(true);
+  };
+
+  return (
+    <div className="bg-white rounded-3xl border border-stone-100 shadow-sm overflow-hidden">
+      <div className="p-6 md:p-8">
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Goal</p>
+          {!isEditing ? (
+            <button
+              onClick={handleStartEdit}
+              className="rounded-lg border border-stone-200 p-1.5 text-stone-400 transition hover:border-brand-200 hover:text-brand-700 flex-shrink-0"
+              title="Edit goal"
+            >
+              <Pencil size={13} />
+            </button>
+          ) : null}
+        </div>
+
+        {isEditing ? (
+          <div className="space-y-3">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={2}
+              maxLength={200}
+              className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm text-stone-900 outline-none resize-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10"
+              placeholder="e.g., Land a senior role at a product company"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void handleSave()}
+                disabled={updateMutation.isLoading}
+                className="rounded-lg bg-brand-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
+              >
+                {updateMutation.isLoading ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-stone-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : goal ? (
+          <p className="text-2xl md:text-3xl font-bold text-stone-900 leading-snug">{goal}</p>
+        ) : (
+          <button
+            onClick={handleStartEdit}
+            className="text-sm text-stone-400 hover:text-brand-600 transition-colors"
+          >
+            + Set a goal to guide your milestones
+          </button>
+        )}
+      </div>
+
+      {showProgress ? (
+        <>
+          <div className="h-px bg-stone-100 mx-6 md:mx-8" />
+          <div className="px-6 md:px-8 py-5 flex items-center gap-6">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-stone-400">{progress}% complete</p>
+                <div className="flex items-center gap-3 text-xs text-stone-500">
+                  <span><span className="font-bold text-stone-700">{incompleteCount}</span> to do</span>
+                  <span><span className="font-bold text-green-600">{completedCount}</span> done</span>
+                </div>
+              </div>
+              <div className="w-full h-2 rounded-full overflow-hidden bg-stone-100">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${progress === 100 ? "bg-green-500" : "bg-stone-300"}`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
 
 function nextMilestoneOrder(milestones: Milestone[]) {
   const maxOrder = milestones.reduce((max, milestone) => Math.max(max, milestone.order), 0);
@@ -154,7 +272,7 @@ function MilestoneItem({
                 <p className={`font-semibold text-sm ${milestone.completed ? "line-through text-stone-400" : "text-stone-900"}`}>
                   {milestone.title}
                 </p>
-                {milestone.completedAt ? (
+                {milestone.completed && milestone.completedAt ? (
                   <p className="text-xs text-stone-400 mt-1">
                     Completed {new Date(milestone.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                   </p>
@@ -205,9 +323,10 @@ function MilestoneItem({
 export default function MemberDevPlanPage() {
   const [filter, setFilter] = useState<FilterTab>("all");
   const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
+  const newMilestoneTitleRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const { plan, milestones, progress, isLoading, error, mutate } = useDeveloperPlan();
+  const { plan, goal, milestones, progress, isLoading, error, mutate } = useDeveloperPlan();
   const createPlanMutation = useCreateMyPlan();
   const addMilestoneMutation = useAddMyMilestone();
 
@@ -258,13 +377,14 @@ export default function MemberDevPlanPage() {
     const cleaned = newMilestoneTitle.trim();
     if (!cleaned) {
       toast("Enter a milestone title", "error");
+      newMilestoneTitleRef.current?.focus();
       return;
     }
 
     try {
       await ensurePlanExists();
       const order = nextMilestoneOrder(milestones);
-      await addMilestoneMutation.trigger({ title: cleaned, order });
+      await addMilestoneMutation.trigger({ milestones: [{ title: cleaned, order }] });
       setNewMilestoneTitle("");
       await mutate();
       toast("Milestone added", "success");
@@ -293,43 +413,21 @@ export default function MemberDevPlanPage() {
           </div>
         </div>
 
-        {!isLoading && milestones.length > 0 ? (
-          <div className="bg-white rounded-3xl p-6 md:p-8 border border-stone-100 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-              <div>
-                <p className="text-sm font-bold text-stone-400 uppercase tracking-wider">Overall Progress</p>
-                <p className="text-3xl font-bold text-stone-900 mt-1">{progress}%</p>
-              </div>
-              <div className="flex gap-3">
-                <div className="px-4 py-2 rounded-xl border bg-stone-100 text-stone-600 border-stone-200 text-center">
-                  <p className="text-lg font-bold">{incompleteCount}</p>
-                  <p className="text-xs font-medium">To Do</p>
-                </div>
-                <div className="px-4 py-2 rounded-xl border bg-green-50 text-green-700 border-green-200 text-center">
-                  <p className="text-lg font-bold">{completedCount}</p>
-                  <p className="text-xs font-medium">Completed</p>
-                </div>
-              </div>
-            </div>
-            <div className="w-full h-4 rounded-full overflow-hidden bg-stone-100">
-              <progress
-                className="h-full w-full [&::-webkit-progress-bar]:bg-transparent [&::-webkit-progress-value]:bg-gradient-to-r [&::-webkit-progress-value]:from-accent-500 [&::-webkit-progress-value]:to-brand-600 [&::-moz-progress-bar]:bg-gradient-to-r [&::-moz-progress-bar]:from-accent-500 [&::-moz-progress-bar]:to-brand-600"
-                value={progress}
-                max={100}
-              />
-            </div>
-          </div>
+        {!isLoading && !hasFatalError ? (
+          <GoalCard
+            goal={goal}
+            progress={progress}
+            completedCount={completedCount}
+            incompleteCount={incompleteCount}
+            showProgress={milestones.length > 0}
+            onSaved={() => void mutate()}
+          />
         ) : null}
 
         {allDone ? (
-          <div className="bg-gradient-to-r from-green-50 via-emerald-50 to-green-50 border border-green-200 rounded-3xl p-6 md:p-8 flex items-center gap-4">
-            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center flex-shrink-0">
-              <CheckCircle size={28} className="text-green-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-stone-900">All milestones completed!</h3>
-              <p className="text-sm text-stone-500 mt-1">Great work. Add new milestones whenever you are ready for your next stretch goal.</p>
-            </div>
+          <div className="flex items-center gap-3 px-1 text-sm text-stone-500">
+            <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+            All milestones completed — add new ones whenever you&apos;re ready for your next stretch.
           </div>
         ) : null}
 
@@ -363,8 +461,10 @@ export default function MemberDevPlanPage() {
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <input
+                  ref={newMilestoneTitleRef}
                   value={newMilestoneTitle}
                   onChange={(event) => setNewMilestoneTitle(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") void handleAddMilestone(); }}
                   className="flex-1 rounded-2xl border border-stone-200 px-4 py-3 text-sm text-stone-900 outline-none transition focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500"
                   placeholder="e.g., Ship my portfolio, complete interview prep, contribute to open source"
                   maxLength={120}

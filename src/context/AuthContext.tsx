@@ -155,6 +155,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => window.removeEventListener(ONBOARDING_LOCAL_STATE_EVENT, handleStateChange);
     }, []);
 
+    useEffect(() => {
+        const handleAuthExpired = () => {
+            const path = window.location.pathname;
+            if (
+                path.startsWith("/sign-in") ||
+                path.startsWith("/sign-up") ||
+                path.startsWith("/forgot-password") ||
+                path.startsWith("/sso-callback")
+            ) {
+                return;
+            }
+            void signOut({ redirectUrl: LOGOUT_REDIRECT });
+        };
+
+        window.addEventListener("bgg:auth-expired", handleAuthExpired);
+        return () => window.removeEventListener("bgg:auth-expired", handleAuthExpired);
+    }, [signOut]);
+
     // Build AuthUser from Clerk + API data
     const user = useMemo<AuthUser | null>(() => (
         isSignedIn

@@ -6,6 +6,7 @@ import {
     Calendar, CalendarDays, Clock, Users, List, CheckCircle, UserCheck,
     Video, ExternalLink, MapPin, Search, Loader2,
 } from "lucide-react";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { SkeletonCard } from "@/components/ui/skeleton";
@@ -73,6 +74,7 @@ export default function MemberSchedulePage() {
     const [eventDetails, setEventDetails] = useState<Record<string, EventDetailRecord>>({});
     const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
     const [busyRsvpId, setBusyRsvpId] = useState<string | null>(null);
+    const [rsvpConfirmId, setRsvpConfirmId] = useState<string | null>(null);
     const hydratedIdsRef = useRef(new Set<string>());
 
     const paginationQuery = useMemo(() => ({
@@ -210,15 +212,18 @@ export default function MemberSchedulePage() {
             });
             try {
                 await loadEventDetail(eventId);
+                // Re-apply after detail refresh — server may return stale hasRsvp
+                setEventDetails((prev) => prev[eventId] ? { ...prev, [eventId]: { ...prev[eventId], hasRsvp: rsvped } } : prev);
             } catch {
                 // Keep the optimistic RSVP state even if the follow-up detail refresh fails.
             }
             invalidateQuery("events");
-            toast("RSVP updated");
+            toast(rsvped ? "You're going!" : "RSVP removed");
         } catch (toggleError) {
             toast(getEventsErrorMessage(toggleError), "error");
         } finally {
             setBusyRsvpId(null);
+            setRsvpConfirmId(null);
         }
     }, [busyRsvpId, getToken, items, loadEventDetail, toast]);
 
@@ -352,7 +357,7 @@ export default function MemberSchedulePage() {
 
                                         <div className="flex-shrink-0 flex flex-row md:flex-col items-center gap-2 p-4 border-t md:border-t-0 md:border-l border-stone-100">
                                             {status === "upcoming" ? (
-                                                <button onClick={() => void toggleRsvp(event.id)} disabled={busyRsvpId === event.id} className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center gap-2 w-full justify-center disabled:opacity-70 disabled:cursor-not-allowed ${isRsvped ? "bg-accent-500 text-white hover:bg-accent-600" : "bg-white border-2 border-stone-200 text-stone-700 hover:border-brand-300 hover:text-brand-700"}`}>
+                                                <button onClick={() => setRsvpConfirmId(event.id)} disabled={busyRsvpId === event.id} className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center gap-2 w-full justify-center disabled:opacity-70 disabled:cursor-not-allowed ${isRsvped ? "bg-accent-500 text-white hover:bg-accent-600" : "bg-white border-2 border-stone-200 text-stone-700 hover:border-brand-300 hover:text-brand-700"}`}>
                                                     {busyRsvpId === event.id ? <Loader2 size={16} className="animate-spin" /> : isRsvped ? <CheckCircle size={16} /> : <UserCheck size={16} />}
                                                     {isRsvped ? "RSVP'd" : "RSVP"}
                                                 </button>
@@ -423,7 +428,7 @@ export default function MemberSchedulePage() {
                                 </div>
                                 <div className="flex gap-3 pt-2">
                                     {getStatus(detailEvent) === "upcoming" ? (
-                                        <button onClick={() => void toggleRsvp(detailEvent.id)} disabled={busyRsvpId === detailEvent.id} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${hasRsvp(detailEvent.id) ? "bg-accent-500 text-white hover:bg-accent-600" : "bg-brand-800 text-white hover:bg-brand-700"}`}>
+                                        <button onClick={() => setRsvpConfirmId(detailEvent.id)} disabled={busyRsvpId === detailEvent.id} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${hasRsvp(detailEvent.id) ? "bg-accent-500 text-white hover:bg-accent-600" : "bg-brand-800 text-white hover:bg-brand-700"}`}>
                                             {busyRsvpId === detailEvent.id ? <Loader2 size={16} className="animate-spin" /> : hasRsvp(detailEvent.id) ? <CheckCircle size={16} /> : <UserCheck size={16} />}
                                             {hasRsvp(detailEvent.id) ? "RSVP'd" : "RSVP Now"}
                                         </button>
@@ -435,6 +440,23 @@ export default function MemberSchedulePage() {
                     </div>
                 ) : null}
             </div>
+
+            {(() => {
+                const isAlreadyRsvped = rsvpConfirmId ? hasRsvp(rsvpConfirmId) : false;
+                return (
+                    <ConfirmModal
+                        open={rsvpConfirmId !== null}
+                        onClose={() => busyRsvpId !== rsvpConfirmId && setRsvpConfirmId(null)}
+                        onConfirm={() => rsvpConfirmId && void toggleRsvp(rsvpConfirmId)}
+                        loading={busyRsvpId === rsvpConfirmId}
+                        title={isAlreadyRsvped ? "Remove RSVP?" : "Confirm RSVP"}
+                        description={isAlreadyRsvped ? "Your RSVP will be removed from this event." : "You'll be added to the attendee list for this event."}
+                        confirmLabel={isAlreadyRsvped ? "Remove" : "RSVP"}
+                        variant={isAlreadyRsvped ? "danger" : "primary"}
+                        icon={UserCheck}
+                    />
+                );
+            })()}
         </ErrorBoundary>
     );
 }
