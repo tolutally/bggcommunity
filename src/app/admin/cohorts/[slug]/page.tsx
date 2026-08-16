@@ -597,7 +597,20 @@ export default function AdminCohortDetailPage() {
                                         const typeColors: Record<string, string> = { PDF: "bg-rose-100 text-rose-700", VIDEO: "bg-blue-100 text-blue-700", ZIP: "bg-amber-100 text-amber-700" };
                                         const fileType = resource.type ?? "LINK";
                                         return (
-                                            <tr key={resource.id} className="hover:bg-stone-50 transition-colors">
+                                            <tr
+                                                key={resource.id}
+                                                role="link"
+                                                tabIndex={0}
+                                                aria-label={`Open ${resource.title} in a new tab`}
+                                                onClick={() => window.open(resource.url, "_blank", "noopener,noreferrer")}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === "Enter" || event.key === " ") {
+                                                        event.preventDefault();
+                                                        window.open(resource.url, "_blank", "noopener,noreferrer");
+                                                    }
+                                                }}
+                                                className="cursor-pointer hover:bg-stone-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                                            >
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <FileText size={18} className="text-stone-400" />
@@ -610,8 +623,8 @@ export default function AdminCohortDetailPage() {
                                                 <td className="px-6 py-4 text-sm text-stone-500">{resource.size ?? "-"}</td>
                                                 <td className="px-6 py-4 text-sm text-stone-500">{resource.createdAt ? new Date(resource.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "-"}</td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <a href={resource.url} target="_blank" rel="noreferrer" title="Open resource" aria-label="Open resource" className="p-2 inline-block text-stone-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors">
-                                                        <Download size={16} />
+                                                    <a href={resource.url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} title="Open resource" aria-label={`Open ${resource.title} in a new tab`} className="p-2 inline-block text-stone-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                                                        <ExternalLink size={16} />
                                                     </a>
                                                 </td>
                                             </tr>

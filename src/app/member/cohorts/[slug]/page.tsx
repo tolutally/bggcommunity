@@ -415,8 +415,8 @@ export default function MemberCohortPage() {
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         {resources.map((resource) => (
-                                            <a key={resource.id} href={resource.url} target="_blank" rel="noreferrer"
-                                                className="rounded-2xl border border-stone-200 bg-white p-4 hover:border-brand-300 transition-colors"
+                                            <a key={resource.id} href={resource.url} target="_blank" rel="noopener noreferrer"
+                                                className="rounded-2xl border border-stone-200 bg-white p-4 hover:border-brand-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
                                             >
                                                 <div className="flex items-start gap-3">
                                                     <div className="p-2 bg-stone-100 rounded-xl text-stone-500 flex-shrink-0"><FileText size={18} /></div>
