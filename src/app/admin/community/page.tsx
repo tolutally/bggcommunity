@@ -1,11 +1,12 @@
 "use client";
 
-import { Users, Plus, Search, Edit2, Trash2, Hash, Loader2, X, Megaphone, UserPlus, Check, ChevronRight, ChevronLeft } from "lucide-react";
+import { Users, Plus, Search, Edit2, Trash2, Hash, Loader2, X, Megaphone, UserPlus, Check, ChevronRight, ChevronLeft, MoreVertical, AlertTriangle } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useCommunityGroups } from "@/hooks/use-community";
 import { useCreateGroup, useUpdateGroup, useDeleteGroup, useAddChannel, useAnnounce, useAvailableGroupUsers, useGroupMembers, useRemoveGroupMember, useDeleteChannel } from "@/hooks/use-admin-community";
 import { useCommunityGroup } from "@/hooks/use-community";
@@ -24,7 +25,7 @@ export default function AdminCommunityPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [showGroupForm, setShowGroupForm] = useState(false);
     const [editingGroup, setEditingGroup] = useState<CommunityGroup | null>(null);
-    const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
+    const [deletingGroup, setDeletingGroup] = useState<CommunityGroup | null>(null);
     const [channelGroup, setChannelGroup] = useState<CommunityGroup | null>(null);
     const [manageMembersGroup, setManageMembersGroup] = useState<CommunityGroup | null>(null);
 
@@ -69,7 +70,7 @@ export default function AdminCommunityPage() {
 
                     <div className="space-y-3">
                         {filtered.map(g => (
-                            <GroupRow key={g.id} group={g} onEdit={() => { setEditingGroup(g); setShowGroupForm(true); }} onDelete={() => setDeletingGroupId(g.id)} onManageChannels={() => setChannelGroup(g)} onManageMembers={() => setManageMembersGroup(g)} />
+                            <GroupRow key={g.id} group={g} onEdit={() => { setEditingGroup(g); setShowGroupForm(true); }} onDelete={() => setDeletingGroup(g)} onManageChannels={() => setChannelGroup(g)} onManageMembers={() => setManageMembersGroup(g)} />
                         ))}
                     </div>
 
@@ -85,8 +86,8 @@ export default function AdminCommunityPage() {
                 <GroupFormModal group={editingGroup} onClose={() => setShowGroupForm(false)} onSuccess={() => { setShowGroupForm(false); mutate(); toast(editingGroup ? "Group updated" : "Group created", "success"); }} onError={(msg) => toast(msg, "error")} />
             )}
 
-            {deletingGroupId && (
-                <DeleteGroupModal groupId={deletingGroupId} onClose={() => setDeletingGroupId(null)} onSuccess={() => { setDeletingGroupId(null); mutate(); toast("Group deleted", "success"); }} onError={(msg) => toast(msg, "error")} />
+            {deletingGroup && (
+                <DeleteGroupModal groupId={deletingGroup.id} groupName={deletingGroup.name} onClose={() => setDeletingGroup(null)} onSuccess={() => { setDeletingGroup(null); mutate(); toast("Group deleted", "success"); }} onError={(msg) => toast(msg, "error")} />
             )}
 
             {channelGroup && (
@@ -101,8 +102,20 @@ export default function AdminCommunityPage() {
     );
 }
 
-/* ── Group Row ── */
+/* ── Group Row (a.k.a. GroupCard) ── */
 function GroupRow({ group, onEdit, onDelete, onManageChannels, onManageMembers }: { group: CommunityGroup; onEdit: () => void; onDelete: () => void; onManageChannels: () => void; onManageMembers: () => void }) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handler = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [menuOpen]);
+
     return (
         <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col md:flex-row md:items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center text-brand-700 flex-shrink-0">
@@ -125,12 +138,21 @@ function GroupRow({ group, onEdit, onDelete, onManageChannels, onManageMembers }
                 <Tooltip label="Manage Channels">
                     <button onClick={onManageChannels} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors"><Hash size={16} /></button>
                 </Tooltip>
-                <Tooltip label="Edit Group">
-                    <button onClick={onEdit} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors"><Edit2 size={16} /></button>
-                </Tooltip>
-                <Tooltip label="Delete Group">
-                    <button onClick={onDelete} className="p-2 rounded-lg border border-stone-200 text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
-                </Tooltip>
+                <div ref={menuRef} className="relative">
+                    <Tooltip label="More options">
+                        <button onClick={() => setMenuOpen(prev => !prev)} aria-label="Group actions" aria-haspopup="menu" aria-expanded={menuOpen} className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 transition-colors"><MoreVertical size={16} /></button>
+                    </Tooltip>
+                    {menuOpen && (
+                        <div role="menu" className="absolute right-0 top-full mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-10 py-1 min-w-[160px]">
+                            <button role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }} className="w-full px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-50 flex items-center gap-2 transition-colors">
+                                <Edit2 size={14} /> Edit group
+                            </button>
+                            <button role="menuitem" onClick={() => { setMenuOpen(false); onDelete(); }} className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
+                                <Trash2 size={14} /> Delete group
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -466,23 +488,22 @@ function MemberRow({ member, groupId, onRemoved, onError }: { member: { id: stri
 }
 
 /* ── Delete Group Modal ── */
-function DeleteGroupModal({ groupId, onClose, onSuccess, onError }: { groupId: string; onClose: () => void; onSuccess: () => void; onError: (msg: string) => void }) {
+function DeleteGroupModal({ groupId, groupName, onClose, onSuccess, onError }: { groupId: string; groupName: string; onClose: () => void; onSuccess: () => void; onError: (msg: string) => void }) {
     const del = useDeleteGroup(groupId);
     const handleDelete = async () => { try { await del.trigger(); onSuccess(); } catch { onError("Failed to delete group."); } };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm mx-4 p-6 space-y-4" onClick={e => e.stopPropagation()}>
-                <h2 className="text-lg font-bold text-stone-900">Delete Group</h2>
-                <p className="text-sm text-stone-500">This will remove the group and all its channels. This action cannot be undone.</p>
-                <div className="flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-stone-600">Cancel</button>
-                    <button onClick={handleDelete} disabled={del.isLoading} className="px-5 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">
-                        {del.isLoading && <Loader2 size={14} className="animate-spin" />} Delete
-                    </button>
-                </div>
-            </div>
-        </div>
+        <ConfirmModal
+            open
+            onClose={onClose}
+            onConfirm={handleDelete}
+            title={`Delete "${groupName}"?`}
+            description="This permanently deletes the group along with all of its channels and posts, and removes it for every member. This action cannot be undone."
+            confirmLabel="Delete Group"
+            variant="danger"
+            icon={AlertTriangle}
+            loading={del.isLoading}
+        />
     );
 }
 
@@ -616,6 +637,13 @@ function AnnouncementForm({ groups }: { groups: CommunityGroup[] }) {
     const [groupId, setGroupId] = useState("");
 
     const targetGroup = groups.find(g => g.id === groupId);
+    const memberCount = (group: CommunityGroup) => group.memberCount ?? group._count?.members ?? 0;
+    const cohortLinkedCount = groups.filter(g => g.cohortId).length;
+    const totalMembers = groups.reduce((sum, g) => sum + memberCount(g), 0);
+
+    const recipientSummary = targetGroup
+        ? `Goes to ${memberCount(targetGroup)} member${memberCount(targetGroup) === 1 ? "" : "s"} in "${targetGroup.name}"${targetGroup.cohortId ? " (cohort-linked group)" : ""}.`
+        : `Goes to all ${groups.length} group${groups.length === 1 ? "" : "s"}${cohortLinkedCount ? ` (${cohortLinkedCount} cohort-linked)` : ""} \u00b7 ${totalMembers} member${totalMembers === 1 ? "" : "s"} total.`;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -650,6 +678,7 @@ function AnnouncementForm({ groups }: { groups: CommunityGroup[] }) {
                             <option value="">All groups</option>
                             {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                         </select>
+                        <p className="text-xs text-stone-500 mt-1.5">{recipientSummary}</p>
                     </div>
                     <div className="flex justify-end">
                         <button type="submit" disabled={announce.isLoading} className="px-5 py-2.5 bg-brand-800 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors text-sm flex items-center gap-2 disabled:opacity-50">

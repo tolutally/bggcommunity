@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Calendar, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Link2, List, Loader2, Pencil, Plus, RefreshCw, Trash2, UserCheck, Users, Video, X, type LucideIcon } from "lucide-react";
+import { Calendar, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, Link2, List, Loader2, MapPin, Pencil, Plus, RefreshCw, Trash2, UserCheck, Users, Video, X, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
@@ -17,6 +17,8 @@ import {
     fetchEventDetail,
     fetchEventRsvps,
     fetchEvents,
+    getEventLinkCtaLabel,
+    getEventLocationLabel,
     getEventPlatformLabel,
     getEventsErrorMessage,
     getEventTypeLabel,
@@ -24,6 +26,7 @@ import {
     updateEvent,
     updateEventRecording,
     type EventDetailRecord,
+    type EventLinkType,
     type EventPlatform,
     type EventRecord,
     type EventRsvpRecord,
@@ -39,12 +42,19 @@ const EVENT_TYPES: Array<{ label: string; value: EventType }> = [
     { label: "Hackathon", value: "HACKATHON" },
 ];
 
-const DURATION_OPTIONS = [30, 45, 60, 90, 120, 180];
+const MIN_DURATION_MINUTES = 15;
+const MAX_DURATION_MINUTES = 300;
 
 const PLATFORM_OPTIONS: Array<{ key: EventPlatform; label: string; color: string }> = [
     { key: "ZOOM", label: "Zoom", color: "bg-blue-50 text-blue-700 border-blue-200" },
     { key: "GOOGLE_MEET", label: "Google Meet", color: "bg-green-50 text-green-700 border-green-200" },
     { key: "OTHER", label: "Other", color: "bg-stone-50 text-stone-600 border-stone-200" },
+    { key: "IN_PERSON", label: "In Person", color: "bg-amber-50 text-amber-700 border-amber-200" },
+];
+
+const LINK_TYPE_OPTIONS: Array<{ key: EventLinkType; label: string }> = [
+    { key: "MEETING", label: "Meeting link" },
+    { key: "REGISTRATION", label: "Registration link" },
 ];
 
 function formatDateLabel(value: string) {
@@ -116,6 +126,8 @@ function toFormValues(event: EventRecord | EventDetailRecord): EventUpsertInput 
         host: event.host,
         type: event.type,
         platform: event.platform,
+        location: event.location,
+        linkType: event.linkType,
         meetingLink: "meetingLink" in event ? event.meetingLink : null,
     };
 }
@@ -520,7 +532,8 @@ export default function AdminEventsPage() {
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                                                         <StatusBadge label={getEventTypeLabel(event.type)} preset={event.type as never} variant="tag" />
-                                                        <StatusBadge label={getEventPlatformLabel(event.platform)} preset={getEventPlatformLabel(event.platform) as never} variant="tag" />
+                                                        <StatusBadge label={getEventLocationLabel(event.platform)} preset={event.platform === "IN_PERSON" ? "In Person" : "Online" as never} variant="tag" />
+                                                        {event.platform !== "IN_PERSON" ? <StatusBadge label={getEventPlatformLabel(event.platform)} preset={getEventPlatformLabel(event.platform) as never} variant="tag" /> : null}
                                                         {status === "past" ? <StatusBadge label="Past" preset="Inactive" variant="tag" /> : null}
                                                         {hasRsvp ? <StatusBadge label="RSVP'd" preset="Active" variant="tag" /> : null}
                                                     </div>
@@ -530,6 +543,7 @@ export default function AdminEventsPage() {
                                                         <span className="flex items-center gap-1.5"><Clock size={16} /> {formatTime(event.scheduledAt)}</span>
                                                         <span className="flex items-center gap-1.5"><Video size={16} /> {formatDuration(event.durationMinutes)}</span>
                                                         <span className="flex items-center gap-1.5"><Users size={16} /> {event.attendeeCount} Attending</span>
+                                                        {event.platform === "IN_PERSON" && event.location ? <span className="flex items-center gap-1.5"><MapPin size={16} /> {event.location}</span> : null}
                                                         <span className="flex items-center gap-1.5">Host: {event.host}</span>
                                                     </div>
                                                 </div>
@@ -548,7 +562,7 @@ export default function AdminEventsPage() {
                                             </div>
                                         </div>
                                     </div>
-                                    {eventMeetingLink ? (
+                                    {event.platform !== "IN_PERSON" && eventMeetingLink ? (
                                         <div className="mt-4 flex items-center gap-3 bg-stone-50 rounded-xl px-4 py-3 border border-stone-100">
                                             <Link2 size={16} className="text-stone-400 flex-shrink-0" />
                                             <span className="text-sm text-stone-600 truncate flex-1 font-mono">{eventMeetingLink}</span>
@@ -556,7 +570,7 @@ export default function AdminEventsPage() {
                                                 {copied === event.id ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
                                             </button>
                                             <a href={eventMeetingLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-800 text-white hover:bg-brand-700 transition-colors">
-                                                <ExternalLink size={14} /> Join
+                                                <ExternalLink size={14} /> {getEventLinkCtaLabel(event.linkType)}
                                             </a>
                                         </div>
                                     ) : null}
@@ -601,7 +615,8 @@ export default function AdminEventsPage() {
                                 ) : null}
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <StatusBadge label={getEventTypeLabel(detailEvent.type)} preset={detailEvent.type as never} variant="tag" />
-                                    <StatusBadge label={getEventPlatformLabel(detailEvent.platform)} preset={getEventPlatformLabel(detailEvent.platform) as never} variant="tag" />
+                                    <StatusBadge label={getEventLocationLabel(detailEvent.platform)} preset={detailEvent.platform === "IN_PERSON" ? "In Person" : "Online" as never} variant="tag" />
+                                    {detailEvent.platform !== "IN_PERSON" ? <StatusBadge label={getEventPlatformLabel(detailEvent.platform)} preset={getEventPlatformLabel(detailEvent.platform) as never} variant="tag" /> : null}
                                     {getStatus(detailEvent) === "past" ? <StatusBadge label="Past" preset="Inactive" variant="tag" /> : null}
                                     {"hasRsvp" in detailEvent && detailEvent.hasRsvp ? <StatusBadge label="RSVP'd" preset="Active" variant="tag" /> : null}
                                 </div>
@@ -617,25 +632,37 @@ export default function AdminEventsPage() {
                                     <p className="text-xs font-bold uppercase tracking-wide text-stone-400 mb-1">Host</p>
                                     <p className="font-semibold text-stone-800">{detailEvent.host}</p>
                                 </div>
-                                <div className={`rounded-xl p-4 border ${platformBadge(detailEvent.platform)}`}>
-                                    <p className="text-xs font-bold uppercase tracking-wide opacity-70 mb-1">Platform</p>
-                                    <p className="font-bold">{getEventPlatformLabel(detailEvent.platform)}</p>
-                                    {detailEvent.meetingLink ? (
-                                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                                            <button onClick={() => copyLink(detailEvent.id, detailEvent.meetingLink!)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied === detailEvent.id ? "bg-green-100 text-green-700" : "bg-white/80 text-stone-700 hover:bg-white border border-white/70"}`}>
-                                                {copied === detailEvent.id ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy link</>}
-                                            </button>
-                                            <a href={detailEvent.meetingLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors">
-                                                <ExternalLink size={16} /> Join meeting
+                                {detailEvent.platform === "IN_PERSON" ? (
+                                    <div className="rounded-xl p-4 border bg-amber-50 text-amber-700 border-amber-200">
+                                        <p className="text-xs font-bold uppercase tracking-wide opacity-70 mb-1">Venue</p>
+                                        <p className="font-bold flex items-center gap-1.5"><MapPin size={16} /> {detailEvent.location ?? "Location to be announced"}</p>
+                                        {detailEvent.recordingUrl ? (
+                                            <a href={detailEvent.recordingUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-white/80 text-stone-700 rounded-xl font-bold text-sm hover:bg-white transition-colors border border-white/70">
+                                                <ExternalLink size={16} /> Open recording
                                             </a>
-                                        </div>
-                                    ) : null}
-                                    {detailEvent.recordingUrl ? (
-                                        <a href={detailEvent.recordingUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-white/80 text-stone-700 rounded-xl font-bold text-sm hover:bg-white transition-colors border border-white/70">
-                                            <ExternalLink size={16} /> Open recording
-                                        </a>
-                                    ) : null}
-                                </div>
+                                        ) : null}
+                                    </div>
+                                ) : (
+                                    <div className={`rounded-xl p-4 border ${platformBadge(detailEvent.platform)}`}>
+                                        <p className="text-xs font-bold uppercase tracking-wide opacity-70 mb-1">Platform</p>
+                                        <p className="font-bold">{getEventPlatformLabel(detailEvent.platform)}</p>
+                                        {detailEvent.meetingLink ? (
+                                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                <button onClick={() => copyLink(detailEvent.id, detailEvent.meetingLink!)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied === detailEvent.id ? "bg-green-100 text-green-700" : "bg-white/80 text-stone-700 hover:bg-white border border-white/70"}`}>
+                                                    {copied === detailEvent.id ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy link</>}
+                                                </button>
+                                                <a href={detailEvent.meetingLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors">
+                                                    <ExternalLink size={16} /> {getEventLinkCtaLabel(detailEvent.linkType)}
+                                                </a>
+                                            </div>
+                                        ) : null}
+                                        {detailEvent.recordingUrl ? (
+                                            <a href={detailEvent.recordingUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-white/80 text-stone-700 rounded-xl font-bold text-sm hover:bg-white transition-colors border border-white/70">
+                                                <ExternalLink size={16} /> Open recording
+                                            </a>
+                                        ) : null}
+                                    </div>
+                                )}
                                 <div className="bg-white rounded-2xl border border-stone-100 p-4">
                                     <div className="flex items-center justify-between gap-3 mb-3">
                                         <div>
@@ -769,8 +796,12 @@ function EventFormModal({
     const [type, setType] = useState<EventType>(initial?.type ?? "WORKSHOP");
     const [host, setHost] = useState(initial?.host ?? "");
     const [platform, setPlatform] = useState<EventPlatform>(initial?.platform ?? "ZOOM");
+    const [location, setLocation] = useState(initial?.location ?? "");
+    const [linkType, setLinkType] = useState<EventLinkType>(initial?.linkType ?? "MEETING");
     const [meetingLink, setMeetingLink] = useState(initial?.meetingLink ?? "");
     const [errors, setErrors] = useState<Record<string, string>>({});
+
+    const isInPerson = platform === "IN_PERSON";
 
     const handleSubmit = async () => {
         const nextErrors: Record<string, string> = {};
@@ -779,8 +810,16 @@ function EventFormModal({
         if (!date) nextErrors.date = "Required";
         if (!time) nextErrors.time = "Required";
         if (!host.trim()) nextErrors.host = "Required";
-        if (!meetingLink.trim()) nextErrors.meetingLink = "Required";
-        else if (!/^https?:\/\/.+/i.test(meetingLink)) nextErrors.meetingLink = "Enter a valid URL (https://...)";
+        if (!Number.isFinite(durationMinutes) || durationMinutes < MIN_DURATION_MINUTES || durationMinutes > MAX_DURATION_MINUTES) {
+            nextErrors.durationMinutes = `Enter a duration between ${MIN_DURATION_MINUTES} and ${MAX_DURATION_MINUTES} minutes`;
+        }
+
+        if (isInPerson) {
+            if (!location.trim()) nextErrors.location = "Required";
+        } else {
+            if (!meetingLink.trim()) nextErrors.meetingLink = "Required";
+            else if (!/^https?:\/\/.+/i.test(meetingLink)) nextErrors.meetingLink = "Enter a valid URL (https://...)";
+        }
 
         setErrors(nextErrors);
 
@@ -796,7 +835,9 @@ function EventFormModal({
             host: host.trim(),
             type,
             platform,
-            meetingLink: meetingLink.trim(),
+            location: isInPerson ? location.trim() : null,
+            linkType: isInPerson ? "IN_PERSON" : linkType,
+            meetingLink: isInPerson ? null : meetingLink.trim(),
         });
     };
 
@@ -825,10 +866,19 @@ function EventFormModal({
                             <input type="time" value={time} onChange={(event) => setTime(event.target.value)} aria-label="Event time" title="Event time" className={inputClass(errors.time)} />
                         </Field>
                         <div>
-                            <label className="block text-sm font-semibold text-stone-700 mb-1">Duration</label>
-                            <select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} aria-label="Event duration" title="Event duration" className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 bg-white">
-                                {DURATION_OPTIONS.map((option) => <option key={option} value={option}>{formatDuration(option)}</option>)}
-                            </select>
+                            <label className="block text-sm font-semibold text-stone-700 mb-1">Duration (min)</label>
+                            <input
+                                type="number"
+                                min={MIN_DURATION_MINUTES}
+                                max={MAX_DURATION_MINUTES}
+                                step={5}
+                                value={durationMinutes}
+                                onChange={(event) => setDurationMinutes(Number(event.target.value))}
+                                aria-label="Event duration in minutes"
+                                title="Event duration in minutes"
+                                className={inputClass(errors.durationMinutes)}
+                            />
+                            {errors.durationMinutes ? <p className="text-red-500 text-xs mt-1">{errors.durationMinutes}</p> : <p className="text-stone-400 text-xs mt-1">{formatDuration(durationMinutes)} &middot; up to 5 hrs</p>}
                         </div>
                     </div>
                     <Field label="Host" error={errors.host}>
@@ -843,7 +893,7 @@ function EventFormModal({
                         </div>
                     </div>
                     <div className="border-t border-stone-100 pt-4 mt-4">
-                        <label className="block text-sm font-semibold text-stone-700 mb-2">Meeting Platform</label>
+                        <label className="block text-sm font-semibold text-stone-700 mb-2">Location</label>
                         <div className="flex gap-2 mb-3 flex-wrap">
                             {PLATFORM_OPTIONS.map((option) => (
                                 <button key={option.key} type="button" onClick={() => setPlatform(option.key)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${platform === option.key ? `${option.color} ring-2 ring-offset-1 ring-brand-300` : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}>
@@ -851,12 +901,31 @@ function EventFormModal({
                                 </button>
                             ))}
                         </div>
-                        <Field label="Meeting Link" error={errors.meetingLink}>
-                            <div className="relative">
-                                <Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                                <input type="url" value={meetingLink} onChange={(event) => setMeetingLink(event.target.value)} placeholder="https://zoom.us/j/123456789" className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 font-mono ${errors.meetingLink ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                            </div>
-                        </Field>
+                        {isInPerson ? (
+                            <Field label="Venue / Address" error={errors.location}>
+                                <div className="relative">
+                                    <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                                    <input type="text" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="e.g. 123 Main St, Suite 400, Atlanta, GA" className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.location ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
+                                </div>
+                            </Field>
+                        ) : (
+                            <>
+                                <label className="block text-sm font-semibold text-stone-700 mb-2">Link Type</label>
+                                <div className="flex gap-2 mb-3 flex-wrap">
+                                    {LINK_TYPE_OPTIONS.map((option) => (
+                                        <button key={option.key} type="button" onClick={() => setLinkType(option.key)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${linkType === option.key ? "bg-brand-50 text-brand-700 border-brand-200 ring-2 ring-offset-1 ring-brand-300" : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}>
+                                        {option.label}
+                                    </button>
+                                    ))}
+                                </div>
+                                <Field label={linkType === "REGISTRATION" ? "Registration Link" : "Meeting Link"} error={errors.meetingLink}>
+                                    <div className="relative">
+                                        <Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                                        <input type="url" value={meetingLink} onChange={(event) => setMeetingLink(event.target.value)} placeholder={linkType === "REGISTRATION" ? "https://forms.gle/..." : "https://zoom.us/j/123456789"} className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 font-mono ${errors.meetingLink ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
+                                    </div>
+                                </Field>
+                            </>
+                        )}
                     </div>
                 </div>
                 <div className="flex gap-3 p-6 border-t border-stone-100 bg-stone-50">

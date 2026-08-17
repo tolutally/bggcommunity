@@ -56,12 +56,14 @@ export interface CohortSessionRecord {
 
 export interface CohortResourceRecord {
     id: string;
+    cohortId: string;
+    uploadedById: string;
     title: string;
     description: string | null;
     url: string;
-    type: string | null;
-    size: string | null;
-    createdAt: string | null;
+    accessType: "link" | "download";
+    createdAt: string;
+    deletedAt: null;
 }
 
 export interface AdminCohortStatsRecord {
@@ -181,12 +183,14 @@ function normalizeResource(value: unknown): CohortResourceRecord {
 
     return {
         id: String(record.id ?? "unknown-resource"),
+        cohortId: String(record.cohortId ?? "unknown-cohort"),
+        uploadedById: String(record.uploadedById ?? "unknown-uploader"),
         title: readString(record.title) ?? "Untitled resource",
         description: readString(record.description),
         url: readString(record.url) ?? "#",
-        type: readString(record.type),
-        size: readString(record.size),
-        createdAt: readString(record.createdAt),
+        accessType: record.accessType === "download" ? "download" : "link",
+        createdAt: readString(record.createdAt) ?? new Date(0).toISOString(),
+        deletedAt: null,
     };
 }
 

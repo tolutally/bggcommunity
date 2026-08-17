@@ -586,27 +586,36 @@ export default function AdminCohortDetailPage() {
                                 <thead>
                                     <tr className="border-b border-stone-100 bg-stone-50">
                                         <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Name</th>
-                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Type</th>
-                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Size</th>
+                                        <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Access</th>
                                         <th className="text-left text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3">Date</th>
                                         <th className="text-right text-xs font-bold text-stone-500 uppercase tracking-wider px-6 py-3"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-100">
                                     {resources.map((resource) => {
-                                        const typeColors: Record<string, string> = { PDF: "bg-rose-100 text-rose-700", VIDEO: "bg-blue-100 text-blue-700", ZIP: "bg-amber-100 text-amber-700" };
-                                        const fileType = resource.type ?? "LINK";
+                                        const isLink = resource.accessType === "link";
+                                        const activateResource = () => {
+                                            if (isLink) {
+                                                window.open(resource.url, "_blank", "noopener,noreferrer");
+                                                return;
+                                            }
+                                            const anchor = document.createElement("a");
+                                            anchor.href = resource.url;
+                                            anchor.download = resource.title;
+                                            anchor.rel = "noopener noreferrer";
+                                            anchor.click();
+                                        };
                                         return (
                                             <tr
                                                 key={resource.id}
                                                 role="link"
                                                 tabIndex={0}
-                                                aria-label={`Open ${resource.title} in a new tab`}
-                                                onClick={() => window.open(resource.url, "_blank", "noopener,noreferrer")}
+                                                aria-label={`${isLink ? "Open" : "Download"} ${resource.title}`}
+                                                onClick={activateResource}
                                                 onKeyDown={(event) => {
                                                     if (event.key === "Enter" || event.key === " ") {
                                                         event.preventDefault();
-                                                        window.open(resource.url, "_blank", "noopener,noreferrer");
+                                                        activateResource();
                                                     }
                                                 }}
                                                 className="cursor-pointer hover:bg-stone-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
@@ -618,20 +627,19 @@ export default function AdminCohortDetailPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${typeColors[fileType] || "bg-stone-100 text-stone-600"}`}>{fileType}</span>
+                                                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-stone-100 text-stone-600">{isLink ? "LINK" : "DOWNLOAD"}</span>
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-stone-500">{resource.size ?? "-"}</td>
-                                                <td className="px-6 py-4 text-sm text-stone-500">{resource.createdAt ? new Date(resource.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "-"}</td>
+                                                <td className="px-6 py-4 text-sm text-stone-500">{new Date(resource.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <a href={resource.url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} title="Open resource" aria-label={`Open ${resource.title} in a new tab`} className="p-2 inline-block text-stone-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-                                                        <ExternalLink size={16} />
+                                                    <a href={resource.url} target={isLink ? "_blank" : undefined} download={isLink ? undefined : resource.title} rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} title={isLink ? "Open resource" : "Download resource"} aria-label={`${isLink ? "Open" : "Download"} ${resource.title}`} className="p-2 inline-block text-stone-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                                                        {isLink ? <ExternalLink size={16} /> : <Download size={16} />}
                                                     </a>
                                                 </td>
                                             </tr>
                                         );
                                     })}
                                     {resources.length === 0 && (
-                                        <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-stone-500">No resources added yet.</td></tr>
+                                        <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-stone-500">No resources added yet.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -1178,6 +1186,7 @@ function UploadResourceModal({ cohortId, onClose, onSuccess }: { cohortId: strin
     const [title, setTitle] = useState("");
     const [url, setUrl] = useState("");
     const [description, setDescription] = useState("");
+    const [accessType, setAccessType] = useState<"link" | "download">("link");
     const [errors, setErrors] = useState<{ title?: string; url?: string }>({});
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -1187,7 +1196,7 @@ function UploadResourceModal({ cohortId, onClose, onSuccess }: { cohortId: strin
         if (!url.trim()) { errs.url = "URL is required"; } else { try { new URL(url.trim()); } catch { errs.url = "Enter a valid URL (include https://)"; } }
         if (Object.keys(errs).length) { setErrors(errs); return; }
         try {
-            await trigger({ title: title.trim(), url: url.trim(), description: description.trim() || undefined });
+            await trigger({ title: title.trim(), url: url.trim(), description: description.trim() || undefined, accessType });
             toast("Resource added");
             await onSuccess();
         } catch {
@@ -1215,6 +1224,13 @@ function UploadResourceModal({ cohortId, onClose, onSuccess }: { cohortId: strin
                 <div>
                     <label className={labelClass}>Description</label>
                     <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description..." rows={3} className={`${inputClass} resize-none`} />
+                </div>
+                <div>
+                    <label className={labelClass}>Access</label>
+                    <select value={accessType} onChange={(e) => setAccessType(e.target.value as "link" | "download")} className={inputClass}>
+                        <option value="link">Open link in a new tab</option>
+                        <option value="download">Download file</option>
+                    </select>
                 </div>
                 <div className="flex justify-end gap-3 pt-2">
                     <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-stone-600 hover:text-stone-800 transition-colors">Cancel</button>

@@ -8,6 +8,7 @@ import {
     BellRing,
     Calendar,
     Clock,
+    Download,
     ExternalLink,
     FileText,
     Loader2,
@@ -414,8 +415,9 @@ export default function MemberCohortPage() {
                                     <EmptyState icon={FileText} heading="No resources yet" description="Resources shared by your cohort facilitator will appear here." variant="plain" />
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {resources.map((resource) => (
-                                            <a key={resource.id} href={resource.url} target="_blank" rel="noopener noreferrer"
+                                        {resources.map((resource) => {
+                                            const isLink = resource.accessType === "link";
+                                            return <a key={resource.id} href={resource.url} target={isLink ? "_blank" : undefined} rel="noopener noreferrer" download={isLink ? undefined : resource.title}
                                                 className="rounded-2xl border border-stone-200 bg-white p-4 hover:border-brand-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
                                             >
                                                 <div className="flex items-start gap-3">
@@ -423,11 +425,13 @@ export default function MemberCohortPage() {
                                                     <div className="min-w-0">
                                                         <p className="font-semibold text-stone-900 truncate">{resource.title}</p>
                                                         {resource.description && <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">{resource.description}</p>}
-                                                        <p className="text-xs text-brand-700 mt-1.5 inline-flex items-center gap-1">Open <ExternalLink size={11} /></p>
+                                                        <p className="text-xs text-brand-700 mt-1.5 inline-flex items-center gap-1">
+                                                            {isLink ? <>Open <ExternalLink size={11} /></> : <>Download <Download size={11} /></>}
+                                                        </p>
                                                     </div>
                                                 </div>
-                                            </a>
-                                        ))}
+                                            </a>;
+                                        })}
                                     </div>
                                 )}
                             </div>

@@ -138,9 +138,14 @@ export interface CohortSession {
 
 export interface CohortResource {
   id: string;
+  cohortId: string;
+  uploadedById: string;
   title: string;
+  description: string | null;
   url: string;
+  accessType: "link" | "download";
   createdAt: string;
+  deletedAt: null;
 }
 
 export interface CohortStats {

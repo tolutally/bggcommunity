@@ -227,7 +227,7 @@ export function useDeleteCohortSession(cohortId: string, sessionId: string) {
 export function useCreateCohortResource(cohortId: string) {
   return useApiMutation<
     ApiResponse<CohortResource>,
-    { title: string; url: string; description?: string }
+    { title: string; url: string; description?: string; accessType?: "link" | "download" }
   >(`/admin/cohorts/${cohortId}/resources`, {
     method: "POST",
     revalidate: [`/cohorts/${cohortId}/resources`],
