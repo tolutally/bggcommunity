@@ -3,21 +3,13 @@
 import { useAuthSWR } from "./use-auth-swr";
 import { useApiMutation } from "./use-api-mutation";
 import type { ApiResponse, Event, RsvpUser } from "@/lib/types";
+import type { EventUpsertInput } from "@/lib/events";
 
 /**
  * Admin: create a new event via POST /admin/events.
  */
 export function useCreateEvent() {
-  return useApiMutation<ApiResponse<Event>, {
-    title: string;
-    description?: string;
-    scheduledAt: string;
-    durationMinutes: number;
-    host: string;
-    type: string;
-    platform?: string;
-    meetingLink?: string;
-  }>("/admin/events", {
+  return useApiMutation<ApiResponse<Event>, EventUpsertInput>("/admin/events", {
     method: "POST",
     revalidate: "/events",
   });
@@ -27,16 +19,7 @@ export function useCreateEvent() {
  * Admin: update an event via PATCH /admin/events/:id.
  */
 export function useUpdateEvent(id: string) {
-  return useApiMutation<ApiResponse<Event>, Partial<{
-    title: string;
-    description: string;
-    scheduledAt: string;
-    durationMinutes: number;
-    host: string;
-    type: string;
-    platform: string;
-    meetingLink: string;
-  }>>(`/admin/events/${id}`, {
+  return useApiMutation<ApiResponse<Event>, Partial<EventUpsertInput>>(`/admin/events/${id}`, {
     method: "PATCH",
     revalidate: ["/events", `/events/${id}`],
   });
@@ -73,7 +56,7 @@ export function useEventRsvps(eventId: string | null) {
  */
 export function useAttachRecording(eventId: string) {
   return useApiMutation<ApiResponse<Event>, { recordingUrl: string }>(
-    `/admin/events/${eventId}`,
+    `/admin/events/${eventId}/recording`,
     {
       method: "PATCH",
       revalidate: [`/events/${eventId}`],

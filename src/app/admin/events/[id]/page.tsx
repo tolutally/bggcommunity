@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { Calendar, Clock, Users, Check, UserCheck, Video, Copy, ExternalLink, Link2, ArrowLeft, Play, Search, Loader2 } from "lucide-react";
+import { Calendar, Clock, Users, Check, UserCheck, Video, Copy, ExternalLink, Link2, ArrowLeft, Play, Search, Loader2, MapPin } from "lucide-react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -89,8 +89,8 @@ export default function AdminEventDetailPage() {
         );
     }
 
-    const platform = detectPlatform(event.meetingLink);
-    const platformMeta = PLATFORMS[platform] ?? PLATFORMS.other;
+    const platform = event.locationType === "in_person" ? null : detectPlatform(event.meetingLink);
+    const platformMeta = platform ? (PLATFORMS[platform] ?? PLATFORMS.other) : null;
     const typeLabel = eventTypeLabel(event.type);
     const past = isEventPast(event.scheduledAt, event.durationMinutes);
 
@@ -116,7 +116,9 @@ export default function AdminEventDetailPage() {
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                                     <StatusBadge label={typeLabel} preset={typeLabel as "Workshop" | "Q&A" | "Speaker Series" | "Social" | "Hackathon"} variant="tag" />
-                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${platformMeta.color}`}>{platformMeta.label}</span>
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${event.locationType === "in_person" ? "bg-amber-50 text-amber-700 border-amber-200" : platformMeta?.color}`}>
+                                        {event.locationType === "in_person" ? "In Person" : platformMeta?.label}
+                                    </span>
                                     {past && <StatusBadge label="Past" preset="Inactive" variant="tag" />}
                                 </div>
                                 <h1 className="text-3xl font-bold text-stone-900 mb-2">{event.title}</h1>
@@ -127,6 +129,7 @@ export default function AdminEventDetailPage() {
                                     <span className="flex items-center gap-2"><Clock size={16} className="text-stone-400" /> {fmtEventTime(event.scheduledAt)}</span>
                                     <span className="flex items-center gap-2"><Video size={16} className="text-stone-400" /> {fmtDuration(event.durationMinutes)}</span>
                                     <span className="flex items-center gap-2"><Users size={16} className="text-stone-400" /> {event._count.rsvps} RSVPs</span>
+                                    {event.locationType === "in_person" && event.venueAddress ? <span className="flex items-center gap-2"><MapPin size={16} className="text-stone-400" /> {event.venueAddress}</span> : null}
                                     <span>Host: <strong className="text-stone-700">{event.host}</strong></span>
                                 </div>
                             </div>
@@ -142,7 +145,7 @@ export default function AdminEventDetailPage() {
                                 {copied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
                             </button>
                             <a href={event.meetingLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold bg-brand-800 text-white hover:bg-brand-700 transition-colors">
-                                <ExternalLink size={14} /> Join
+                                <ExternalLink size={14} /> {event.linkType === "registration" ? "Register" : "Join"}
                             </a>
                         </div>
                     )}

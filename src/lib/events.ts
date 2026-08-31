@@ -3,8 +3,9 @@ import { getApiErrorMessage as getSharedApiErrorMessage } from "@/lib/jobs";
 import type { CursorPageResult } from "@/hooks/useCursorPagination";
 
 export type EventType = "WORKSHOP" | "QA" | "SPEAKER_SERIES" | "SOCIAL" | "HACKATHON";
-export type EventPlatform = "ZOOM" | "GOOGLE_MEET" | "OTHER" | "IN_PERSON";
-export type EventLinkType = "MEETING" | "REGISTRATION" | "IN_PERSON";
+export type EventPlatform = "ZOOM" | "GOOGLE_MEET" | "OTHER";
+export type EventLocationType = "online" | "in_person";
+export type EventLinkType = "meeting" | "registration" | "other";
 
 export interface EventRecord {
     id: string;
@@ -15,8 +16,9 @@ export interface EventRecord {
     host: string;
     type: EventType;
     platform: EventPlatform;
-    /** Venue/address, only populated when platform is IN_PERSON */
-    location: string | null;
+    locationType: EventLocationType;
+    /** Venue/address, only populated for in-person events. */
+    venueAddress: string | null;
     linkType: EventLinkType;
     recordingUrl: string | null;
     createdAt: string | null;
@@ -36,7 +38,8 @@ export interface EventUpsertInput {
     host: string;
     type: EventType;
     platform: EventPlatform;
-    location: string | null;
+    locationType: EventLocationType;
+    venueAddress: string | null;
     linkType: EventLinkType;
     meetingLink: string | null;
 }
@@ -96,7 +99,8 @@ function normalizeEvent(value: unknown): EventRecord {
     const record = isRecord(value) ? value : {};
     const count = isRecord(record._count) ? record._count : {};
     const platform = (readString(record.platform) as EventPlatform) ?? "OTHER";
-    const linkType = (readString(record.linkType) as EventLinkType) ?? (platform === "IN_PERSON" ? "IN_PERSON" : "MEETING");
+    const locationType = (readString(record.locationType) as EventLocationType) ?? "online";
+    const linkType = (readString(record.linkType) as EventLinkType) ?? "meeting";
 
     return {
         id: String(record.id ?? `event-${Date.now()}`),
@@ -107,7 +111,8 @@ function normalizeEvent(value: unknown): EventRecord {
         host: readString(record.host) ?? "Community Team",
         type: (readString(record.type) as EventType) ?? "WORKSHOP",
         platform,
-        location: readString(record.location),
+        locationType,
+        venueAddress: readString(record.venueAddress),
         linkType,
         recordingUrl: readString(record.recordingUrl),
         createdAt: readString(record.createdAt),
@@ -238,18 +243,16 @@ export function getEventPlatformLabel(platform: EventPlatform) {
             return "Zoom";
         case "GOOGLE_MEET":
             return "Google Meet";
-        case "IN_PERSON":
-            return "In Person";
         default:
             return "Other";
     }
 }
 
 /** High-level location badge shown on cards/detail so members can tell before RSVP */
-export function getEventLocationLabel(platform: EventPlatform) {
-    return platform === "IN_PERSON" ? "In Person" : "Online";
+export function getEventLocationLabel(locationType: EventLocationType) {
+    return locationType === "in_person" ? "In Person" : "Online";
 }
 
 export function getEventLinkCtaLabel(linkType: EventLinkType) {
-    return linkType === "REGISTRATION" ? "Register" : "Join meeting";
+    return linkType === "registration" ? "Register" : "Join meeting";
 }

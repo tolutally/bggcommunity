@@ -207,8 +207,9 @@ export default function MemberSchedulePage() {
                                 host: "Community Team",
                                 type: "WORKSHOP",
                                 platform: "OTHER",
-                                location: null,
-                                linkType: "MEETING",
+                                locationType: "online",
+                                venueAddress: null,
+                                linkType: "meeting",
                                 recordingUrl: null,
                                 createdAt: null,
                                 attendeeCount: 0,
@@ -338,8 +339,12 @@ export default function MemberSchedulePage() {
                             const isRsvped = hasRsvp(event.id);
                             const status = getStatus(event);
                             const platformLabel = getEventPlatformLabel(event.platform);
-                            const locationLabel = getEventLocationLabel(event.platform);
-                            const isInPerson = event.platform === "IN_PERSON";
+                            const locationLabel = getEventLocationLabel(event.locationType);
+                            const isInPerson = event.locationType === "in_person";
+                            const hydratedEvent = eventDetails[event.id];
+                            const registrationLink = hydratedEvent?.linkType === "registration"
+                                ? hydratedEvent.meetingLink
+                                : null;
 
                             return (
                                 <div key={event.id} className="bg-white rounded-2xl border border-stone-200 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-500/5 transition-all group overflow-hidden">
@@ -362,17 +367,24 @@ export default function MemberSchedulePage() {
                                             <div className="flex flex-wrap items-center gap-4 text-sm text-stone-500">
                                                 <span className="flex items-center gap-1.5"><Clock size={14} className="text-stone-400" /> {formatTime(event.scheduledAt)} &middot; {formatDuration(event.durationMinutes)}</span>
                                                 <span className="flex items-center gap-1.5"><Users size={14} className="text-stone-400" /> {event.attendeeCount} attendees</span>
-                                                {isInPerson && event.location ? <span className="flex items-center gap-1.5"><MapPin size={14} className="text-stone-400" /> {event.location}</span> : null}
+                                                {isInPerson && event.venueAddress ? <span className="flex items-center gap-1.5"><MapPin size={14} className="text-stone-400" /> {event.venueAddress}</span> : null}
                                                 <span className="flex items-center gap-1.5"><User size={14} className="text-stone-400" /> {event.host}</span>
                                             </div>
                                         </div>
 
                                         <div className="flex-shrink-0 flex flex-row md:flex-col items-center gap-2 p-4 border-t md:border-t-0 md:border-l border-stone-100">
                                             {status === "upcoming" ? (
-                                                <button onClick={() => setRsvpConfirmId(event.id)} disabled={busyRsvpId === event.id} className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center gap-2 w-full justify-center disabled:opacity-70 disabled:cursor-not-allowed ${isRsvped ? "bg-accent-500 text-white hover:bg-accent-600" : "bg-white border-2 border-stone-200 text-stone-700 hover:border-brand-300 hover:text-brand-700"}`}>
-                                                    {busyRsvpId === event.id ? <Loader2 size={16} className="animate-spin" /> : isRsvped ? <CheckCircle size={16} /> : <UserCheck size={16} />}
-                                                    {isRsvped ? "RSVP'd" : "RSVP"}
-                                                </button>
+                                                <>
+                                                    {registrationLink ? (
+                                                        <a href={registrationLink} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 rounded-xl font-bold text-sm bg-brand-800 text-white hover:bg-brand-700 flex items-center gap-2 w-full justify-center">
+                                                            <ExternalLink size={16} /> Register
+                                                        </a>
+                                                    ) : null}
+                                                    <button onClick={() => setRsvpConfirmId(event.id)} disabled={busyRsvpId === event.id} className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-colors flex items-center gap-2 w-full justify-center disabled:opacity-70 disabled:cursor-not-allowed ${isRsvped ? "bg-accent-500 text-white hover:bg-accent-600" : "bg-white border-2 border-stone-200 text-stone-700 hover:border-brand-300 hover:text-brand-700"}`}>
+                                                        {busyRsvpId === event.id ? <Loader2 size={16} className="animate-spin" /> : isRsvped ? <CheckCircle size={16} /> : <UserCheck size={16} />}
+                                                        {isRsvped ? "RSVP'd" : "RSVP"}
+                                                    </button>
+                                                </>
                                             ) : event.recordingUrl ? (
                                                 <a href={event.recordingUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 px-3 py-2 bg-brand-800 text-white rounded-xl font-bold text-xs hover:bg-brand-700 transition-colors">
                                                     <Video size={14} /> Recording
@@ -406,7 +418,7 @@ export default function MemberSchedulePage() {
                             <div className={`p-6 ${hasRsvp(detailEvent.id) ? "bg-brand-50" : "bg-stone-50"} rounded-t-3xl border-b border-stone-100`}>
                                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                                     <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold uppercase tracking-wide border ${TYPE_COLOR[detailEvent.type]}`}>{getEventTypeLabel(detailEvent.type)}</span>
-                                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${LOCATION_COLOR[getEventLocationLabel(detailEvent.platform)]}`}>{getEventLocationLabel(detailEvent.platform)}</span>
+                                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${LOCATION_COLOR[getEventLocationLabel(detailEvent.locationType)]}`}>{getEventLocationLabel(detailEvent.locationType)}</span>
                                     {hasRsvp(detailEvent.id) ? <span className="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-accent-100 text-accent-700 border border-accent-200">RSVP&apos;d</span> : null}
                                     {getStatus(detailEvent) === "past" ? <span className="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-stone-100 text-stone-500 border border-stone-200">Past</span> : null}
                                 </div>
@@ -424,10 +436,15 @@ export default function MemberSchedulePage() {
                                     <div className="bg-stone-50 rounded-xl p-3"><p className="text-xs text-stone-400 font-bold uppercase mb-1">Attendees</p><p className="font-semibold text-stone-900">{detailEvent.attendeeCount}</p></div>
                                 </div>
                                 <div className="bg-stone-50 rounded-xl p-3"><p className="text-xs text-stone-400 font-bold uppercase mb-1">Host</p><p className="font-semibold text-stone-900">{detailEvent.host}</p></div>
-                                {detailEvent.platform === "IN_PERSON" ? (
+                                {detailEvent.locationType === "in_person" ? (
                                     <div className="rounded-xl p-4 border bg-amber-50 text-amber-700 border-amber-200">
                                         <p className="text-xs font-bold uppercase mb-1 opacity-70">Venue</p>
-                                        <p className="font-bold flex items-center gap-1.5"><MapPin size={16} /> {detailEvent.location ?? "Location to be announced"}</p>
+                                        <p className="font-bold flex items-center gap-1.5"><MapPin size={16} /> {detailEvent.venueAddress ?? "Location to be announced"}</p>
+                                        {detailEvent.linkType === "registration" && detailEvent.meetingLink ? (
+                                            <a href={detailEvent.meetingLink} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors">
+                                                <ExternalLink size={16} /> Register
+                                            </a>
+                                        ) : null}
                                         {detailEvent.recordingUrl ? (
                                             <a href={detailEvent.recordingUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors">
                                                 <ExternalLink size={16} /> Open recording
