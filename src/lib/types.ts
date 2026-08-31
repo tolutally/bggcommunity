@@ -85,7 +85,9 @@ export interface Event {
   durationMinutes: number;
   host: string;
   type: EventType;
-  platform: string | null;
+  platform: "ZOOM" | "GOOGLE_MEET" | "OTHER" | "IN_PERSON";
+  location: string | null;
+  linkType: "MEETING" | "REGISTRATION";
   meetingLink: string | null;
   recordingUrl: string | null;
   createdAt: string;

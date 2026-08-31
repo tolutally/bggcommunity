@@ -4,7 +4,7 @@ import type { CursorPageResult } from "@/hooks/useCursorPagination";
 
 export type EventType = "WORKSHOP" | "QA" | "SPEAKER_SERIES" | "SOCIAL" | "HACKATHON";
 export type EventPlatform = "ZOOM" | "GOOGLE_MEET" | "OTHER" | "IN_PERSON";
-export type EventLinkType = "MEETING" | "REGISTRATION" | "IN_PERSON";
+export type EventLinkType = "MEETING" | "REGISTRATION";
 
 export interface EventRecord {
     id: string;
@@ -96,7 +96,7 @@ function normalizeEvent(value: unknown): EventRecord {
     const record = isRecord(value) ? value : {};
     const count = isRecord(record._count) ? record._count : {};
     const platform = (readString(record.platform) as EventPlatform) ?? "OTHER";
-    const linkType = (readString(record.linkType) as EventLinkType) ?? (platform === "IN_PERSON" ? "IN_PERSON" : "MEETING");
+    const linkType = (readString(record.linkType) as EventLinkType) ?? (platform === "IN_PERSON" ? "REGISTRATION" : "MEETING");
 
     return {
         id: String(record.id ?? `event-${Date.now()}`),

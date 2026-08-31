@@ -43,7 +43,7 @@ const EVENT_TYPES: Array<{ label: string; value: EventType }> = [
 ];
 
 const MIN_DURATION_MINUTES = 15;
-const MAX_DURATION_MINUTES = 300;
+const MAX_DURATION_MINUTES = 480;
 
 const PLATFORM_OPTIONS: Array<{ key: EventPlatform; label: string; color: string }> = [
     { key: "ZOOM", label: "Zoom", color: "bg-blue-50 text-blue-700 border-blue-200" },
@@ -532,7 +532,7 @@ export default function AdminEventsPage() {
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                                                         <StatusBadge label={getEventTypeLabel(event.type)} preset={event.type as never} variant="tag" />
-                                                        <StatusBadge label={getEventLocationLabel(event.platform)} preset={event.platform === "IN_PERSON" ? "In Person" : "Online" as never} variant="tag" />
+                                                        <StatusBadge label={getEventLocationLabel(event.platform)} preset={getEventLocationLabel(event.platform) as never} variant="tag" />
                                                         {event.platform !== "IN_PERSON" ? <StatusBadge label={getEventPlatformLabel(event.platform)} preset={getEventPlatformLabel(event.platform) as never} variant="tag" /> : null}
                                                         {status === "past" ? <StatusBadge label="Past" preset="Inactive" variant="tag" /> : null}
                                                         {hasRsvp ? <StatusBadge label="RSVP'd" preset="Active" variant="tag" /> : null}
@@ -615,7 +615,7 @@ export default function AdminEventsPage() {
                                 ) : null}
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <StatusBadge label={getEventTypeLabel(detailEvent.type)} preset={detailEvent.type as never} variant="tag" />
-                                    <StatusBadge label={getEventLocationLabel(detailEvent.platform)} preset={detailEvent.platform === "IN_PERSON" ? "In Person" : "Online" as never} variant="tag" />
+                                    <StatusBadge label={getEventLocationLabel(detailEvent.platform)} preset={getEventLocationLabel(detailEvent.platform) as never} variant="tag" />
                                     {detailEvent.platform !== "IN_PERSON" ? <StatusBadge label={getEventPlatformLabel(detailEvent.platform)} preset={getEventPlatformLabel(detailEvent.platform) as never} variant="tag" /> : null}
                                     {getStatus(detailEvent) === "past" ? <StatusBadge label="Past" preset="Inactive" variant="tag" /> : null}
                                     {"hasRsvp" in detailEvent && detailEvent.hasRsvp ? <StatusBadge label="RSVP'd" preset="Active" variant="tag" /> : null}
@@ -636,6 +636,16 @@ export default function AdminEventsPage() {
                                     <div className="rounded-xl p-4 border bg-amber-50 text-amber-700 border-amber-200">
                                         <p className="text-xs font-bold uppercase tracking-wide opacity-70 mb-1">Venue</p>
                                         <p className="font-bold flex items-center gap-1.5"><MapPin size={16} /> {detailEvent.location ?? "Location to be announced"}</p>
+                                        {detailEvent.meetingLink ? (
+                                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                <button onClick={() => copyLink(detailEvent.id, detailEvent.meetingLink!)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied === detailEvent.id ? "bg-green-100 text-green-700" : "bg-white/80 text-stone-700 hover:bg-white border border-white/70"}`}>
+                                                    {copied === detailEvent.id ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy registration link</>}
+                                                </button>
+                                                <a href={detailEvent.meetingLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors">
+                                                    <ExternalLink size={16} /> Register
+                                                </a>
+                                            </div>
+                                        ) : null}
                                         {detailEvent.recordingUrl ? (
                                             <a href={detailEvent.recordingUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-white/80 text-stone-700 rounded-xl font-bold text-sm hover:bg-white transition-colors border border-white/70">
                                                 <ExternalLink size={16} /> Open recording
@@ -775,7 +785,7 @@ function InfoRow({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
     return <div className="flex items-center gap-2 text-stone-500"><Icon size={16} className="text-stone-400" /> {label}</div>;
 }
 
-function EventFormModal({
+export function EventFormModal({
     initial,
     prefilledDate,
     onClose,
@@ -797,7 +807,9 @@ function EventFormModal({
     const [host, setHost] = useState(initial?.host ?? "");
     const [platform, setPlatform] = useState<EventPlatform>(initial?.platform ?? "ZOOM");
     const [location, setLocation] = useState(initial?.location ?? "");
-    const [linkType, setLinkType] = useState<EventLinkType>(initial?.linkType ?? "MEETING");
+    const [linkType, setLinkType] = useState<EventLinkType>(
+        initial?.platform === "IN_PERSON" ? "REGISTRATION" : (initial?.linkType ?? "MEETING"),
+    );
     const [meetingLink, setMeetingLink] = useState(initial?.meetingLink ?? "");
     const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -816,10 +828,9 @@ function EventFormModal({
 
         if (isInPerson) {
             if (!location.trim()) nextErrors.location = "Required";
-        } else {
-            if (!meetingLink.trim()) nextErrors.meetingLink = "Required";
-            else if (!/^https?:\/\/.+/i.test(meetingLink)) nextErrors.meetingLink = "Enter a valid URL (https://...)";
         }
+        if (!meetingLink.trim()) nextErrors.meetingLink = "Required";
+        else if (!/^https?:\/\/.+/i.test(meetingLink)) nextErrors.meetingLink = "Enter a valid URL (https://...)";
 
         setErrors(nextErrors);
 
@@ -836,8 +847,8 @@ function EventFormModal({
             type,
             platform,
             location: isInPerson ? location.trim() : null,
-            linkType: isInPerson ? "IN_PERSON" : linkType,
-            meetingLink: isInPerson ? null : meetingLink.trim(),
+            linkType: isInPerson ? "REGISTRATION" : linkType,
+            meetingLink: meetingLink.trim(),
         });
     };
 
@@ -878,7 +889,7 @@ function EventFormModal({
                                 title="Event duration in minutes"
                                 className={inputClass(errors.durationMinutes)}
                             />
-                            {errors.durationMinutes ? <p className="text-red-500 text-xs mt-1">{errors.durationMinutes}</p> : <p className="text-stone-400 text-xs mt-1">{formatDuration(durationMinutes)} &middot; up to 5 hrs</p>}
+                            {errors.durationMinutes ? <p className="text-red-500 text-xs mt-1">{errors.durationMinutes}</p> : <p className="text-stone-400 text-xs mt-1">{formatDuration(durationMinutes)} &middot; up to 8 hrs</p>}
                         </div>
                     </div>
                     <Field label="Host" error={errors.host}>
@@ -896,18 +907,29 @@ function EventFormModal({
                         <label className="block text-sm font-semibold text-stone-700 mb-2">Location</label>
                         <div className="flex gap-2 mb-3 flex-wrap">
                             {PLATFORM_OPTIONS.map((option) => (
-                                <button key={option.key} type="button" onClick={() => setPlatform(option.key)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${platform === option.key ? `${option.color} ring-2 ring-offset-1 ring-brand-300` : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}>
+                                <button key={option.key} type="button" onClick={() => {
+                                    setPlatform(option.key);
+                                    if (option.key === "IN_PERSON") setLinkType("REGISTRATION");
+                                }} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${platform === option.key ? `${option.color} ring-2 ring-offset-1 ring-brand-300` : "bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}>
                                     {option.label}
                                 </button>
                             ))}
                         </div>
                         {isInPerson ? (
-                            <Field label="Venue / Address" error={errors.location}>
-                                <div className="relative">
-                                    <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                                    <input type="text" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="e.g. 123 Main St, Suite 400, Atlanta, GA" className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.location ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
-                                </div>
-                            </Field>
+                            <div className="space-y-4">
+                                <Field label="Venue / Address" error={errors.location}>
+                                    <div className="relative">
+                                        <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                                        <input type="text" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="e.g. 123 Main St, Suite 400, Atlanta, GA" className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 ${errors.location ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
+                                    </div>
+                                </Field>
+                                <Field label="Registration / Sign-up Link" error={errors.meetingLink}>
+                                    <div className="relative">
+                                        <Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                                        <input type="url" value={meetingLink} onChange={(event) => setMeetingLink(event.target.value)} placeholder="https://forms.gle/..." className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-300 font-mono ${errors.meetingLink ? "border-red-300 bg-red-50" : "border-stone-200"}`} />
+                                    </div>
+                                </Field>
+                            </div>
                         ) : (
                             <>
                                 <label className="block text-sm font-semibold text-stone-700 mb-2">Link Type</label>
