@@ -207,8 +207,9 @@ export default function MemberSchedulePage() {
                                 host: "Community Team",
                                 type: "WORKSHOP",
                                 platform: "OTHER",
-                                location: null,
-                                linkType: "MEETING",
+                                locationType: "online",
+                                venueAddress: null,
+                                linkType: "meeting",
                                 recordingUrl: null,
                                 createdAt: null,
                                 attendeeCount: 0,
@@ -338,10 +339,10 @@ export default function MemberSchedulePage() {
                             const isRsvped = hasRsvp(event.id);
                             const status = getStatus(event);
                             const platformLabel = getEventPlatformLabel(event.platform);
-                            const locationLabel = getEventLocationLabel(event.platform);
-                            const isInPerson = event.platform === "IN_PERSON";
+                            const locationLabel = getEventLocationLabel(event.locationType);
+                            const isInPerson = event.locationType === "in_person";
                             const hydratedEvent = eventDetails[event.id];
-                            const registrationLink = hydratedEvent?.linkType === "REGISTRATION"
+                            const registrationLink = hydratedEvent?.linkType === "registration"
                                 ? hydratedEvent.meetingLink
                                 : null;
 
@@ -366,7 +367,7 @@ export default function MemberSchedulePage() {
                                             <div className="flex flex-wrap items-center gap-4 text-sm text-stone-500">
                                                 <span className="flex items-center gap-1.5"><Clock size={14} className="text-stone-400" /> {formatTime(event.scheduledAt)} &middot; {formatDuration(event.durationMinutes)}</span>
                                                 <span className="flex items-center gap-1.5"><Users size={14} className="text-stone-400" /> {event.attendeeCount} attendees</span>
-                                                {isInPerson && event.location ? <span className="flex items-center gap-1.5"><MapPin size={14} className="text-stone-400" /> {event.location}</span> : null}
+                                                {isInPerson && event.venueAddress ? <span className="flex items-center gap-1.5"><MapPin size={14} className="text-stone-400" /> {event.venueAddress}</span> : null}
                                                 <span className="flex items-center gap-1.5"><User size={14} className="text-stone-400" /> {event.host}</span>
                                             </div>
                                         </div>
@@ -417,7 +418,7 @@ export default function MemberSchedulePage() {
                             <div className={`p-6 ${hasRsvp(detailEvent.id) ? "bg-brand-50" : "bg-stone-50"} rounded-t-3xl border-b border-stone-100`}>
                                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                                     <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold uppercase tracking-wide border ${TYPE_COLOR[detailEvent.type]}`}>{getEventTypeLabel(detailEvent.type)}</span>
-                                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${LOCATION_COLOR[getEventLocationLabel(detailEvent.platform)]}`}>{getEventLocationLabel(detailEvent.platform)}</span>
+                                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${LOCATION_COLOR[getEventLocationLabel(detailEvent.locationType)]}`}>{getEventLocationLabel(detailEvent.locationType)}</span>
                                     {hasRsvp(detailEvent.id) ? <span className="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-accent-100 text-accent-700 border border-accent-200">RSVP&apos;d</span> : null}
                                     {getStatus(detailEvent) === "past" ? <span className="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-stone-100 text-stone-500 border border-stone-200">Past</span> : null}
                                 </div>
@@ -435,11 +436,11 @@ export default function MemberSchedulePage() {
                                     <div className="bg-stone-50 rounded-xl p-3"><p className="text-xs text-stone-400 font-bold uppercase mb-1">Attendees</p><p className="font-semibold text-stone-900">{detailEvent.attendeeCount}</p></div>
                                 </div>
                                 <div className="bg-stone-50 rounded-xl p-3"><p className="text-xs text-stone-400 font-bold uppercase mb-1">Host</p><p className="font-semibold text-stone-900">{detailEvent.host}</p></div>
-                                {detailEvent.platform === "IN_PERSON" ? (
+                                {detailEvent.locationType === "in_person" ? (
                                     <div className="rounded-xl p-4 border bg-amber-50 text-amber-700 border-amber-200">
                                         <p className="text-xs font-bold uppercase mb-1 opacity-70">Venue</p>
-                                        <p className="font-bold flex items-center gap-1.5"><MapPin size={16} /> {detailEvent.location ?? "Location to be announced"}</p>
-                                        {detailEvent.linkType === "REGISTRATION" && detailEvent.meetingLink ? (
+                                        <p className="font-bold flex items-center gap-1.5"><MapPin size={16} /> {detailEvent.venueAddress ?? "Location to be announced"}</p>
+                                        {detailEvent.linkType === "registration" && detailEvent.meetingLink ? (
                                             <a href={detailEvent.meetingLink} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-800 text-white rounded-xl font-bold text-sm hover:bg-brand-700 transition-colors">
                                                 <ExternalLink size={16} /> Register
                                             </a>

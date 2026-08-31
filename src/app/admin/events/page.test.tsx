@@ -36,9 +36,9 @@ describe("EventFormModal", () => {
         await waitFor(() => {
             expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
                 durationMinutes: 300,
-                platform: "IN_PERSON",
-                location: "123 Main St, Atlanta, GA",
-                linkType: "REGISTRATION",
+                locationType: "in_person",
+                venueAddress: "123 Main St, Atlanta, GA",
+                linkType: "registration",
                 meetingLink: "https://example.com/register",
             }));
         });
